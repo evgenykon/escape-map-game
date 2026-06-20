@@ -35,6 +35,7 @@ export const useGameStore = defineStore('game', () => {
   const isInShelter = ref(false)
 
   const isWalking = ref(true)
+  const loadingMessage = ref('Загрузка карты...')
 
   return {
     phase,
@@ -51,5 +52,6 @@ export const useGameStore = defineStore('game', () => {
     isInCar,
     isInShelter,
     isWalking,
+    loadingMessage,
   }
 })

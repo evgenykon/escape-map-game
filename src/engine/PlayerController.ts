@@ -2,7 +2,8 @@ import { useGameStore } from '@/stores/game'
 import { CarPhysics } from './CarPhysics'
 import { MapEngine } from './MapEngine'
 
-const MOVE_SPEED_WALK = 0.00005
+const MOVE_SPEED_WALK = 0.000005
+const ROTATION_SPEED = 0.04
 
 export class PlayerController {
   private keys: Set<string> = new Set()
@@ -36,14 +37,20 @@ export class PlayerController {
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
-    this.keys.add(e.key.toLowerCase())
-    if (e.key.toLowerCase() === 'e') {
-      this.interact()
+    const code = e.code
+    const key = code.replace('Key', '').toLowerCase()
+    if (['w', 'a', 's', 'd', 'e'].includes(key)) {
+      e.preventDefault()
+      this.keys.add(key)
+      if (key === 'e') {
+        this.interact()
+      }
     }
   }
 
   private onKeyUp = (e: KeyboardEvent) => {
-    this.keys.delete(e.key.toLowerCase())
+    const key = e.code.replace('Key', '').toLowerCase()
+    this.keys.delete(key)
   }
 
   private interact() {
@@ -74,42 +81,50 @@ export class PlayerController {
   }
 
   private gameLoop = () => {
-    this.update()
+    try {
+      this.update()
+    } catch (e) {
+      console.error('gameLoop error', e)
+    }
     this.animationId = requestAnimationFrame(this.gameLoop)
   }
 
   private update() {
     const store = useGameStore()
-    let dx = 0
-    let dy = 0
+    let forward = 0
+    let rotation = 0
 
-    if (this.keys.has('w')) dy -= 1
-    if (this.keys.has('s')) dy += 1
-    if (this.keys.has('a')) dx -= 1
-    if (this.keys.has('d')) dx += 1
-
-    if (dx !== 0 || dy !== 0) {
-      this.playerAngle = Math.atan2(dx, -dy)
-    }
+    if (this.keys.has('w')) forward += 1
+    if (this.keys.has('s')) forward -= 1
+    if (this.keys.has('a')) rotation -= 1
+    if (this.keys.has('d')) rotation += 1
 
     if (store.isInCar) {
-      this.updateCar(dx, dy)
+      this.updateCar(forward, rotation)
     } else {
-      this.updateWalk(dx, dy)
+      this.updateWalk(forward, rotation)
     }
 
-    this.mapEngine.updatePlayerPosition(this.playerLng, this.playerLat)
+    this.mapEngine.updatePlayerPosition(this.playerLng, this.playerLat, this.playerAngle)
   }
 
-  private updateWalk(dx: number, dy: number) {
-    if (dx === 0 && dy === 0) return
-    const len = Math.sqrt(dx * dx + dy * dy)
-    this.playerLng += (dx / len) * MOVE_SPEED_WALK
-    this.playerLat += (dy / len) * MOVE_SPEED_WALK
+  private updateWalk(forward: number, rotation: number) {
+    this.playerAngle += rotation * ROTATION_SPEED
+
+    if (forward !== 0) {
+      const dlng = Math.sin(this.playerAngle) * forward * MOVE_SPEED_WALK
+      const dlat = Math.cos(this.playerAngle) * forward * MOVE_SPEED_WALK
+      const newLng = this.playerLng + dlng
+      const newLat = this.playerLat + dlat
+      if (!this.mapEngine.isInsideBuilding(newLng, newLat)) {
+        this.playerLng = newLng
+        this.playerLat = newLat
+      }
+    }
   }
 
-  private updateCar(dx: number, dy: number) {
-    const result = this.carPhysics.update(dx, dy, this.playerLng, this.playerLat, this.playerAngle)
+  private updateCar(forward: number, rotation: number) {
+    const result = this.carPhysics.update(forward, rotation, this.playerLng, this.playerLat, this.playerAngle)
     this.playerLng = result.lng
     this.playerLat = result.lat
     this.playerAngle = result.angle

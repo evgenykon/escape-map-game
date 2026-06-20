@@ -49,7 +49,7 @@ make run       # Запуск production сборки (nginx)
 
 | Сервис | Образ | Порт |
 |---|---|---|
-| `frontend-dev` | `node:22-alpine` | 3001 |
+| `frontend-dev` | `node:24-alpine` | 3001 |
 | `frontend` | nginx:alpine | 80 |
 
 ## Архитектура игры

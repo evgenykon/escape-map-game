@@ -15,29 +15,28 @@ function startGame() {
   const diff = difficulties.find(d => d.key === selectedDifficulty.value)!
   store.difficulty = selectedDifficulty.value
   store.timerMinutes = diff.time
+
+  store.playerLatitude = 55.7558
+  store.playerLongitude = 37.6173
+
+  const angle = Math.random() * 2 * Math.PI
+  const dlat = (1 / 111.32) * Math.cos(angle)
+  const dlng = (1 / (111.32 * Math.cos(store.playerLatitude * Math.PI / 180))) * Math.sin(angle)
+  store.epicenterLatitude = store.playerLatitude + dlat
+  store.epicenterLongitude = store.playerLongitude + dlng
+
   store.phase = 'loading'
 
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       store.playerLatitude = pos.coords.latitude
       store.playerLongitude = pos.coords.longitude
-      startLoading()
+      store.epicenterLatitude = store.playerLatitude + dlat
+      store.epicenterLongitude = store.playerLongitude + dlng
     },
-    () => {
-      store.playerLatitude = 55.7558
-      store.playerLongitude = 37.6173
-      startLoading()
-    },
+    () => {},
     { enableHighAccuracy: true, timeout: 10000 }
   )
-}
-
-function startLoading() {
-  const angle = Math.random() * 2 * Math.PI
-  const dlat = (1 / 111.32) * Math.cos(angle)
-  const dlng = (1 / (111.32 * Math.cos(store.playerLatitude * Math.PI / 180))) * Math.sin(angle)
-  store.epicenterLatitude = store.playerLatitude + dlat
-  store.epicenterLongitude = store.playerLongitude + dlng
 }
 </script>
 

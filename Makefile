@@ -10,10 +10,10 @@ run:
 	docker compose --profile production up frontend -d
 
 deploy-gh-pages:
-	make build
+	npm run build && \
+	cp -r dist /tmp/escape-gh-pages 2>/dev/null || true; \
+	cp -r dist/* /tmp/escape-gh-pages/ 2>/dev/null; \
 	cp -r dist /tmp/escape-gh-pages 2>/dev/null; \
-	rm -rf /tmp/escape-gh-pages; \
-	cp -r dist /tmp/escape-gh-pages; \
 	git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages; \
 	rm -rf *; \
 	cp -r /tmp/escape-gh-pages/* .; \
