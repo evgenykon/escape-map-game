@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { MapEngine } from '@/engine/MapEngine'
 import { PlayerController } from '@/engine/PlayerController'
@@ -12,6 +12,10 @@ const hudTimeLeft = ref(0)
 const hudSms = ref<{ id: number; text: string; visible: boolean }[]>([])
 const showSplash = ref(false)
 const splashText = ref('')
+const currentFuel = computed(() => {
+  const car = store.cars.find(c => c.id === store.activeCarId)
+  return car?.fuel ?? 0
+})
 
 let mapEngine: MapEngine
 let playerController: PlayerController
@@ -32,12 +36,13 @@ const smsTexts = [
 onMounted(() => {
   mapEngine = new MapEngine()
   mapEngine.init(mapContainer.value!)
+  mapEngine.onReady(() => {
+    startTimer()
+    scheduleSMS()
+  })
 
   playerController = new PlayerController(mapEngine)
   playerController.start()
-
-  startTimer()
-  scheduleSMS()
 })
 
 onUnmounted(() => {
@@ -91,15 +96,23 @@ function showSMS(text: string) {
 }
 
 function triggerExplosion() {
+  playerController.stop()
+
+  const pos = playerController.getPosition()
+  const dlat = (pos.lat - store.epicenterLatitude) * 111320
+  const dlng = (pos.lng - store.epicenterLongitude) * 111320 * Math.cos(pos.lat * Math.PI / 180)
+  store.playerDistFromEpicenter = Math.sqrt(dlat * dlat + dlng * dlng)
+
   showSplash.value = true
   splashText.value = 'ВЗРЫВ'
+  setTimeout(() => { showSplash.value = false }, 1000)
 
-  const radius = store.explosionRadius
-  mapEngine.showExplosion(store.epicenterLongitude, store.epicenterLatitude, radius)
+  mapEngine.flyTo(store.epicenterLongitude, store.epicenterLatitude)
 
   setTimeout(() => {
-    showSplash.value = false
-  }, 5000)
+    const radius = store.explosionRadius
+    mapEngine.showExplosion(store.epicenterLongitude, store.epicenterLatitude, radius)
+  }, 1600)
 }
 
 function formatTime(seconds: number): string {
@@ -125,6 +138,14 @@ function restartGame() {
       <div class="hud-status">
         <span v-if="store.isInCar">🚗 В машине</span>
         <span v-else>🚶 Пешком</span>
+      </div>
+      <div v-if="store.isHacking" class="hack-bar">
+        <div class="hack-bar-fill" :style="{ width: store.hackProgress * 100 + '%' }"></div>
+        <span>Взлом замка зажигания… {{ Math.round(store.hackProgress * 100) }}%</span>
+      </div>
+      <div v-if="store.isInCar" class="fuel-bar">
+        <div class="fuel-bar-fill" :style="{ width: currentFuel * 100 + '%' }"></div>
+        <span>⛽ Топливо: {{ Math.round(currentFuel * 100) }}%</span>
       </div>
     </div>
 
@@ -201,6 +222,54 @@ function restartGame() {
   padding: 0.3rem 0.8rem;
   font-size: 0.9rem;
   border: 1px solid #444;
+}
+.hack-bar {
+  position: relative;
+  background: rgba(0,0,0,0.8);
+  border: 1px solid #fa0;
+  padding: 0.3rem;
+  width: 200px;
+  height: 2rem;
+  overflow: hidden;
+}
+.hack-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #fa0, #f80);
+  transition: width 0.1s linear;
+}
+.hack-bar span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 0.75rem;
+  text-shadow: 0 0 4px #000;
+}
+.fuel-bar {
+  position: relative;
+  background: rgba(0,0,0,0.8);
+  border: 1px solid #48f;
+  padding: 0.3rem;
+  width: 200px;
+  height: 2rem;
+  overflow: hidden;
+}
+.fuel-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #48f, #4af);
+  transition: width 0.1s linear;
+}
+.fuel-bar span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 0.75rem;
+  text-shadow: 0 0 4px #000;
 }
 .sms-container {
   position: absolute;

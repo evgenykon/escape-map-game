@@ -20,9 +20,13 @@ export function loadOSMData(): Promise<void> {
       const cars: Car[] = []
       const { epicenterLatitude, epicenterLongitude, playerLatitude, playerLongitude } = store
 
+      const shelterKm = store.customShelterKm
+      const carCount = store.customCarCount
+      const fuelAmount = store.customFuelAmount
+
       for (let i = 0; i < 20; i++) {
         const angle = Math.random() * 2 * Math.PI
-        const dist = 5000 + Math.random() * 5000
+        const dist = (shelterKm * 500 + Math.random() * shelterKm * 500) * 1000
         const dlat = (dist / 111320) * Math.cos(angle)
         const dlng = (dist / (111320 * Math.cos(epicenterLatitude * Math.PI / 180))) * Math.sin(angle)
         shelters.push({
@@ -32,7 +36,7 @@ export function loadOSMData(): Promise<void> {
         })
       }
 
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < carCount; i++) {
         const placeAngle = Math.random() * 2 * Math.PI
         const dist = 100 + Math.random() * 600
         const dlat = (dist / 111320) * Math.cos(placeAngle)
@@ -42,6 +46,7 @@ export function loadOSMData(): Promise<void> {
           longitude: playerLongitude + dlng,
           latitude: playerLatitude + dlat,
           angle: Math.random() * 2 * Math.PI,
+          fuel: fuelAmount * (0.3 + Math.random() * 0.7),
         })
       }
 

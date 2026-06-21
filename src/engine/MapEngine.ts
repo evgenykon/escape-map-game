@@ -4,11 +4,16 @@ import { useGameStore } from '@/stores/game'
 export class MapEngine {
   private map: maplibregl.Map | null = null
   private playerMarker: maplibregl.Marker | null = null
-  private playerMarkerImg: HTMLImageElement | null = null
+  private playerMarkerImg: HTMLElement | null = null
   private carMarkers: Map<string, maplibregl.Marker> = new Map()
-  private carMarkerInners: Map<string, HTMLImageElement> = new Map()
+  private carMarkerInners: Map<string, HTMLElement> = new Map()
   private shelterMarkers: Map<string, maplibregl.Marker> = new Map()
   private shelterMarkerEls: Map<string, HTMLElement> = new Map()
+  private onReadyCallback?: () => void
+
+  onReady(cb: () => void) {
+    this.onReadyCallback = cb
+  }
 
   init(container: HTMLDivElement) {
     const store = useGameStore()
@@ -24,10 +29,30 @@ export class MapEngine {
     this.map.addControl(new maplibregl.NavigationControl(), 'top-right')
 
     this.map.on('load', () => {
-      this.addShelterMarkers()
-      this.addCarMarkers()
-      this.addEpicenterMarker()
-      this.createPlayerMarker()
+      try { this.addShelterMarkers() } catch (e) { console.warn('shelter markers fail', e) }
+      try { this.addCarMarkers() } catch (e) { console.warn('car markers fail', e) }
+      try { this.addEpicenterMarker() } catch (e) { console.warn('epicenter fail', e) }
+      try { this.createPlayerMarker() } catch (e) { console.warn('player marker fail', e) }
+      this.onReadyCallback?.()
+    })
+
+    this.map.on('styleimagemissing', (e) => {
+      if (!this.map) return
+      const id = e.id
+      if (this.map.hasImage(id)) return
+      const size = 16
+      const canvas = document.createElement('canvas')
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')!
+      ctx.fillStyle = '#888'
+      ctx.beginPath()
+      ctx.arc(size / 2, size / 2, size / 2 - 2, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = '#fff'
+      ctx.lineWidth = 1
+      ctx.stroke()
+      this.map.addImage(id, ctx.getImageData(0, 0, size, size))
     })
 
     this.map.on('error', (e) => {
@@ -38,16 +63,15 @@ export class MapEngine {
   }
 
   private createPlayerMarker() {
-    const img = new Image()
-    img.src = '/player.png'
-    img.width = 22
-    img.height = 28
-    img.style.display = 'block'
-    img.style.filter = 'drop-shadow(0 0 6px #0f0)'
-    img.style.zIndex = '100'
-    this.playerMarkerImg = img
+    const el = document.createElement('div')
+    el.style.width = '22px'
+    el.style.height = '28px'
+    el.style.background = 'no-repeat center/contain url(/player.png)'
+    el.style.filter = 'drop-shadow(0 0 6px #0f0)'
+    el.style.zIndex = '100'
+    this.playerMarkerImg = el
 
-    this.playerMarker = new maplibregl.Marker({ element: img })
+    this.playerMarker = new maplibregl.Marker({ element: el })
       .setLngLat([useGameStore().playerLongitude, useGameStore().playerLatitude])
       .addTo(this.map!)
   }
@@ -90,30 +114,40 @@ export class MapEngine {
     }
   }
 
-  private createCarImage(angle?: number): HTMLImageElement {
-    const img = new Image()
-    img.src = '/car.png'
-    img.width = 26
-    img.height = 38
-    img.style.display = 'block'
-    img.style.filter = 'drop-shadow(0 0 6px #48f)'
+  private createCarImage(angle?: number): HTMLElement {
+    const el = document.createElement('div')
+    el.style.width = '26px'
+    el.style.height = '38px'
+    el.style.background = 'no-repeat center/contain url(/car.png)'
+    el.style.filter = 'drop-shadow(0 0 6px #48f)'
     if (angle !== undefined) {
-      img.style.transform = `rotate(${angle}rad)`
+      el.style.transform = `rotate(${angle}rad)`
     }
-    return img
+    return el
   }
 
   private addCarMarkers() {
     const store = useGameStore()
 
     for (const car of store.cars) {
-      const img = this.createCarImage(car.angle)
+      let lng = car.longitude
+      let lat = car.latitude
+      let attempts = 0
+      while (this.isInsideBuilding(lng, lat) && attempts < 20) {
+        const jitter = (Math.random() - 0.5) * 0.0006
+        lng = car.longitude + jitter
+        lat = car.latitude + jitter
+        attempts++
+      }
+      car.longitude = lng
+      car.latitude = lat
 
-      const marker = new maplibregl.Marker({ element: img, rotationAlignment: 'map' })
-        .setLngLat([car.longitude, car.latitude])
+      const el = this.createCarImage(car.angle)
+      const marker = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
+        .setLngLat([lng, lat])
         .addTo(this.map!)
       this.carMarkers.set(car.id, marker)
-      this.carMarkerInners.set(car.id, img)
+      this.carMarkerInners.set(car.id, el)
     }
   }
 
@@ -137,12 +171,18 @@ export class MapEngine {
 
   addCarMarker(id: string, lng: number, lat: number, angle?: number) {
     if (this.carMarkers.has(id)) return
-    const img = this.createCarImage(angle)
-    const marker = new maplibregl.Marker({ element: img, rotationAlignment: 'map' })
+    const el = this.createCarImage(angle)
+    const marker = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
       .setLngLat([lng, lat])
       .addTo(this.map!)
     this.carMarkers.set(id, marker)
-    this.carMarkerInners.set(id, img)
+    this.carMarkerInners.set(id, el)
+  }
+
+  getBounds(): { n: number; s: number; e: number; w: number } | null {
+    if (!this.map) return null
+    const b = this.map.getBounds()
+    return { n: b.getNorth(), s: b.getSouth(), e: b.getEast(), w: b.getWest() }
   }
 
   updatePlayerPosition(lng: number, lat: number, angle?: number) {
@@ -161,6 +201,10 @@ export class MapEngine {
     // Handled by map bearing
   }
 
+  flyTo(lng: number, lat: number) {
+    this.map?.flyTo({ center: [lng, lat], duration: 1500 })
+  }
+
   setPlayerMarkerShadow(shadow: string) {
     if (this.playerMarkerImg) {
       this.playerMarkerImg.style.filter = `drop-shadow(0 0 6px ${shadow})`
@@ -169,15 +213,12 @@ export class MapEngine {
 
   setPlayerMarkerShape(isCar: boolean) {
     if (!this.playerMarkerImg) return
-    if (isCar) {
-      this.playerMarkerImg.src = '/car.png'
-      this.playerMarkerImg.width = 26
-      this.playerMarkerImg.height = 38
-    } else {
-      this.playerMarkerImg.src = '/player.png'
-      this.playerMarkerImg.width = 22
-      this.playerMarkerImg.height = 28
-    }
+    this.playerMarkerImg.style.backgroundImage = isCar ? 'url(/car.png)' : 'url(/player.png)'
+    this.playerMarkerImg.style.width = isCar ? '26px' : '22px'
+    this.playerMarkerImg.style.height = isCar ? '38px' : '28px'
+    this.playerMarkerImg.style.filter = isCar
+      ? 'drop-shadow(0 0 6px #48f)'
+      : 'drop-shadow(0 0 6px #0f0)'
   }
 
   isInsideBuilding(lng: number, lat: number): boolean {
@@ -201,6 +242,7 @@ export class MapEngine {
   showExplosion(epicenterLng: number, epicenterLat: number, maxRadiusMeters: number) {
     if (!this.map) return
 
+    const store = useGameStore()
     const id = 'explosion-circle'
     const layerId = 'explosion-layer'
 
@@ -229,6 +271,29 @@ export class MapEngine {
       },
     })
 
+    const blastZoneId = 'blast-zone'
+    this.map.addSource(blastZoneId, {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'Point', coordinates: [epicenterLng, epicenterLat] },
+      },
+    })
+    this.map.addLayer({
+      id: 'blast-zone-layer',
+      type: 'circle',
+      source: blastZoneId,
+      paint: {
+        'circle-radius': 30,
+        'circle-color': '#f44',
+        'circle-opacity': 0.6,
+        'circle-stroke-width': 3,
+        'circle-stroke-color': '#f80',
+        'circle-blur': 0.3,
+      },
+    })
+
     const maxPixels = this.map.project([epicenterLng, epicenterLat]).x -
       this.map.project([epicenterLng + maxRadiusMeters / (111320 * Math.cos(epicenterLat * Math.PI / 180)), epicenterLat]).x
 
@@ -248,6 +313,8 @@ export class MapEngine {
   private checkExplosionEnd() {
     const store = useGameStore()
     if (store.isInShelter) {
+      store.phase = 'victory'
+    } else if (store.playerDistFromEpicenter > store.explosionRadius) {
       store.phase = 'victory'
     } else {
       store.phase = 'gameover'

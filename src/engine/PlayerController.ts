@@ -16,6 +16,9 @@ export class PlayerController {
   private playerLat: number
   private playerAngle: number = 0
   private activeCarId: string | null = null
+  private hackDuration: number = 0
+  private spawnTimer: number = 0
+  private nextCarId: number = 12
   private highlightedCar: string | null = null
   private highlightedShelter: string | null = null
 
@@ -63,34 +66,18 @@ export class PlayerController {
     const store = useGameStore()
 
     if (store.isInCar) {
-      this.mapEngine.setPlayerMarkerShape(false)
-      this.mapEngine.setPlayerMarkerShadow('#0f0')
-      const offset = 0.00008
-      this.playerLng += Math.sin(this.playerAngle) * offset
-      this.playerLat += Math.cos(this.playerAngle) * offset
-      if (this.activeCarId) {
-        this.mapEngine.showCarMarker(this.activeCarId, this.playerLng, this.playerLat)
-        const car = store.cars.find(c => c.id === this.activeCarId)
-        if (car) {
-          car.longitude = this.playerLng
-          car.latitude = this.playerLat
-        }
-        this.activeCarId = null
-      }
-      store.isInCar = false
+      this.exitCar()
+      return
+    }
+
+    if (store.isHacking) {
+      this.cancelHack()
       return
     }
 
     const found = this.findNearbyCar()
     if (found) {
-      store.isInCar = true
-      this.activeCarId = found.id
-      this.mapEngine.setPlayerMarkerShape(true)
-      this.mapEngine.setPlayerMarkerShadow('#48f')
-      this.mapEngine.hideCarMarker(found.id)
-      this.playerLng = found.longitude
-      this.playerLat = found.latitude
-      this.playerAngle = found.angle ?? 0
+      this.startHack(found)
       return
     }
 
@@ -99,6 +86,62 @@ export class PlayerController {
       store.isInShelter = true
       store.phase = 'victory'
     }
+  }
+
+  private startHack(car: Car) {
+    const store = useGameStore()
+    store.isHacking = true
+    store.hackProgress = 0
+    store.hackingCarId = car.id
+    this.hackDuration = store.customHackSec * (0.9 + Math.random() * 0.2) * 1000
+  }
+
+  private cancelHack() {
+    const store = useGameStore()
+    store.isHacking = false
+    store.hackProgress = 0
+    store.hackingCarId = null
+  }
+
+  private finishHack() {
+    const store = useGameStore()
+    const carId = store.hackingCarId
+    if (!carId) return
+    const car = store.cars.find(c => c.id === carId)
+    if (!car) return
+
+    store.isHacking = false
+    store.hackProgress = 0
+    store.hackingCarId = null
+    store.isInCar = true
+    store.activeCarId = carId
+    this.activeCarId = carId
+    this.mapEngine.setPlayerMarkerShape(true)
+    this.mapEngine.setPlayerMarkerShadow('#48f')
+    this.mapEngine.hideCarMarker(carId)
+    this.playerLng = car.longitude
+    this.playerLat = car.latitude
+    this.playerAngle = car.angle ?? 0
+  }
+
+  private exitCar() {
+    const store = useGameStore()
+    this.mapEngine.setPlayerMarkerShape(false)
+    this.mapEngine.setPlayerMarkerShadow('#0f0')
+    const offset = 0.00008
+    this.playerLng += Math.sin(this.playerAngle) * offset
+    this.playerLat += Math.cos(this.playerAngle) * offset
+    if (this.activeCarId) {
+      this.mapEngine.showCarMarker(this.activeCarId, this.playerLng, this.playerLat)
+      const car = store.cars.find(c => c.id === this.activeCarId)
+      if (car) {
+        car.longitude = this.playerLng
+        car.latitude = this.playerLat
+      }
+      store.activeCarId = null
+      this.activeCarId = null
+    }
+    store.isInCar = false
   }
 
   private findNearbyCar(): Car | null {
@@ -157,6 +200,8 @@ export class PlayerController {
     if (this.keys.has('d')) rotation += 1
 
     this.updateProximityFeedback()
+    this.updateHack(dt)
+    this.carSpawnCheck(dt)
 
     if (store.isInCar) {
       this.updateCar(forward, rotation, dt)
@@ -164,6 +209,70 @@ export class PlayerController {
     } else {
       this.updateWalk(forward, rotation)
       this.mapEngine.updatePlayerPosition(this.playerLng, this.playerLat, this.playerAngle)
+    }
+  }
+
+  private carSpawnCheck(dt: number) {
+    this.spawnTimer += dt
+    if (this.spawnTimer < 1.5) return
+    this.spawnTimer = 0
+
+    const store = useGameStore()
+    const bounds = this.mapEngine.getBounds()
+    if (!bounds) return
+
+    let inView = 0
+    for (const car of store.cars) {
+      if (car.longitude >= bounds.w && car.longitude <= bounds.e &&
+          car.latitude >= bounds.s && car.latitude <= bounds.n) {
+        inView++
+      }
+    }
+    if (inView >= 2) return
+
+    const needed = 2 - inView
+    for (let i = 0; i < needed; i++) {
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const lng = bounds.w + Math.random() * (bounds.e - bounds.w)
+        const lat = bounds.s + Math.random() * (bounds.n - bounds.s)
+
+        if (this.mapEngine.isInsideBuilding(lng, lat)) continue
+
+        let tooClose = false
+        for (const car of store.cars) {
+          const dx = car.longitude - lng
+          const dy = car.latitude - lat
+          if (Math.sqrt(dx * dx + dy * dy) < 0.0003) {
+            tooClose = true
+            break
+          }
+        }
+        if (tooClose) continue
+
+        const id = `car-${this.nextCarId++}`
+        const angle = Math.random() * 2 * Math.PI
+        store.cars.push({ id, longitude: lng, latitude: lat, angle, fuel: 0.3 + Math.random() * 0.7 })
+        this.mapEngine.addCarMarker(id, lng, lat, angle)
+        break
+      }
+    }
+  }
+
+  private updateHack(dt: number) {
+    const store = useGameStore()
+    if (!store.isHacking) return
+
+    store.hackProgress = Math.min(store.hackProgress + dt / (this.hackDuration / 1000), 1)
+
+    if (store.hackProgress >= 1) {
+      this.finishHack()
+      return
+    }
+
+    const dx = Math.abs(this.playerLng - (store.cars.find(c => c.id === store.hackingCarId)?.longitude ?? this.playerLng))
+    const dy = Math.abs(this.playerLat - (store.cars.find(c => c.id === store.hackingCarId)?.latitude ?? this.playerLat))
+    if (Math.sqrt(dx * dx + dy * dy) > 0.0005) {
+      this.cancelHack()
     }
   }
 
@@ -228,7 +337,10 @@ export class PlayerController {
   }
 
   private updateCar(forward: number, rotation: number, dt: number) {
-    const result = this.carPhysics.update(forward, rotation, dt, this.playerLng, this.playerLat, this.playerAngle)
+    const store = useGameStore()
+    const currentCar = this.activeCarId ? store.cars.find(c => c.id === this.activeCarId) : null
+    const fuel = currentCar?.fuel ?? 1
+    const result = this.carPhysics.update(forward, rotation, dt, fuel, this.playerLng, this.playerLat, this.playerAngle)
     const newLng = result.lng
     const newLat = result.lat
 
@@ -238,14 +350,11 @@ export class PlayerController {
     }
     this.playerAngle = result.angle
 
-    if (this.activeCarId) {
-      const store = useGameStore()
-      const car = store.cars.find(c => c.id === this.activeCarId)
-      if (car) {
-        car.longitude = this.playerLng
-        car.latitude = this.playerLat
-      }
-      this.mapEngine.moveCarMarker(this.activeCarId, this.playerLng, this.playerLat)
+    if (currentCar) {
+      currentCar.longitude = this.playerLng
+      currentCar.latitude = this.playerLat
+      currentCar.fuel = result.fuel
+      this.mapEngine.moveCarMarker(this.activeCarId!, this.playerLng, this.playerLat)
     }
   }
 

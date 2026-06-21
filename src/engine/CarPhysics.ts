@@ -13,6 +13,7 @@ const DRIFT_FACTOR = 0.03
 const STEERING_RATE = 3.0
 const STEERING_RETURN_RATE = 4.0
 const STEERING_MAX = 1.0
+const FUEL_CONSUMPTION = 0.015
 
 export class CarPhysics {
   private state: CarState = { speed: 0, angle: 0, steeringAngle: 0 }
@@ -21,10 +22,11 @@ export class CarPhysics {
     forward: number,
     rotation: number,
     dt: number,
+    fuel: number,
     currentLng: number,
     currentLat: number,
     currentAngle: number,
-  ): { lng: number; lat: number; angle: number } {
+  ): { lng: number; lat: number; angle: number; fuel: number } {
     this.state.angle = currentAngle
 
     if (rotation !== 0) {
@@ -49,7 +51,7 @@ export class CarPhysics {
       this.state.angle += drift
     }
 
-    if (forward > 0) {
+    if (forward > 0 && fuel > 0) {
       this.state.speed = Math.min(this.state.speed + ACCELERATION, MAX_SPEED)
     } else if (forward < 0) {
       this.state.speed = Math.max(this.state.speed - BRAKE_FORCE, 0)
@@ -57,10 +59,14 @@ export class CarPhysics {
       this.state.speed = Math.max(this.state.speed - FRICTION, 0)
     }
 
+    if (this.state.speed > 0 && fuel > 0) {
+      fuel = Math.max(fuel - FUEL_CONSUMPTION * (this.state.speed / MAX_SPEED) * dt, 0)
+    }
+
     const lngScale = 1 / Math.cos(currentLat * Math.PI / 180)
     const lng = currentLng + Math.sin(this.state.angle) * this.state.speed * lngScale
     const lat = currentLat + Math.cos(this.state.angle) * this.state.speed
 
-    return { lng, lat, angle: this.state.angle }
+    return { lng, lat, angle: this.state.angle, fuel }
   }
 }
