@@ -50,6 +50,7 @@ export const useGameStore = defineStore('game', () => {
   const isWalking = ref(true)
   const loadingMessage = ref('Загрузка карты...')
   const playerDistFromEpicenter = ref(0)
+  const shelterHudVisible = ref(false)
 
   const customTimerMinutes = ref(7)
   const customShelterKm = ref(7)
@@ -80,6 +81,7 @@ export const useGameStore = defineStore('game', () => {
     isWalking,
     loadingMessage,
     playerDistFromEpicenter,
+    shelterHudVisible,
     customTimerMinutes,
     customShelterKm,
     customHackSec,

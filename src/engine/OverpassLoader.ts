@@ -26,13 +26,13 @@ export function loadOSMData(): Promise<void> {
 
       for (let i = 0; i < 20; i++) {
         const angle = Math.random() * 2 * Math.PI
-        const dist = (shelterKm * 500 + Math.random() * shelterKm * 500) * 1000
+        const dist = 10000 + (Math.random() - 0.5) * 2000
         const dlat = (dist / 111320) * Math.cos(angle)
-        const dlng = (dist / (111320 * Math.cos(epicenterLatitude * Math.PI / 180))) * Math.sin(angle)
+        const dlng = (dist / (111320 * Math.cos(playerLatitude * Math.PI / 180))) * Math.sin(angle)
         shelters.push({
           id: `shelter-${i}`,
-          longitude: epicenterLongitude + dlng,
-          latitude: epicenterLatitude + dlat,
+          longitude: playerLongitude + dlng,
+          latitude: playerLatitude + dlat,
         })
       }
 

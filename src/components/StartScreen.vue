@@ -57,7 +57,7 @@ async function startGame() {
 <template>
   <div class="start-screen">
     <h1 class="title">ESCAPE MAP GAME</h1>
-    <p class="subtitle">Ядерный апокалипсис. Спаси себя.</p>
+    <p class="subtitle">Симуляция побега из опасной зоны, которой становится ваш дом.</p>
 
     <div class="difficulty-select">
       <p class="label">Сложность:</p>

@@ -31,7 +31,6 @@ export class MapEngine {
     this.map.on('load', () => {
       try { this.addShelterMarkers() } catch (e) { console.warn('shelter markers fail', e) }
       try { this.addCarMarkers() } catch (e) { console.warn('car markers fail', e) }
-      try { this.addEpicenterMarker() } catch (e) { console.warn('epicenter fail', e) }
       try { this.createPlayerMarker() } catch (e) { console.warn('player marker fail', e) }
       this.onReadyCallback?.()
     })
@@ -73,22 +72,6 @@ export class MapEngine {
 
     this.playerMarker = new maplibregl.Marker({ element: el })
       .setLngLat([useGameStore().playerLongitude, useGameStore().playerLatitude])
-      .addTo(this.map!)
-  }
-
-  private addEpicenterMarker() {
-    const store = useGameStore()
-    const el = document.createElement('div')
-    el.style.width = '24px'
-    el.style.height = '24px'
-    el.style.background = '#f44'
-    el.style.borderRadius = '50%'
-    el.style.border = '3px solid #fff'
-    el.style.boxShadow = '0 0 30px #f44'
-    el.style.zIndex = '90'
-
-    new maplibregl.Marker({ element: el })
-      .setLngLat([store.epicenterLongitude, store.epicenterLatitude])
       .addTo(this.map!)
   }
 
@@ -205,6 +188,10 @@ export class MapEngine {
     this.map?.flyTo({ center: [lng, lat], duration: 1500 })
   }
 
+  fitBounds(lng1: number, lat1: number, lng2: number, lat2: number, padding: number = 200) {
+    this.map?.fitBounds([[lng1, lat1], [lng2, lat2]], { padding, duration: 1500 })
+  }
+
   setPlayerMarkerShadow(shadow: string) {
     if (this.playerMarkerImg) {
       this.playerMarkerImg.style.filter = `drop-shadow(0 0 6px ${shadow})`
@@ -302,23 +289,11 @@ export class MapEngine {
       radius += maxPixels / 50
       if (radius >= maxPixels) {
         clearInterval(interval)
-        this.checkExplosionEnd()
       }
       if (this.map && this.map.getLayer(layerId)) {
         this.map.setPaintProperty(layerId, 'circle-radius', radius)
       }
     }, 100)
-  }
-
-  private checkExplosionEnd() {
-    const store = useGameStore()
-    if (store.isInShelter) {
-      store.phase = 'victory'
-    } else if (store.playerDistFromEpicenter > store.explosionRadius) {
-      store.phase = 'victory'
-    } else {
-      store.phase = 'gameover'
-    }
   }
 
   highlightShelter(id: string) {

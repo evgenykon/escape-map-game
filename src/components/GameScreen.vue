@@ -20,13 +20,62 @@ const currentFuel = computed(() => {
 let mapEngine: MapEngine
 let playerController: PlayerController
 let timerInterval: ReturnType<typeof setInterval>
+let shelterInterval: ReturnType<typeof setInterval>
 const smsTimeouts: ReturnType<typeof setTimeout>[] = []
+
+const shelterHeading = ref(0)
+const shelterDist = ref(0)
+
+function bearing(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const rLat1 = lat1 * Math.PI / 180
+  const rLat2 = lat2 * Math.PI / 180
+  const y = Math.sin(dLng) * Math.cos(rLat2)
+  const x = Math.cos(rLat1) * Math.sin(rLat2) - Math.sin(rLat1) * Math.cos(rLat2) * Math.cos(dLng)
+  return Math.atan2(y, x)
+}
+
+function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const rLat1 = lat1 * Math.PI / 180
+  const rLat2 = lat2 * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rLat1) * Math.cos(rLat2) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function findNearestShelter() {
+  const pos = playerController.getPosition()
+  let minDist = Infinity
+  let nearest: { heading: number; dist: number } = { heading: 0, dist: 0 }
+  for (const s of store.shelters) {
+    const dist = haversine(pos.lat, pos.lng, s.latitude, s.longitude)
+    if (dist < minDist) {
+      minDist = dist
+      nearest = {
+        heading: bearing(pos.lat, pos.lng, s.latitude, s.longitude),
+        dist,
+      }
+    }
+  }
+  return nearest
+}
+
+function updateShelterInfo() {
+  if (!store.shelterHudVisible || !playerController) return
+  const info = findNearestShelter()
+  const playerAngle = playerController.getAngle()
+  shelterHeading.value = info.heading - playerAngle
+  shelterDist.value = info.dist
+}
 
 const smsTexts = [
   'Сообщение: Внимание! Чрезвычайная ситуация! Зафиксирован запуск ракеты в сторону нашего региона!',
   'Сообщение: Внимание! По оценкам МО ракета, выпушенная по нашему региону, может нести ядерный заряд!',
   'Друг: Привет! Видел объявление? Ты где? Мы собираемся сваливать подальше на восток.',
   'Сообщение: Внимание! Не пользуйтесь лифтами. Отключите газ и электричество. Сохраняйте спокойствие.',
+  'Сообщение: Экстренные службы открыли убежища. Следуйте указателям на карте.',
   'Сообщение: Если вы не успеваете достигнуть убежища, ищите здания с глубокими подвалами.',
   'ПВО и спасательные службы работают. Избегайте паники и мест скопления людей и машин. Ждите дальнейших инструкций.',
   'Внимание! Опасайтесь оставаться на улицах! Немедленно найдите укрытие!',
@@ -43,11 +92,13 @@ onMounted(() => {
 
   playerController = new PlayerController(mapEngine)
   playerController.start()
+  shelterInterval = setInterval(updateShelterInfo, 500)
 })
 
 onUnmounted(() => {
   playerController.stop()
   clearInterval(timerInterval)
+  clearInterval(shelterInterval)
   smsTimeouts.forEach(clearTimeout)
   mapEngine?.destroy()
 })
@@ -68,20 +119,21 @@ function startTimer() {
 }
 
 function scheduleSMS() {
-  const totalSeconds = store.timerMinutes * 60
-  const baseDelays = [10, 25, 45, 70, 100, 140, 180, 230]
-  const maxBaseDelay = 230
-  const scale = Math.max(0.3, (totalSeconds * 0.8) / maxBaseDelay)
-  const delays = baseDelays.map(d => Math.round(d * scale * 1000))
+  const totalMs = store.timerMinutes * 60 * 1000
+  const count = smsTexts.length
+  const gap = totalMs * 0.85 / (count - 1)
 
-  showSMS(smsTexts[0])
-
-  delays.slice(1).forEach((delay, i) => {
-    const id = setTimeout(() => {
-      if (store.phase !== 'playing') return
-      showSMS(smsTexts[i + 1])
-    }, delay)
-    smsTimeouts.push(id)
+  smsTexts.forEach((text, i) => {
+    if (i === 0) {
+      showSMS(text)
+    } else {
+      const id = setTimeout(() => {
+        if (store.phase !== 'playing') return
+        showSMS(text)
+        if (i === 4) store.shelterHudVisible = true
+      }, Math.round(gap * i))
+      smsTimeouts.push(id)
+    }
   })
 }
 
@@ -107,12 +159,31 @@ function triggerExplosion() {
   splashText.value = 'ВЗРЫВ'
   setTimeout(() => { showSplash.value = false }, 1000)
 
-  mapEngine.flyTo(store.epicenterLongitude, store.epicenterLatitude)
+  mapEngine.fitBounds(
+    store.epicenterLongitude, store.epicenterLatitude,
+    pos.lng, pos.lat,
+    120
+  )
 
   setTimeout(() => {
     const radius = store.explosionRadius
     mapEngine.showExplosion(store.epicenterLongitude, store.epicenterLatitude, radius)
   }, 1600)
+
+  setTimeout(() => {
+    if (store.phase !== 'playing') return
+    checkGameResult()
+  }, 10000)
+}
+
+function checkGameResult() {
+  if (store.isInShelter) {
+    store.phase = 'victory'
+  } else if (store.playerDistFromEpicenter > store.explosionRadius) {
+    store.phase = 'victory'
+  } else {
+    store.phase = 'gameover'
+  }
 }
 
 function formatTime(seconds: number): string {
@@ -147,6 +218,16 @@ function restartGame() {
         <div class="fuel-bar-fill" :style="{ width: currentFuel * 100 + '%' }"></div>
         <span>⛽ Топливо: {{ Math.round(currentFuel * 100) }}%</span>
       </div>
+    </div>
+
+    <div v-if="store.shelterHudVisible" class="shelter-hud">
+      <div class="shelter-compass">
+        <div class="shelter-arrow-wrap" :style="{ transform: `rotate(${shelterHeading}rad)` }">
+          <div class="shelter-arrow-stem"></div>
+          <div class="shelter-arrow-head"></div>
+        </div>
+      </div>
+      <div class="shelter-dist">{{ (shelterDist / 1000).toFixed(1) }} км</div>
     </div>
 
     <div class="sms-container">
@@ -270,6 +351,57 @@ function restartGame() {
   color: #fff;
   font-size: 0.75rem;
   text-shadow: 0 0 4px #000;
+}
+.shelter-hud {
+  position: absolute;
+  bottom: 8rem;
+  right: 1rem;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(0,0,0,0.75);
+  padding: 0.75rem 1rem;
+  border: 1px solid #fa0;
+  font-family: 'Courier New', monospace;
+}
+.shelter-compass {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #fa0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.shelter-arrow-wrap {
+  position: relative;
+  width: 4px;
+  height: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: transform 0.3s;
+}
+.shelter-arrow-stem {
+  width: 3px;
+  height: 22px;
+  background: #fa0;
+  border-radius: 1px;
+}
+.shelter-arrow-head {
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 10px solid #fa0;
+  margin-top: -1px;
+}
+.shelter-dist {
+  color: #ff0;
+  font-size: 1.1rem;
+  letter-spacing: 0.05rem;
 }
 .sms-container {
   position: absolute;
