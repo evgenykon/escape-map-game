@@ -11,6 +11,13 @@ export interface Shelter {
   latitude: number
 }
 
+export interface Car {
+  id: string
+  longitude: number
+  latitude: number
+  angle: number
+}
+
 export interface SMS {
   id: number
   text: string
@@ -29,6 +36,7 @@ export const useGameStore = defineStore('game', () => {
   const epicenterLongitude = ref(0)
 
   const shelters = ref<Shelter[]>([])
+  const cars = ref<Car[]>([])
   const smsMessages = ref<SMS[]>([])
   const timeLeft = ref(0)
   const isInCar = ref(false)
@@ -47,6 +55,7 @@ export const useGameStore = defineStore('game', () => {
     epicenterLatitude,
     epicenterLongitude,
     shelters,
+    cars,
     smsMessages,
     timeLeft,
     isInCar,

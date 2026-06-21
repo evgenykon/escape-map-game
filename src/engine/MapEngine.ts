@@ -4,6 +4,11 @@ import { useGameStore } from '@/stores/game'
 export class MapEngine {
   private map: maplibregl.Map | null = null
   private playerMarker: maplibregl.Marker | null = null
+  private playerMarkerImg: HTMLImageElement | null = null
+  private carMarkers: Map<string, maplibregl.Marker> = new Map()
+  private carMarkerInners: Map<string, HTMLImageElement> = new Map()
+  private shelterMarkers: Map<string, maplibregl.Marker> = new Map()
+  private shelterMarkerEls: Map<string, HTMLElement> = new Map()
 
   init(container: HTMLDivElement) {
     const store = useGameStore()
@@ -20,6 +25,7 @@ export class MapEngine {
 
     this.map.on('load', () => {
       this.addShelterMarkers()
+      this.addCarMarkers()
       this.addEpicenterMarker()
       this.createPlayerMarker()
     })
@@ -32,23 +38,16 @@ export class MapEngine {
   }
 
   private createPlayerMarker() {
-    const el = document.createElement('div')
-    el.style.zIndex = '100'
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-    svg.setAttribute('width', '24')
-    svg.setAttribute('height', '24')
-    svg.setAttribute('viewBox', '0 0 24 24')
-    svg.style.filter = 'drop-shadow(0 0 6px #0f0)'
-    svg.style.display = 'block'
-    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon')
-    poly.setAttribute('points', '12,2 4,22 12,16 20,22')
-    poly.setAttribute('fill', '#0f0')
-    poly.setAttribute('stroke', '#fff')
-    poly.setAttribute('stroke-width', '1.5')
-    svg.appendChild(poly)
-    el.appendChild(svg)
+    const img = new Image()
+    img.src = '/player.png'
+    img.width = 22
+    img.height = 28
+    img.style.display = 'block'
+    img.style.filter = 'drop-shadow(0 0 6px #0f0)'
+    img.style.zIndex = '100'
+    this.playerMarkerImg = img
 
-    this.playerMarker = new maplibregl.Marker({ element: el })
+    this.playerMarker = new maplibregl.Marker({ element: img })
       .setLngLat([useGameStore().playerLongitude, useGameStore().playerLatitude])
       .addTo(this.map!)
   }
@@ -82,11 +81,68 @@ export class MapEngine {
       el.style.boxShadow = '0 0 15px #ff0'
       el.style.zIndex = '80'
 
-      new maplibregl.Marker({ element: el })
+      const marker = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
         .setLngLat([shelter.longitude, shelter.latitude])
         .setPopup(new maplibregl.Popup({ offset: 10 }).setText('Убежище'))
         .addTo(this.map!)
+      this.shelterMarkers.set(shelter.id, marker)
+      this.shelterMarkerEls.set(shelter.id, el)
     }
+  }
+
+  private createCarImage(angle?: number): HTMLImageElement {
+    const img = new Image()
+    img.src = '/car.png'
+    img.width = 26
+    img.height = 38
+    img.style.display = 'block'
+    img.style.filter = 'drop-shadow(0 0 6px #48f)'
+    if (angle !== undefined) {
+      img.style.transform = `rotate(${angle}rad)`
+    }
+    return img
+  }
+
+  private addCarMarkers() {
+    const store = useGameStore()
+
+    for (const car of store.cars) {
+      const img = this.createCarImage(car.angle)
+
+      const marker = new maplibregl.Marker({ element: img, rotationAlignment: 'map' })
+        .setLngLat([car.longitude, car.latitude])
+        .addTo(this.map!)
+      this.carMarkers.set(car.id, marker)
+      this.carMarkerInners.set(car.id, img)
+    }
+  }
+
+  moveCarMarker(id: string, lng: number, lat: number) {
+    const marker = this.carMarkers.get(id)
+    if (marker) marker.setLngLat([lng, lat])
+  }
+
+  hideCarMarker(id: string) {
+    const marker = this.carMarkers.get(id)
+    if (marker) marker.getElement().style.display = 'none'
+  }
+
+  showCarMarker(id: string, lng: number, lat: number) {
+    const marker = this.carMarkers.get(id)
+    if (marker) {
+      marker.setLngLat([lng, lat])
+      marker.getElement().style.display = ''
+    }
+  }
+
+  addCarMarker(id: string, lng: number, lat: number, angle?: number) {
+    if (this.carMarkers.has(id)) return
+    const img = this.createCarImage(angle)
+    const marker = new maplibregl.Marker({ element: img, rotationAlignment: 'map' })
+      .setLngLat([lng, lat])
+      .addTo(this.map!)
+    this.carMarkers.set(id, marker)
+    this.carMarkerInners.set(id, img)
   }
 
   updatePlayerPosition(lng: number, lat: number, angle?: number) {
@@ -101,11 +157,45 @@ export class MapEngine {
     }
   }
 
+  rotatePlayerMarker(_angle: number) {
+    // Handled by map bearing
+  }
+
+  setPlayerMarkerShadow(shadow: string) {
+    if (this.playerMarkerImg) {
+      this.playerMarkerImg.style.filter = `drop-shadow(0 0 6px ${shadow})`
+    }
+  }
+
+  setPlayerMarkerShape(isCar: boolean) {
+    if (!this.playerMarkerImg) return
+    if (isCar) {
+      this.playerMarkerImg.src = '/car.png'
+      this.playerMarkerImg.width = 26
+      this.playerMarkerImg.height = 38
+    } else {
+      this.playerMarkerImg.src = '/player.png'
+      this.playerMarkerImg.width = 22
+      this.playerMarkerImg.height = 28
+    }
+  }
+
   isInsideBuilding(lng: number, lat: number): boolean {
     if (!this.map) return false
     const pt = this.map.project([lng, lat])
     const features = this.map.queryRenderedFeatures(pt)
     return features.some(f => f.layer && (f.layer.id === 'building' || f.layer.id === 'building-3d'))
+  }
+
+  isOnRoad(lng: number, lat: number): boolean {
+    if (!this.map) return false
+    const pt = this.map.project([lng, lat])
+    const features = this.map.queryRenderedFeatures(pt)
+    return features.some(f => {
+      if (!f.layer) return false
+      const id = f.layer.id
+      return id.startsWith('road_') || id.startsWith('tunnel_') || id.startsWith('bridge_') || id.startsWith('highway-')
+    })
   }
 
   showExplosion(epicenterLng: number, epicenterLat: number, maxRadiusMeters: number) {
@@ -155,40 +245,42 @@ export class MapEngine {
     }, 100)
   }
 
-  addBuildingsLayer(geojson: any) {
-    if (!this.map) return
-    const srcId = 'buildings'
-    if (this.map.getSource(srcId)) return
-
-    try {
-      this.map.addSource(srcId, { type: 'geojson', data: geojson })
-      this.map.addLayer({
-        id: 'buildings-fill',
-        type: 'fill',
-        source: srcId,
-        paint: {
-          'fill-color': '#ff4444',
-          'fill-opacity': 0.15,
-        },
-      })
-      this.map.addLayer({
-        id: 'buildings-outline',
-        type: 'line',
-        source: srcId,
-        paint: {
-          'line-color': '#ff0000',
-          'line-width': 2,
-        },
-      })
-    } catch (e) {
-      console.error('addBuildingsLayer error:', e)
+  private checkExplosionEnd() {
+    const store = useGameStore()
+    if (store.isInShelter) {
+      store.phase = 'victory'
+    } else {
+      store.phase = 'gameover'
     }
   }
 
-  private checkExplosionEnd() {
-    const store = useGameStore()
-    if (!store.isInShelter) {
-      store.phase = 'gameover'
+  highlightShelter(id: string) {
+    const el = this.shelterMarkerEls.get(id)
+    if (el) {
+      el.style.boxShadow = '0 0 30px #0f0'
+      el.style.borderColor = '#0f0'
+    }
+  }
+
+  unhighlightShelter(id: string) {
+    const el = this.shelterMarkerEls.get(id)
+    if (el) {
+      el.style.boxShadow = '0 0 15px #ff0'
+      el.style.borderColor = '#fa0'
+    }
+  }
+
+  highlightCar(id: string) {
+    const el = this.carMarkerInners.get(id)
+    if (el) {
+      el.style.filter = 'drop-shadow(0 0 10px #0f0)'
+    }
+  }
+
+  unhighlightCar(id: string) {
+    const el = this.carMarkerInners.get(id)
+    if (el) {
+      el.style.filter = 'drop-shadow(0 0 6px #48f)'
     }
   }
 

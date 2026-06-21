@@ -11,13 +11,27 @@ const difficulties: { key: Difficulty; label: string; time: number }[] = [
   { key: 'hard', label: 'Сложная', time: 5 },
 ]
 
-function startGame() {
+async function startGame() {
   const diff = difficulties.find(d => d.key === selectedDifficulty.value)!
   store.difficulty = selectedDifficulty.value
   store.timerMinutes = diff.time
 
+  const radiusMap: Record<Difficulty, number> = { easy: 800, normal: 1000, hard: 1500 }
+  store.explosionRadius = radiusMap[selectedDifficulty.value]
+
   store.playerLatitude = 55.7558
   store.playerLongitude = 37.6173
+
+  try {
+    const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject,
+        { enableHighAccuracy: true, timeout: 10000 })
+    })
+    store.playerLatitude = pos.coords.latitude
+    store.playerLongitude = pos.coords.longitude
+  } catch {
+    // fallback to Moscow coordinates
+  }
 
   const angle = Math.random() * 2 * Math.PI
   const dlat = (1 / 111.32) * Math.cos(angle)
@@ -26,17 +40,6 @@ function startGame() {
   store.epicenterLongitude = store.playerLongitude + dlng
 
   store.phase = 'loading'
-
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      store.playerLatitude = pos.coords.latitude
-      store.playerLongitude = pos.coords.longitude
-      store.epicenterLatitude = store.playerLatitude + dlat
-      store.epicenterLongitude = store.playerLongitude + dlng
-    },
-    () => {},
-    { enableHighAccuracy: true, timeout: 10000 }
-  )
 }
 </script>
 

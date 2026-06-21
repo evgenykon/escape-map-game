@@ -16,16 +16,17 @@ const splashText = ref('')
 let mapEngine: MapEngine
 let playerController: PlayerController
 let timerInterval: ReturnType<typeof setInterval>
+const smsTimeouts: ReturnType<typeof setTimeout>[] = []
 
 const smsTexts = [
-  'ВНИМАНИЕ! Зафиксирован ядерный взрыв в вашем регионе. Немедленно найдите убежище.',
-  'Правительство объявляет эвакуацию. Двигайтесь в сторону убежищ, отмеченных на карте.',
-  'До прибытия ударной волны осталось несколько минут. Укройтесь в ближайшем здании.',
-  'Не пользуйтесь лифтами. Отключите газ и электричество. Сохраняйте спокойствие.',
-  'Ударная волна приближается. Если вы не в убежище — ложитесь на пол, закройте голову.',
-  'Радиоактивное облако движется на восток. Находитесь в укрытии до особого распоряжения.',
-  'Спасательные службы работают. Оставайтесь на связи. Ждите дальнейших инструкций.',
-  'Внимание! Возможны повторные удары. Не покидайте убежище.',
+  'Сообщение: Внимание! Чрезвычайная ситуация! Зафиксирован запуск ракеты в сторону нашего региона!',
+  'Сообщение: Внимание! По оценкам МО ракета, выпушенная по нашему региону, может нести ядерный заряд!',
+  'Друг: Привет! Видел объявление? Ты где? Мы собираемся сваливать подальше на восток.',
+  'Сообщение: Внимание! Не пользуйтесь лифтами. Отключите газ и электричество. Сохраняйте спокойствие.',
+  'Сообщение: Если вы не успеваете достигнуть убежища, ищите здания с глубокими подвалами.',
+  'ПВО и спасательные службы работают. Избегайте паники и мест скопления людей и машин. Ждите дальнейших инструкций.',
+  'Внимание! Опасайтесь оставаться на улицах! Немедленно найдите укрытие!',
+  'Внимание! Не покидайте убежище.',
 ]
 
 onMounted(() => {
@@ -42,6 +43,8 @@ onMounted(() => {
 onUnmounted(() => {
   playerController.stop()
   clearInterval(timerInterval)
+  smsTimeouts.forEach(clearTimeout)
+  mapEngine?.destroy()
 })
 
 function startTimer() {
@@ -60,13 +63,20 @@ function startTimer() {
 }
 
 function scheduleSMS() {
-  const delays = [10, 25, 45, 70, 100, 140, 180, 230].map(s => s * 1000)
+  const totalSeconds = store.timerMinutes * 60
+  const baseDelays = [10, 25, 45, 70, 100, 140, 180, 230]
+  const maxBaseDelay = 230
+  const scale = Math.max(0.3, (totalSeconds * 0.8) / maxBaseDelay)
+  const delays = baseDelays.map(d => Math.round(d * scale * 1000))
 
-  delays.forEach((delay, i) => {
-    setTimeout(() => {
+  showSMS(smsTexts[0])
+
+  delays.slice(1).forEach((delay, i) => {
+    const id = setTimeout(() => {
       if (store.phase !== 'playing') return
-      showSMS(smsTexts[i])
+      showSMS(smsTexts[i + 1])
     }, delay)
+    smsTimeouts.push(id)
   })
 }
 

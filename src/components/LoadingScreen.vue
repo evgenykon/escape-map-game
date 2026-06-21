@@ -5,8 +5,8 @@ import { loadOSMData } from '@/engine/OverpassLoader'
 
 const store = useGameStore()
 
-onMounted(() => {
-  loadOSMData()
+onMounted(async () => {
+  await loadOSMData()
   store.phase = 'playing'
 })
 </script>
