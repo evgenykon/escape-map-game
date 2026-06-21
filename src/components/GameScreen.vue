@@ -21,10 +21,13 @@ let mapEngine: MapEngine
 let playerController: PlayerController
 let timerInterval: ReturnType<typeof setInterval>
 let shelterInterval: ReturnType<typeof setInterval>
+let carInfoInterval: ReturnType<typeof setInterval>
 const smsTimeouts: ReturnType<typeof setTimeout>[] = []
 
 const shelterHeading = ref(0)
 const shelterDist = ref(0)
+const carSpeed = ref(0)
+const carGear = ref('P')
 
 function bearing(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const dLng = (lng2 - lng1) * Math.PI / 180
@@ -93,12 +96,17 @@ onMounted(() => {
   playerController = new PlayerController(mapEngine)
   playerController.start()
   shelterInterval = setInterval(updateShelterInfo, 500)
+  carInfoInterval = setInterval(() => {
+    carSpeed.value = playerController.getCarSpeed()
+    carGear.value = playerController.getCarGear()
+  }, 200)
 })
 
 onUnmounted(() => {
   playerController.stop()
   clearInterval(timerInterval)
   clearInterval(shelterInterval)
+  clearInterval(carInfoInterval)
   smsTimeouts.forEach(clearTimeout)
   mapEngine?.destroy()
 })
@@ -159,11 +167,13 @@ function triggerExplosion() {
   splashText.value = 'ВЗРЫВ'
   setTimeout(() => { showSplash.value = false }, 1000)
 
-  mapEngine.fitBounds(
-    store.epicenterLongitude, store.epicenterLatitude,
-    pos.lng, pos.lat,
-    120
-  )
+  const radiusDeg = store.explosionRadius / 111320
+  const rLng = radiusDeg / Math.cos(store.epicenterLatitude * Math.PI / 180)
+  const swLng = Math.min(store.epicenterLongitude - rLng, pos.lng)
+  const swLat = Math.min(store.epicenterLatitude - radiusDeg, pos.lat)
+  const neLng = Math.max(store.epicenterLongitude + rLng, pos.lng)
+  const neLat = Math.max(store.epicenterLatitude + radiusDeg, pos.lat)
+  mapEngine.fitBounds(swLng, swLat, neLng, neLat, 60)
 
   setTimeout(() => {
     const radius = store.explosionRadius
@@ -192,6 +202,11 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+function formatSpeed(speed: number): string {
+  const kmh = Math.round(Math.abs(speed) / 0.00002 * 120)
+  return `${kmh} км/ч`
+}
+
 function restartGame() {
   store.phase = 'start'
 }
@@ -218,6 +233,7 @@ function restartGame() {
         <div class="fuel-bar-fill" :style="{ width: currentFuel * 100 + '%' }"></div>
         <span>⛽ Топливо: {{ Math.round(currentFuel * 100) }}%</span>
       </div>
+      <div v-if="store.isInCar" class="hud-speed">{{ carGear }} {{ formatSpeed(carSpeed) }}</div>
     </div>
 
     <div v-if="store.shelterHudVisible" class="shelter-hud">
@@ -351,6 +367,16 @@ function restartGame() {
   color: #fff;
   font-size: 0.75rem;
   text-shadow: 0 0 4px #000;
+}
+.hud-speed {
+  background: rgba(0,0,0,0.8);
+  color: #0f0;
+  padding: 0.3rem 0.8rem;
+  font-size: 1rem;
+  border: 1px solid #0f0;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.1rem;
 }
 .shelter-hud {
   position: absolute;

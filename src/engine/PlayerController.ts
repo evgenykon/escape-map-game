@@ -21,11 +21,13 @@ export class PlayerController {
   private nextCarId: number = 12
   private highlightedCar: string | null = null
   private highlightedShelter: string | null = null
+  private offRoadFactor = 1.0
 
   constructor(mapEngine: MapEngine) {
     const store = useGameStore()
     this.mapEngine = mapEngine
     this.carPhysics = new CarPhysics()
+    this.carPhysics.setConsumption(store.customFuelConsumption / 100 * 0.005)
     this.playerLng = store.playerLongitude
     this.playerLat = store.playerLatitude
   }
@@ -232,11 +234,12 @@ export class PlayerController {
 
     const needed = 2 - inView
     for (let i = 0; i < needed; i++) {
-      for (let attempt = 0; attempt < 20; attempt++) {
+      for (let attempt = 0; attempt < 50; attempt++) {
         const lng = bounds.w + Math.random() * (bounds.e - bounds.w)
         const lat = bounds.s + Math.random() * (bounds.n - bounds.s)
 
         if (this.mapEngine.isInsideBuilding(lng, lat)) continue
+        if (!this.mapEngine.isOnRoad(lng, lat)) continue
 
         let tooClose = false
         for (const car of store.cars) {
@@ -345,8 +348,12 @@ export class PlayerController {
     const newLat = result.lat
 
     if (!this.mapEngine.isInsideBuilding(newLng, newLat)) {
-      this.playerLng = newLng
-      this.playerLat = newLat
+      const onRoad = this.mapEngine.isOnRoad(newLng, newLat)
+      const target = onRoad ? 1.0 : 0.03
+      const rate = onRoad ? 2.5 : 0.6
+      this.offRoadFactor += (target - this.offRoadFactor) * Math.min(1, rate * dt)
+      this.playerLng += (newLng - this.playerLng) * this.offRoadFactor
+      this.playerLat += (newLat - this.playerLat) * this.offRoadFactor
     }
     this.playerAngle = result.angle
 
@@ -356,6 +363,14 @@ export class PlayerController {
       currentCar.fuel = result.fuel
       this.mapEngine.moveCarMarker(this.activeCarId!, this.playerLng, this.playerLat)
     }
+  }
+
+  getCarSpeed(): number {
+    return this.carPhysics.getSpeed() * this.offRoadFactor
+  }
+
+  getCarGear(): string {
+    return this.carPhysics.getGear()
   }
 
   getPosition(): { lng: number; lat: number } {

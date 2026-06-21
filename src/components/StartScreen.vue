@@ -98,6 +98,10 @@ async function startGame() {
         <label>Количество машин: <strong>{{ store.customCarCount }}</strong></label>
         <input type="range" min="3" max="30" step="1" v-model.number="store.customCarCount">
       </div>
+      <div class="option">
+        <label>Расход топлива: <strong>{{ store.customFuelConsumption }}%</strong></label>
+        <input type="range" min="10" max="200" step="10" v-model.number="store.customFuelConsumption">
+      </div>
     </div>
 
     <button class="start-btn" @click="startGame">СТАРТ</button>

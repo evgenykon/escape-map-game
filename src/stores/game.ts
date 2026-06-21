@@ -58,6 +58,7 @@ export const useGameStore = defineStore('game', () => {
   const customFuelAmount = ref(0.7)
   const customCarCount = ref(12)
   const customExplosionRadius = ref(1000)
+  const customFuelConsumption = ref(50)
 
   return {
     phase,
@@ -88,5 +89,6 @@ export const useGameStore = defineStore('game', () => {
     customFuelAmount,
     customCarCount,
     customExplosionRadius,
+    customFuelConsumption,
   }
 })
