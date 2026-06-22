@@ -1,15 +1,20 @@
+import { destination } from '@turf/turf'
 import maplibregl from 'maplibre-gl'
 import { useGameStore } from '@/stores/game'
 
 export class MapEngine {
   private map: maplibregl.Map | null = null
   private playerMarker: maplibregl.Marker | null = null
+  private playerMarkerOuter: HTMLElement | null = null
   private playerMarkerImg: HTMLElement | null = null
   private carMarkers: Map<string, maplibregl.Marker> = new Map()
   private carMarkerInners: Map<string, HTMLElement> = new Map()
   private shelterMarkers: Map<string, maplibregl.Marker> = new Map()
   private shelterMarkerEls: Map<string, HTMLElement> = new Map()
+  private playerBaseW = 22
+  private playerBaseH = 28
   private onReadyCallback?: () => void
+  private targetZoom: number | null = null
 
   onReady(cb: () => void) {
     this.onReadyCallback = cb
@@ -68,7 +73,15 @@ export class MapEngine {
     el.style.background = 'no-repeat center/contain url(/player.png)'
     el.style.filter = 'drop-shadow(0 0 6px #0f0)'
     el.style.zIndex = '100'
-    this.playerMarkerImg = el
+
+    const inner = document.createElement('div')
+    inner.style.width = '100%'
+    inner.style.height = '100%'
+    inner.style.background = 'no-repeat center/contain url(/player.png)'
+    inner.style.filter = 'drop-shadow(0 0 6px #0f0)'
+    el.appendChild(inner)
+    this.playerMarkerOuter = el
+    this.playerMarkerImg = inner
 
     this.playerMarker = new maplibregl.Marker({ element: el })
       .setLngLat([useGameStore().playerLongitude, useGameStore().playerLatitude])
@@ -162,18 +175,46 @@ export class MapEngine {
     this.carMarkerInners.set(id, el)
   }
 
+  removeCarMarker(id: string) {
+    const marker = this.carMarkers.get(id)
+    if (marker) {
+      marker.remove()
+      this.carMarkers.delete(id)
+      this.carMarkerInners.delete(id)
+    }
+  }
+
+  setCarMarkersVisible(visible: boolean) {
+    for (const marker of this.carMarkers.values()) {
+      marker.getElement().style.display = visible ? '' : 'none'
+    }
+  }
+
   getBounds(): { n: number; s: number; e: number; w: number } | null {
     if (!this.map) return null
     const b = this.map.getBounds()
     return { n: b.getNorth(), s: b.getSouth(), e: b.getEast(), w: b.getWest() }
   }
 
-  updatePlayerPosition(lng: number, lat: number, angle?: number) {
+  updatePlayerPosition(lng: number, lat: number, angle?: number, zoom?: number) {
     if (this.playerMarker) {
       this.playerMarker.setLngLat([lng, lat])
     }
     if (this.map) {
       this.map.setCenter([lng, lat])
+      if (zoom !== undefined) {
+        this.applyPlayerZoom(zoom)
+        this.targetZoom = zoom
+        const current = this.map.getZoom()
+        const diff = this.targetZoom - current
+        if (Math.abs(diff) > 0.05) {
+          this.map.setZoom(current + diff * 0.12)
+        } else {
+          this.map.setZoom(this.targetZoom)
+        }
+      } else {
+        this.targetZoom = null
+      }
       if (angle !== undefined) {
         this.map.setBearing(angle * 180 / Math.PI)
       }
@@ -188,8 +229,21 @@ export class MapEngine {
     this.map?.flyTo({ center: [lng, lat], duration: 1500 })
   }
 
+  setMapZoom(z: number) {
+    this.map?.flyTo({ zoom: z, duration: 600 })
+  }
+
   fitBounds(lng1: number, lat1: number, lng2: number, lat2: number, padding: number = 200) {
     this.map?.fitBounds([[lng1, lat1], [lng2, lat2]], { padding, duration: 1500 })
+  }
+
+  private applyPlayerZoom(zoom: number) {
+    if (!this.playerMarkerImg) return
+    const scale = 1 + (zoom - 18) * 0.2
+    const w = Math.round(this.playerBaseW * scale)
+    const h = Math.round(this.playerBaseH * scale)
+    this.playerMarkerImg.style.width = w + 'px'
+    this.playerMarkerImg.style.height = h + 'px'
   }
 
   setPlayerMarkerShadow(shadow: string) {
@@ -200,12 +254,22 @@ export class MapEngine {
 
   setPlayerMarkerShape(isCar: boolean) {
     if (!this.playerMarkerImg) return
-    this.playerMarkerImg.style.backgroundImage = isCar ? 'url(/car.png)' : 'url(/player.png)'
-    this.playerMarkerImg.style.width = isCar ? '26px' : '22px'
-    this.playerMarkerImg.style.height = isCar ? '38px' : '28px'
+    this.playerBaseW = isCar ? 26 : 22
+    this.playerBaseH = isCar ? 38 : 28
+    this.playerMarkerImg.style.background = isCar
+      ? 'no-repeat center/contain url(/car.png)'
+      : 'no-repeat center/contain url(/player.png)'
     this.playerMarkerImg.style.filter = isCar
       ? 'drop-shadow(0 0 6px #48f)'
       : 'drop-shadow(0 0 6px #0f0)'
+    this.applyPlayerZoom(this.map?.getZoom() ?? 18)
+  }
+
+  setPlayerWalkFrame(frame: number) {
+    if (!this.playerMarkerImg) return
+    const sprites = ['/player.png', '/player-left-foot.png', '/player-right-foot.png']
+    this.playerMarkerImg.style.background = `no-repeat center/contain url(${sprites[frame]})`
+    this.applyPlayerZoom(this.map?.getZoom() ?? 18)
   }
 
   isInsideBuilding(lng: number, lat: number): boolean {
@@ -218,11 +282,23 @@ export class MapEngine {
   isOnRoad(lng: number, lat: number): boolean {
     if (!this.map) return false
     const pt = this.map.project([lng, lat])
-    const features = this.map.queryRenderedFeatures(pt)
+    const r = 6
+    const features = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
     return features.some(f => {
       if (!f.layer) return false
       const id = f.layer.id
       return id.startsWith('road_') || id.startsWith('tunnel_') || id.startsWith('bridge_') || id.startsWith('highway-')
+    })
+  }
+
+  isOnWater(lng: number, lat: number): boolean {
+    if (!this.map) return false
+    const pt = this.map.project([lng, lat])
+    const features = this.map.queryRenderedFeatures(pt)
+    return features.some(f => {
+      if (!f.layer) return false
+      const id = f.layer.id
+      return id === 'water' || id === 'waterway' || id.startsWith('water_')
     })
   }
 
@@ -281,8 +357,8 @@ export class MapEngine {
       },
     })
 
-    const maxPixels = this.map.project([epicenterLng, epicenterLat]).x -
-      this.map.project([epicenterLng + maxRadiusMeters / (111320 * Math.cos(epicenterLat * Math.PI / 180)), epicenterLat]).x
+    const dest = destination([epicenterLng, epicenterLat], maxRadiusMeters, 90, { units: 'meters' })
+    const maxPixels = this.map.project([epicenterLng, epicenterLat]).x - this.map.project(dest.geometry.coordinates as [number, number]).x
 
     let radius = 0
     const interval = setInterval(() => {

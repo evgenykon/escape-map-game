@@ -1,10 +1,13 @@
+import { distance, destination } from '@turf/turf'
 import { useGameStore } from '@/stores/game'
 import type { Car } from '@/stores/game'
 import { CarPhysics } from './CarPhysics'
 import { MapEngine } from './MapEngine'
 
-const MOVE_SPEED_WALK = 0.000005
-const ROTATION_SPEED = 0.04
+const MOVE_SPEED_WALK = 2
+const ROTATION_SPEED = 2.4
+const CAR_COLLISION_DIST = 3
+const SWIM_SPEED = 0.3
 
 export class PlayerController {
   private keys: Set<string> = new Set()
@@ -17,11 +20,14 @@ export class PlayerController {
   private playerAngle: number = 0
   private activeCarId: string | null = null
   private hackDuration: number = 0
+  private hasDrivenBefore = false
   private spawnTimer: number = 0
   private nextCarId: number = 12
   private highlightedCar: string | null = null
   private highlightedShelter: string | null = null
-  private offRoadFactor = 1.0
+  private walkAnimTimer = 0
+  private walkAnimFrame = 0
+  private isMapMode = false
 
   constructor(mapEngine: MapEngine) {
     const store = useGameStore()
@@ -49,8 +55,14 @@ export class PlayerController {
 
   private onKeyDown = (e: KeyboardEvent) => {
     const code = e.code
-    const key = code.replace('Key', '').toLowerCase()
-    if (['w', 'a', 's', 'd', 'e'].includes(key)) {
+    const key = code === 'ShiftLeft' || code === 'ShiftRight' ? 'shift' : code.replace('Key', '').toLowerCase()
+    if (key === 'm') {
+      this.isMapMode = !this.isMapMode
+      this.mapEngine.setMapZoom(this.isMapMode ? 10 : 20)
+      this.mapEngine.setCarMarkersVisible(!this.isMapMode)
+      return
+    }
+    if (['w', 'a', 's', 'd', 'e', 'shift'].includes(key)) {
       e.preventDefault()
       this.keys.add(key)
       if (key === 'e') {
@@ -60,7 +72,7 @@ export class PlayerController {
   }
 
   private onKeyUp = (e: KeyboardEvent) => {
-    const key = e.code.replace('Key', '').toLowerCase()
+    const key = e.code === 'ShiftLeft' || e.code === 'ShiftRight' ? 'shift' : e.code.replace('Key', '').toLowerCase()
     this.keys.delete(key)
   }
 
@@ -79,7 +91,11 @@ export class PlayerController {
 
     const found = this.findNearbyCar()
     if (found) {
-      this.startHack(found)
+      if (this.hasDrivenBefore) {
+        this.enterCarDirectly(found)
+      } else {
+        this.startHack(found)
+      }
       return
     }
 
@@ -88,6 +104,19 @@ export class PlayerController {
       store.isInShelter = true
       store.phase = 'victory'
     }
+  }
+
+  private enterCarDirectly(car: Car) {
+    const store = useGameStore()
+    store.isInCar = true
+    store.activeCarId = car.id
+    this.activeCarId = car.id
+    this.mapEngine.setPlayerMarkerShape(true)
+    this.mapEngine.setPlayerMarkerShadow('#48f')
+    this.mapEngine.hideCarMarker(car.id)
+    this.playerLng = car.longitude
+    this.playerLat = car.latitude
+    this.playerAngle = car.angle ?? 0
   }
 
   private startHack(car: Car) {
@@ -112,6 +141,7 @@ export class PlayerController {
     const car = store.cars.find(c => c.id === carId)
     if (!car) return
 
+    this.hasDrivenBefore = true
     store.isHacking = false
     store.hackProgress = 0
     store.hackingCarId = null
@@ -130,9 +160,9 @@ export class PlayerController {
     const store = useGameStore()
     this.mapEngine.setPlayerMarkerShape(false)
     this.mapEngine.setPlayerMarkerShadow('#0f0')
-    const offset = 0.00008
-    this.playerLng += Math.sin(this.playerAngle) * offset
-    this.playerLat += Math.cos(this.playerAngle) * offset
+    const exitPos = destination([this.playerLng, this.playerLat], 8, this.playerAngle * 180 / Math.PI, { units: 'meters' })
+    this.playerLng = exitPos.geometry.coordinates[0]
+    this.playerLat = exitPos.geometry.coordinates[1]
     if (this.activeCarId) {
       this.mapEngine.showCarMarker(this.activeCarId, this.playerLng, this.playerLat)
       const car = store.cars.find(c => c.id === this.activeCarId)
@@ -148,14 +178,12 @@ export class PlayerController {
 
   private findNearbyCar(): Car | null {
     const store = useGameStore()
-    const threshold = 0.0003
+    const threshold = 30
     let closest: Car | null = null
     let minDist = threshold
 
     for (const car of store.cars) {
-      const dlat = Math.abs(car.latitude - this.playerLat)
-      const dlng = Math.abs(car.longitude - this.playerLng)
-      const dist = Math.sqrt(dlat * dlat + dlng * dlng)
+      const dist = distance([this.playerLng, this.playerLat], [car.longitude, car.latitude], { units: 'meters' })
       if (dist < minDist) {
         minDist = dist
         closest = car
@@ -166,12 +194,11 @@ export class PlayerController {
 
   private findNearbyShelter() {
     const store = useGameStore()
-    const threshold = 0.0005
+    const threshold = 50
 
     for (const shelter of store.shelters) {
-      const dlat = Math.abs(shelter.latitude - this.playerLat)
-      const dlng = Math.abs(shelter.longitude - this.playerLng)
-      if (dlat < threshold && dlng < threshold) {
+      const dist = distance([this.playerLng, this.playerLat], [shelter.longitude, shelter.latitude], { units: 'meters' })
+      if (dist < threshold) {
         return shelter
       }
     }
@@ -205,12 +232,17 @@ export class PlayerController {
     this.updateHack(dt)
     this.carSpawnCheck(dt)
 
+    if (this.isMapMode) return
+
     if (store.isInCar) {
       this.updateCar(forward, rotation, dt)
-      this.mapEngine.updatePlayerPosition(this.playerLng, this.playerLat, this.playerAngle)
+      const speedKmh = Math.abs(this.getCarSpeed()) * 3.6
+      const t = Math.min(1, Math.max(0, (speedKmh - 30) / 30))
+      const zoom = 19 - t * 2
+      this.mapEngine.updatePlayerPosition(this.playerLng, this.playerLat, this.playerAngle, zoom)
     } else {
-      this.updateWalk(forward, rotation)
-      this.mapEngine.updatePlayerPosition(this.playerLng, this.playerLat, this.playerAngle)
+      this.updateWalk(forward, rotation, dt)
+      this.mapEngine.updatePlayerPosition(this.playerLng, this.playerLat, this.playerAngle, 20)
     }
   }
 
@@ -223,16 +255,16 @@ export class PlayerController {
     const bounds = this.mapEngine.getBounds()
     if (!bounds) return
 
-    let inView = 0
+    let totalInView = 0
     for (const car of store.cars) {
       if (car.longitude >= bounds.w && car.longitude <= bounds.e &&
           car.latitude >= bounds.s && car.latitude <= bounds.n) {
-        inView++
+        totalInView++
       }
     }
-    if (inView >= 2) return
+    if (totalInView >= 2) return
 
-    const needed = 2 - inView
+    const needed = 2 - totalInView
     for (let i = 0; i < needed; i++) {
       for (let attempt = 0; attempt < 50; attempt++) {
         const lng = bounds.w + Math.random() * (bounds.e - bounds.w)
@@ -243,9 +275,8 @@ export class PlayerController {
 
         let tooClose = false
         for (const car of store.cars) {
-          const dx = car.longitude - lng
-          const dy = car.latitude - lat
-          if (Math.sqrt(dx * dx + dy * dy) < 0.0003) {
+          const cd = distance([lng, lat], [car.longitude, car.latitude], { units: 'meters' })
+          if (cd < 30) {
             tooClose = true
             break
           }
@@ -272,25 +303,25 @@ export class PlayerController {
       return
     }
 
-    const dx = Math.abs(this.playerLng - (store.cars.find(c => c.id === store.hackingCarId)?.longitude ?? this.playerLng))
-    const dy = Math.abs(this.playerLat - (store.cars.find(c => c.id === store.hackingCarId)?.latitude ?? this.playerLat))
-    if (Math.sqrt(dx * dx + dy * dy) > 0.0005) {
-      this.cancelHack()
+    const hackTarget = store.cars.find(c => c.id === store.hackingCarId)
+    if (hackTarget) {
+      const hackDist = distance([this.playerLng, this.playerLat], [hackTarget.longitude, hackTarget.latitude], { units: 'meters' })
+      if (hackDist > 50) {
+        this.cancelHack()
+      }
     }
   }
 
   private updateProximityFeedback() {
     const store = useGameStore()
-    const carThreshold = 0.0003
-    const shelterThreshold = 0.0005
+    const carThreshold = 5
+    const shelterThreshold = 50
 
     let closestCar: string | null = null
     let minCarDist = carThreshold
 
     for (const car of store.cars) {
-      const dlat = Math.abs(car.latitude - this.playerLat)
-      const dlng = Math.abs(car.longitude - this.playerLng)
-      const dist = Math.sqrt(dlat * dlat + dlng * dlng)
+      const dist = distance([this.playerLng, this.playerLat], [car.longitude, car.latitude], { units: 'meters' })
       if (dist < minCarDist) {
         minCarDist = dist
         closestCar = car.id
@@ -307,9 +338,7 @@ export class PlayerController {
     let minShelterDist = shelterThreshold
 
     for (const shelter of store.shelters) {
-      const dlat = Math.abs(shelter.latitude - this.playerLat)
-      const dlng = Math.abs(shelter.longitude - this.playerLng)
-      const dist = Math.sqrt(dlat * dlat + dlng * dlng)
+      const dist = distance([this.playerLng, this.playerLat], [shelter.longitude, shelter.latitude], { units: 'meters' })
       if (dist < minShelterDist) {
         minShelterDist = dist
         closestShelter = shelter.id
@@ -323,20 +352,77 @@ export class PlayerController {
     }
   }
 
-  private updateWalk(forward: number, rotation: number) {
-    this.playerAngle += rotation * ROTATION_SPEED
+  private sinkPlayerCar() {
+    const store = useGameStore()
+    if (this.activeCarId) {
+      this.mapEngine.removeCarMarker(this.activeCarId)
+      this.mapEngine.setPlayerMarkerShape(false)
+      this.mapEngine.setPlayerMarkerShadow('#0f0')
+      const idx = store.cars.findIndex(c => c.id === this.activeCarId)
+      if (idx !== -1) store.cars.splice(idx, 1)
+      store.activeCarId = null
+      this.activeCarId = null
+    }
+    store.isInCar = false
+    store.isSwimming = true
+  }
+
+  private removeTrafficCar(id: string) {
+    const store = useGameStore()
+    this.mapEngine.removeCarMarker(id)
+    const idx = store.cars.findIndex(c => c.id === id)
+    if (idx !== -1) store.cars.splice(idx, 1)
+  }
+
+  private updateWalk(forward: number, rotation: number, dt: number) {
+    this.playerAngle += rotation * ROTATION_SPEED * dt
+
+    const isRunning = this.keys.has('shift')
 
     if (forward !== 0) {
-      const lngScale = 1 / Math.cos(this.playerLat * Math.PI / 180)
-      const dlng = Math.sin(this.playerAngle) * forward * MOVE_SPEED_WALK * lngScale
-      const dlat = Math.cos(this.playerAngle) * forward * MOVE_SPEED_WALK
-      const newLng = this.playerLng + dlng
-      const newLat = this.playerLat + dlat
+      let bearing = this.playerAngle * 180 / Math.PI
+      const inWater = this.mapEngine.isOnWater(this.playerLng, this.playerLat)
+      const speed = inWater ? SWIM_SPEED : (isRunning ? 6 : MOVE_SPEED_WALK)
+      let dist = Math.abs(forward) * speed * dt
+      if (forward < 0) {
+        bearing += 180
+      }
+      const moved = destination([this.playerLng, this.playerLat], dist, bearing, { units: 'meters' })
+      const [newLng, newLat] = moved.geometry.coordinates
       if (!this.mapEngine.isInsideBuilding(newLng, newLat)) {
         this.playerLng = newLng
         this.playerLat = newLat
       }
     }
+
+    this.walkAnimTimer += dt
+    const animInterval = isRunning ? 0.15 : 0.25
+    if (forward !== 0) {
+      if (this.walkAnimTimer >= animInterval) {
+        this.walkAnimTimer = 0
+        this.walkAnimFrame = this.walkAnimFrame === 1 ? 2 : 1
+        this.mapEngine.setPlayerWalkFrame(this.walkAnimFrame)
+      }
+    } else {
+      this.walkAnimTimer = 0
+      this.walkAnimFrame = 0
+      this.mapEngine.setPlayerWalkFrame(0)
+    }
+
+    const store = useGameStore()
+    store.isSwimming = this.mapEngine.isOnWater(this.playerLng, this.playerLat)
+  }
+
+  private checkCarCollision(lng: number, lat: number, excludeId?: string): boolean {
+    const store = useGameStore()
+    const speed = Math.abs(this.carPhysics.getSpeed())
+    const threshold = Math.max(CAR_COLLISION_DIST, speed * 0.4)
+    for (const car of store.cars) {
+      if (car.id === excludeId) continue
+      const dist = distance([lng, lat], [car.longitude, car.latitude], { units: 'meters' })
+      if (dist < threshold) return true
+    }
+    return false
   }
 
   private updateCar(forward: number, rotation: number, dt: number) {
@@ -347,13 +433,19 @@ export class PlayerController {
     const newLng = result.lng
     const newLat = result.lat
 
-    if (!this.mapEngine.isInsideBuilding(newLng, newLat)) {
-      const onRoad = this.mapEngine.isOnRoad(newLng, newLat)
-      const target = onRoad ? 1.0 : 0.03
-      const rate = onRoad ? 2.5 : 0.6
-      this.offRoadFactor += (target - this.offRoadFactor) * Math.min(1, rate * dt)
-      this.playerLng += (newLng - this.playerLng) * this.offRoadFactor
-      this.playerLat += (newLat - this.playerLat) * this.offRoadFactor
+    if (this.mapEngine.isInsideBuilding(newLng, newLat)) {
+      this.carPhysics.setSpeed(0)
+    } else if (this.mapEngine.isOnWater(newLng, newLat)) {
+      this.sinkPlayerCar()
+    } else if (this.checkCarCollision(newLng, newLat, this.activeCarId!)) {
+      this.playerLng -= (newLng - this.playerLng) * 0.8
+      this.playerLat -= (newLat - this.playerLat) * 0.8
+    } else {
+      if (!this.mapEngine.isOnRoad(newLng, newLat)) {
+        this.carPhysics.applyOffRoadDrag(dt)
+      }
+      this.playerLng = newLng
+      this.playerLat = newLat
     }
     this.playerAngle = result.angle
 
@@ -366,7 +458,7 @@ export class PlayerController {
   }
 
   getCarSpeed(): number {
-    return this.carPhysics.getSpeed() * this.offRoadFactor
+    return this.carPhysics.getSpeed()
   }
 
   getCarGear(): string {

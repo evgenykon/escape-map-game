@@ -1,16 +1,18 @@
+import { destination } from '@turf/turf'
+
 interface CarState {
   speed: number
   angle: number
   steeringAngle: number
 }
 
-const MAX_SPEED = 0.00002
-const MAX_REVERSE_SPEED = 0.000008
-const ACCELERATION = 0.00000009
-const REVERSE_ACCELERATION = 0.00000006
-const BRAKE_FORCE = 0.0000004
-const FRICTION = 0.0000001
-const TURN_SPEED_BASE = 0.04
+const MAX_SPEED = 50
+const MAX_REVERSE_SPEED = 15
+const ACCELERATION = 3
+const REVERSE_ACCELERATION = 3
+const BRAKE_FORCE = 8
+const FRICTION = 2
+const TURN_SPEED_BASE = 2.4
 const DRIFT_FACTOR = 0.03
 const STEERING_RATE = 3.0
 const STEERING_RETURN_RATE = 4.0
@@ -54,31 +56,31 @@ export class CarPhysics {
 
     const speedAbs = Math.abs(this.state.speed)
     const speedRatio = Math.min(speedAbs / MAX_SPEED, 1)
-    const turnSpeed = TURN_SPEED_BASE * Math.min(speedRatio / 0.5, 1) * Math.max(0.15, 1 - speedRatio * 0.85)
+    const turnSpeed = TURN_SPEED_BASE * Math.max(0.3, 1 - speedRatio * 0.8)
 
-    if (this.state.steeringAngle !== 0 && speedAbs > MAX_SPEED * 0.1) {
-      this.state.angle += this.state.steeringAngle * turnSpeed
+    if (this.state.steeringAngle !== 0 && speedAbs > 0.5) {
+      this.state.angle += this.state.steeringAngle * turnSpeed * dt
       const drift = this.state.steeringAngle * DRIFT_FACTOR * speedRatio
-      this.state.angle += drift
+      this.state.angle += drift * dt
     }
 
     if (forward > 0) {
       if (this.state.speed < 0) {
-        this.state.speed = Math.min(this.state.speed + BRAKE_FORCE, 0)
+        this.state.speed = Math.min(this.state.speed + BRAKE_FORCE * dt, 0)
       } else if (fuel > 0) {
-        this.state.speed = Math.min(this.state.speed + ACCELERATION, MAX_SPEED)
+        this.state.speed = Math.min(this.state.speed + ACCELERATION * dt, MAX_SPEED)
       }
     } else if (forward < 0) {
       if (this.state.speed > 0) {
-        this.state.speed = Math.max(this.state.speed - BRAKE_FORCE, 0)
+        this.state.speed = Math.max(this.state.speed - BRAKE_FORCE * dt, 0)
       } else if (fuel > 0) {
-        this.state.speed = Math.max(this.state.speed - REVERSE_ACCELERATION, -MAX_REVERSE_SPEED)
+        this.state.speed = Math.max(this.state.speed - REVERSE_ACCELERATION * dt, -MAX_REVERSE_SPEED)
       }
     } else {
       if (this.state.speed > 0) {
-        this.state.speed = Math.max(this.state.speed - FRICTION, 0)
+        this.state.speed = Math.max(this.state.speed - FRICTION * dt, 0)
       } else if (this.state.speed < 0) {
-        this.state.speed = Math.min(this.state.speed + FRICTION, 0)
+        this.state.speed = Math.min(this.state.speed + FRICTION * dt, 0)
       }
     }
 
@@ -86,9 +88,10 @@ export class CarPhysics {
       fuel = Math.max(fuel - this._fuelConsumption * speedRatio * dt, 0)
     }
 
-    const lngScale = 1 / Math.cos(currentLat * Math.PI / 180)
-    const lng = currentLng + Math.sin(this.state.angle) * this.state.speed * lngScale
-    const lat = currentLat + Math.cos(this.state.angle) * this.state.speed
+    const distance = this.state.speed * dt
+    const bearing = this.state.angle * 180 / Math.PI
+    const moved = destination([currentLng, currentLat], distance, bearing, { units: 'meters' })
+    const [lng, lat] = moved.geometry.coordinates
 
     return { lng, lat, angle: this.state.angle, fuel }
   }
@@ -97,9 +100,28 @@ export class CarPhysics {
     return this.state.speed
   }
 
+  clampSpeed(max: number) {
+    if (Math.abs(this.state.speed) > max) {
+      this.state.speed = Math.sign(this.state.speed) * max
+    }
+  }
+
+  setSpeed(speed: number) {
+    this.state.speed = speed
+  }
+
+  applyOffRoadDrag(dt: number) {
+    const drag = FRICTION * dt * 5
+    if (this.state.speed > 0) {
+      this.state.speed = Math.max(this.state.speed - drag, 0)
+    } else if (this.state.speed < 0) {
+      this.state.speed = Math.min(this.state.speed + drag, 0)
+    }
+  }
+
   getGear(): string {
-    if (this.state.speed > 0.000001) return 'D'
-    if (this.state.speed < -0.000001) return 'R'
+    if (this.state.speed > 0.5) return 'D'
+    if (this.state.speed < -0.5) return 'R'
     return 'P'
   }
 }

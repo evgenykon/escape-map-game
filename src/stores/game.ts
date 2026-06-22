@@ -47,6 +47,7 @@ export const useGameStore = defineStore('game', () => {
   const hackProgress = ref(0)
   const hackingCarId = ref<string | null>(null)
 
+  const isSwimming = ref(false)
   const isWalking = ref(true)
   const loadingMessage = ref('Загрузка карты...')
   const playerDistFromEpicenter = ref(0)
@@ -80,6 +81,7 @@ export const useGameStore = defineStore('game', () => {
     hackProgress,
     hackingCarId,
     isWalking,
+    isSwimming,
     loadingMessage,
     playerDistFromEpicenter,
     shelterHudVisible,
