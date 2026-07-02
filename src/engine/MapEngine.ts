@@ -50,7 +50,7 @@ export class MapEngine {
     boxH: number
   ) {
     const scale = Math.min(boxW / cellW, boxH / cellH)
-    inner.style.backgroundImage = 'url(/sprites.png)'
+    inner.style.backgroundImage = `url(${import.meta.env.BASE_URL}sprites.png)`
     inner.style.backgroundRepeat = 'no-repeat'
     inner.style.backgroundSize = `${(MapEngine.SHEET_W * scale).toFixed(2)}px ${(MapEngine.SHEET_H * scale).toFixed(2)}px`
     inner.style.backgroundPositionX = `-${(cellX * scale).toFixed(2)}px`
@@ -176,7 +176,7 @@ export class MapEngine {
 
   private applyCarCellBackground(el: HTMLElement, boxW: number, boxH: number) {
     const scale = Math.min(boxW / MapEngine.CAR_W, boxH / MapEngine.CAR_H)
-    el.style.backgroundImage = 'url(/sprites.png)'
+    el.style.backgroundImage = `url(${import.meta.env.BASE_URL}sprites.png)`
     el.style.backgroundRepeat = 'no-repeat'
     el.style.backgroundSize = `${(MapEngine.SHEET_W * scale).toFixed(2)}px ${(MapEngine.SHEET_H * scale).toFixed(2)}px`
     el.style.backgroundPositionX = `-${(MapEngine.CAR_X * scale).toFixed(2)}px`
