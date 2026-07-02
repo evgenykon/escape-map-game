@@ -2,6 +2,8 @@
 import { ref, computed } from 'vue'
 import { useGameStore, type Difficulty } from '@/stores/game'
 
+const BUILD_TAG = 'build-2026-07-02-r2'
+
 const store = useGameStore()
 const selectedDifficulty = ref<Difficulty>('normal')
 

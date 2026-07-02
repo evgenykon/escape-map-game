@@ -54,6 +54,7 @@ export const useGameStore = defineStore('game', () => {
   const shelterHudVisible = ref(false)
 
   const customTimerMinutes = ref(7)
+  const cacheBustTag = 'bust-2026-07-02-19-45'
   const customShelterKm = ref(7)
   const customHackSec = ref(15)
   const customFuelAmount = ref(0.7)
