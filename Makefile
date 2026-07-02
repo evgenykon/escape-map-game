@@ -1,7 +1,10 @@
-.PHONY: dev build run deploy-gh-pages
+.PHONY: dev build run deploy-gh-pages typecheck
 
 dev:
 	docker compose up frontend-dev --build
+
+typecheck:
+	docker compose run --rm --entrypoint sh frontend-dev -c "npx vue-tsc --noEmit"
 
 build:
 	docker compose --profile production build frontend

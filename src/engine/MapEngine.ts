@@ -13,8 +13,49 @@ export class MapEngine {
   private shelterMarkerEls: Map<string, HTMLElement> = new Map()
   private playerBaseW = 22
   private playerBaseH = 28
+  private playerIsCar = false
+  private movementScale = 1
   private onReadyCallback?: () => void
   private targetZoom: number | null = null
+  private static readonly SHEET_W = 276
+  private static readonly SHEET_H = 262
+  private static readonly PERSON_X = 185
+  private static readonly PERSON_Y = 92
+  private static readonly PERSON_W = 75
+  private static readonly PERSON_H = 87
+  private static readonly CAR_X = 29
+  private static readonly CAR_Y = 23
+  private static readonly CAR_W = 133
+  private static readonly CAR_H = 202
+  private static readonly PERSON_CELL: [number, number, number, number] = [
+    MapEngine.PERSON_X,
+    MapEngine.PERSON_Y,
+    MapEngine.PERSON_W,
+    MapEngine.PERSON_H,
+  ]
+  private static readonly CAR_CELL: [number, number, number, number] = [
+    MapEngine.CAR_X,
+    MapEngine.CAR_Y,
+    MapEngine.CAR_W,
+    MapEngine.CAR_H,
+  ]
+
+  private applyCellBackground(
+    inner: HTMLElement,
+    cellX: number,
+    cellY: number,
+    cellW: number,
+    cellH: number,
+    boxW: number,
+    boxH: number
+  ) {
+    const scale = Math.min(boxW / cellW, boxH / cellH)
+    inner.style.backgroundImage = 'url(/sprites.png)'
+    inner.style.backgroundRepeat = 'no-repeat'
+    inner.style.backgroundSize = `${(MapEngine.SHEET_W * scale).toFixed(2)}px ${(MapEngine.SHEET_H * scale).toFixed(2)}px`
+    inner.style.backgroundPositionX = `-${(cellX * scale).toFixed(2)}px`
+    inner.style.backgroundPositionY = `-${(cellY * scale).toFixed(2)}px`
+  }
 
   onReady(cb: () => void) {
     this.onReadyCallback = cb
@@ -37,7 +78,16 @@ export class MapEngine {
       try { this.addShelterMarkers() } catch (e) { console.warn('shelter markers fail', e) }
       try { this.addCarMarkers() } catch (e) { console.warn('car markers fail', e) }
       try { this.createPlayerMarker() } catch (e) { console.warn('player marker fail', e) }
+      this.applyAllCarsZoom(this.map!.getZoom())
       this.onReadyCallback?.()
+    })
+
+    this.map.on('zoom', () => {
+      if (this.map) this.applyAllCarsZoom(this.map.getZoom())
+    })
+
+    this.map.on('moveend', () => {
+      if (this.map) this.applyAllCarsZoom(this.map.getZoom())
     })
 
     this.map.on('styleimagemissing', (e) => {
@@ -68,16 +118,17 @@ export class MapEngine {
 
   private createPlayerMarker() {
     const el = document.createElement('div')
+    el.style.zIndex = '100'
     el.style.width = '22px'
     el.style.height = '28px'
-    el.style.background = 'no-repeat center/contain url(/player.png)'
-    el.style.filter = 'drop-shadow(0 0 6px #0f0)'
-    el.style.zIndex = '100'
+    el.style.overflow = 'visible'
 
     const inner = document.createElement('div')
     inner.style.width = '100%'
     inner.style.height = '100%'
-    inner.style.background = 'no-repeat center/contain url(/player.png)'
+    inner.style.overflow = 'hidden'
+    const [px, py, pw, ph] = MapEngine.PERSON_CELL
+    this.applyCellBackground(inner, px, py, pw, ph, this.playerBaseW, this.playerBaseH)
     inner.style.filter = 'drop-shadow(0 0 6px #0f0)'
     el.appendChild(inner)
     this.playerMarkerOuter = el
@@ -114,12 +165,34 @@ export class MapEngine {
     const el = document.createElement('div')
     el.style.width = '26px'
     el.style.height = '38px'
-    el.style.background = 'no-repeat center/contain url(/car.png)'
+    el.style.overflow = 'hidden'
     el.style.filter = 'drop-shadow(0 0 6px #48f)'
     if (angle !== undefined) {
       el.style.transform = `rotate(${angle}rad)`
     }
+    this.applyCarCellBackground(el, 26, 38)
     return el
+  }
+
+  private applyCarCellBackground(el: HTMLElement, boxW: number, boxH: number) {
+    const scale = Math.min(boxW / MapEngine.CAR_W, boxH / MapEngine.CAR_H)
+    el.style.backgroundImage = 'url(/sprites.png)'
+    el.style.backgroundRepeat = 'no-repeat'
+    el.style.backgroundSize = `${(MapEngine.SHEET_W * scale).toFixed(2)}px ${(MapEngine.SHEET_H * scale).toFixed(2)}px`
+    el.style.backgroundPositionX = `-${(MapEngine.CAR_X * scale).toFixed(2)}px`
+    el.style.backgroundPositionY = `-${(MapEngine.CAR_Y * scale).toFixed(2)}px`
+  }
+
+  private applyAllCarsZoom(zoom: number) {
+    const scale = (1 + (zoom - 18) * 0.2) * this.movementScale
+    const w = Math.round(26 * scale)
+    const h = Math.round(38 * scale)
+    for (const marker of this.carMarkers.values()) {
+      const el = marker.getElement()
+      el.style.width = w + 'px'
+      el.style.height = h + 'px'
+      this.applyCarCellBackground(el, w, h)
+    }
   }
 
   private addCarMarkers() {
@@ -204,14 +277,9 @@ export class MapEngine {
       this.map.setCenter([lng, lat])
       if (zoom !== undefined) {
         this.applyPlayerZoom(zoom)
+        this.applyAllCarsZoom(zoom)
         this.targetZoom = zoom
-        const current = this.map.getZoom()
-        const diff = this.targetZoom - current
-        if (Math.abs(diff) > 0.05) {
-          this.map.setZoom(current + diff * 0.12)
-        } else {
-          this.map.setZoom(this.targetZoom)
-        }
+        this.map.setZoom(zoom)
       } else {
         this.targetZoom = null
       }
@@ -237,13 +305,21 @@ export class MapEngine {
     this.map?.fitBounds([[lng1, lat1], [lng2, lat2]], { padding, duration: 1500 })
   }
 
+  setMovementScale(factor: number) {
+    this.movementScale = factor
+  }
+
   private applyPlayerZoom(zoom: number) {
-    if (!this.playerMarkerImg) return
-    const scale = 1 + (zoom - 18) * 0.2
+    if (!this.playerMarkerOuter) return
+    const scale = (1 + (zoom - 18) * 0.2) * this.movementScale
     const w = Math.round(this.playerBaseW * scale)
     const h = Math.round(this.playerBaseH * scale)
-    this.playerMarkerImg.style.width = w + 'px'
-    this.playerMarkerImg.style.height = h + 'px'
+    this.playerMarkerOuter.style.width = w + 'px'
+    this.playerMarkerOuter.style.height = h + 'px'
+    if (this.playerMarkerImg) {
+      const [cx, cy, cw, ch] = this.playerIsCar ? MapEngine.CAR_CELL : MapEngine.PERSON_CELL
+      this.applyCellBackground(this.playerMarkerImg, cx, cy, cw, ch, w, h)
+    }
   }
 
   setPlayerMarkerShadow(shadow: string) {
@@ -256,19 +332,22 @@ export class MapEngine {
     if (!this.playerMarkerImg) return
     this.playerBaseW = isCar ? 26 : 22
     this.playerBaseH = isCar ? 38 : 28
-    this.playerMarkerImg.style.background = isCar
-      ? 'no-repeat center/contain url(/car.png)'
-      : 'no-repeat center/contain url(/player.png)'
-    this.playerMarkerImg.style.filter = isCar
-      ? 'drop-shadow(0 0 6px #48f)'
-      : 'drop-shadow(0 0 6px #0f0)'
+    this.playerIsCar = isCar
+    if (isCar) {
+      this.playerMarkerImg.style.filter = 'drop-shadow(0 0 6px #48f)'
+    } else {
+      this.playerMarkerImg.style.filter = 'drop-shadow(0 0 6px #0f0)'
+    }
+    this.playerMarkerImg.classList.remove('walking', 'running')
     this.applyPlayerZoom(this.map?.getZoom() ?? 18)
   }
 
   setPlayerWalkFrame(frame: number) {
     if (!this.playerMarkerImg) return
-    const sprites = ['/player.png', '/player-left-foot.png', '/player-right-foot.png']
-    this.playerMarkerImg.style.background = `no-repeat center/contain url(${sprites[frame]})`
+    const isIdle = frame === 0
+    const isRunning = frame === 2
+    this.playerMarkerImg.classList.toggle('walking', !isIdle)
+    this.playerMarkerImg.classList.toggle('running', isRunning)
     this.applyPlayerZoom(this.map?.getZoom() ?? 18)
   }
 

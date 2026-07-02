@@ -25,8 +25,7 @@ export class PlayerController {
   private nextCarId: number = 12
   private highlightedCar: string | null = null
   private highlightedShelter: string | null = null
-  private walkAnimTimer = 0
-  private walkAnimFrame = 0
+  private lastWalkState = 0
   private isMapMode = false
 
   constructor(mapEngine: MapEngine) {
@@ -239,10 +238,16 @@ export class PlayerController {
       const speedKmh = Math.abs(this.getCarSpeed()) * 3.6
       const t = Math.min(1, Math.max(0, (speedKmh - 30) / 30))
       const zoom = 19 - t * 2
+      const carScale = speedKmh < 1 ? 0.55 : 1
+      this.mapEngine.setMovementScale(carScale)
       this.mapEngine.updatePlayerPosition(this.playerLng, this.playerLat, this.playerAngle, zoom)
     } else {
       this.updateWalk(forward, rotation, dt)
-      this.mapEngine.updatePlayerPosition(this.playerLng, this.playerLat, this.playerAngle, 20)
+      const isRunning = this.keys.has('shift')
+      const walkZoom = forward !== 0 ? (isRunning ? 20 : 19) : 18
+      const walkScale = forward !== 0 ? (isRunning ? 1.2 : 1) : 0.55
+      this.mapEngine.setMovementScale(walkScale)
+      this.mapEngine.updatePlayerPosition(this.playerLng, this.playerLat, this.playerAngle, walkZoom)
     }
   }
 
@@ -395,19 +400,12 @@ export class PlayerController {
       }
     }
 
-    this.walkAnimTimer += dt
-    const animInterval = isRunning ? 0.15 : 0.25
     if (forward !== 0) {
-      if (this.walkAnimTimer >= animInterval) {
-        this.walkAnimTimer = 0
-        this.walkAnimFrame = this.walkAnimFrame === 1 ? 2 : 1
-        this.mapEngine.setPlayerWalkFrame(this.walkAnimFrame)
-      }
+      this.lastWalkState = isRunning ? 2 : 1
     } else {
-      this.walkAnimTimer = 0
-      this.walkAnimFrame = 0
-      this.mapEngine.setPlayerWalkFrame(0)
+      this.lastWalkState = 0
     }
+    this.mapEngine.setPlayerWalkFrame(this.lastWalkState)
 
     const store = useGameStore()
     store.isSwimming = this.mapEngine.isOnWater(this.playerLng, this.playerLat)

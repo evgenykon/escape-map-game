@@ -520,3 +520,16 @@ function restartGame() {
   cursor: pointer;
 }
 </style>
+
+<style>
+@keyframes player-walk {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+.walking {
+  animation: player-walk 0.36s linear infinite;
+}
+.walking.running {
+  animation-duration: 0.18s;
+}
+</style>
