@@ -1,58 +1,52 @@
 import { useGameStore } from '@/stores/game'
-import type { Shelter, Car } from '@/stores/game'
+import type { Scenario } from '@/scenarios/types'
 
-export function loadOSMData(): Promise<void> {
+type Step = { delay: number; message?: string; finalize?: boolean }
+
+const STEPS: Step[] = [
+  { delay: 0, message: 'Загрузка данных карты...' },
+  { delay: 500, message: 'Поиск убежищ...' },
+  { delay: 1000, message: 'Поиск транспорта...' },
+  { delay: 1500, finalize: true },
+]
+
+export function loadScenarioData(scenario: Scenario): Promise<void> {
+  const store = useGameStore()
+
+  store.loadingMessage = STEPS[0].message!
+
   return new Promise((resolve) => {
-    const store = useGameStore()
+    for (const step of STEPS) {
+      setTimeout(() => {
+        if (!step.finalize) {
+          store.loadingMessage = step.message!
+          return
+        }
+        scenario.init()
+        store.timerMinutes = scenario.timerMinutes
+        store.explosionRadius = scenario.explosionRadius
+        store.fuelConsumption = scenario.fuelConsumption
+        store.hackSec = scenario.hackSec
 
-    store.loadingMessage = 'Загрузка данных карты...'
-
-    setTimeout(() => {
-      store.loadingMessage = 'Поиск убежищ...'
-    }, 500)
-
-    setTimeout(() => {
-      store.loadingMessage = 'Поиск транспорта...'
-    }, 1000)
-
-    setTimeout(() => {
-      const shelters: Shelter[] = []
-      const cars: Car[] = []
-      const { epicenterLatitude, epicenterLongitude, playerLatitude, playerLongitude } = store
-
-      const shelterKm = store.customShelterKm
-      const carCount = store.customCarCount
-      const fuelAmount = store.customFuelAmount
-
-      for (let i = 0; i < 20; i++) {
-        const angle = Math.random() * 2 * Math.PI
-        const dist = 10000 + (Math.random() - 0.5) * 2000
-        const dlat = (dist / 111320) * Math.cos(angle)
-        const dlng = (dist / (111320 * Math.cos(playerLatitude * Math.PI / 180))) * Math.sin(angle)
-        shelters.push({
-          id: `shelter-${i}`,
-          longitude: playerLongitude + dlng,
-          latitude: playerLatitude + dlat,
+        const epicenter = scenario.computeEpicenter({
+          playerLatitude: store.playerLatitude,
+          playerLongitude: store.playerLongitude,
         })
-      }
+        store.epicenterLatitude = epicenter.latitude
+        store.epicenterLongitude = epicenter.longitude
 
-      for (let i = 0; i < carCount; i++) {
-        const placeAngle = Math.random() * 2 * Math.PI
-        const dist = 100 + Math.random() * 600
-        const dlat = (dist / 111320) * Math.cos(placeAngle)
-        const dlng = (dist / (111320 * Math.cos(playerLatitude * Math.PI / 180))) * Math.sin(placeAngle)
-        cars.push({
-          id: `car-${i}`,
-          longitude: playerLongitude + dlng,
-          latitude: playerLatitude + dlat,
-          angle: Math.random() * 2 * Math.PI,
-          fuel: fuelAmount * (0.3 + Math.random() * 0.7),
-        })
-      }
+        const spawn = scenario.computeSpawn(
+          {
+            playerLatitude: store.playerLatitude,
+            playerLongitude: store.playerLongitude,
+          },
+          epicenter,
+        )
+        store.shelters = spawn.shelters
+        store.cars = spawn.cars
 
-      store.shelters = shelters
-      store.cars = cars
-      resolve()
-    }, 1500)
+        resolve()
+      }, step.delay)
+    }
   })
 }

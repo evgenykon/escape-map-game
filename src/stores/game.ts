@@ -1,9 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, shallowRef } from 'vue'
+import type { Scenario } from '@/scenarios/types'
 
 export type GamePhase = 'start' | 'loading' | 'playing' | 'gameover' | 'victory'
-
-export type Difficulty = 'easy' | 'normal' | 'hard' | 'custom'
 
 export interface Shelter {
   id: string
@@ -27,9 +26,13 @@ export interface SMS {
 
 export const useGameStore = defineStore('game', () => {
   const phase = ref<GamePhase>('start')
-  const difficulty = ref<Difficulty>('normal')
+  const selectedScenarioId = ref<string | null>(null)
+  const scenario = shallowRef<Scenario | null>(null)
+
   const timerMinutes = ref(5)
   const explosionRadius = ref(1000)
+  const fuelConsumption = ref(50)
+  const hackSec = ref(15)
 
   const playerLatitude = ref(0)
   const playerLongitude = ref(0)
@@ -53,20 +56,16 @@ export const useGameStore = defineStore('game', () => {
   const playerDistFromEpicenter = ref(0)
   const shelterHudVisible = ref(false)
 
-  const customTimerMinutes = ref(7)
   const cacheBustTag = 'bust-2026-07-02-19-45'
-  const customShelterKm = ref(7)
-  const customHackSec = ref(15)
-  const customFuelAmount = ref(0.7)
-  const customCarCount = ref(12)
-  const customExplosionRadius = ref(1000)
-  const customFuelConsumption = ref(50)
 
   return {
     phase,
-    difficulty,
+    selectedScenarioId,
+    scenario,
     timerMinutes,
     explosionRadius,
+    fuelConsumption,
+    hackSec,
     playerLatitude,
     playerLongitude,
     epicenterLatitude,
@@ -86,12 +85,6 @@ export const useGameStore = defineStore('game', () => {
     loadingMessage,
     playerDistFromEpicenter,
     shelterHudVisible,
-    customTimerMinutes,
-    customShelterKm,
-    customHackSec,
-    customFuelAmount,
-    customCarCount,
-    customExplosionRadius,
-    customFuelConsumption,
+    cacheBustTag,
   }
 })

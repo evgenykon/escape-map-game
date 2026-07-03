@@ -73,22 +73,19 @@ function updateShelterInfo() {
   shelterDist.value = info.dist
 }
 
-const smsTexts = [
-  'Сообщение: Внимание! Чрезвычайная ситуация! Зафиксирован запуск ракеты в сторону нашего региона!',
-  'Сообщение: Внимание! По оценкам МО ракета, выпушенная по нашему региону, может нести ядерный заряд!',
-  'Друг: Привет! Видел объявление? Ты где? Мы собираемся сваливать подальше на восток.',
-  'Сообщение: Внимание! Не пользуйтесь лифтами. Отключите газ и электричество. Сохраняйте спокойствие.',
-  'Сообщение: Экстренные службы открыли убежища. Следуйте указателям на карте.',
-  'Сообщение: Если вы не успеваете достигнуть убежища, ищите здания с глубокими подвалами.',
-  'ПВО и спасательные службы работают. Избегайте паники и мест скопления людей и машин. Ждите дальнейших инструкций.',
-  'Внимание! Опасайтесь оставаться на улицах! Немедленно найдите укрытие!',
-  'Внимание! Не покидайте убежище.',
-]
+const smsTexts = computed<string[]>(() => store.scenario?.smsTexts ?? [])
 
 onMounted(() => {
   mapEngine = new MapEngine()
   mapEngine.init(mapContainer.value!)
   mapEngine.onReady(() => {
+    const valid = mapEngine.findValidSpawnPoint(store.playerLongitude, store.playerLatitude)
+    if (valid) {
+      store.playerLatitude = valid.lat
+      store.playerLongitude = valid.lng
+      playerController.setPosition(valid.lat, valid.lng)
+      mapEngine.updatePlayerPosition(valid.lng, valid.lat)
+    }
     startTimer()
     scheduleSMS()
   })
@@ -127,11 +124,13 @@ function startTimer() {
 }
 
 function scheduleSMS() {
+  const texts = smsTexts.value
   const totalMs = store.timerMinutes * 60 * 1000
-  const count = smsTexts.length
-  const gap = totalMs * 0.85 / (count - 1)
+  const count = texts.length
+  if (count === 0) return
+  const gap = count > 1 ? totalMs * 0.85 / (count - 1) : 0
 
-  smsTexts.forEach((text, i) => {
+  texts.forEach((text, i) => {
     if (i === 0) {
       showSMS(text)
     } else {
@@ -209,7 +208,17 @@ function formatSpeed(speed: number): string {
 
 function restartGame() {
   store.phase = 'start'
+  store.scenario = null
+  store.shelters = []
+  store.cars = []
+  store.smsMessages = []
+  store.shelterHudVisible = false
+  store.timeLeft = 0
+  hudTimeLeft.value = 0
+  hudSms.value = []
 }
+
+const resultTexts = computed(() => store.scenario?.resultTexts)
 </script>
 
 <template>
@@ -263,14 +272,14 @@ function restartGame() {
     </div>
 
     <div v-if="store.phase === 'gameover'" class="gameover-overlay">
-      <h1>GAME OVER</h1>
-      <p>Вы не успели укрыться от взрыва.</p>
+      <h1>{{ resultTexts?.gameoverTitle ?? 'GAME OVER' }}</h1>
+      <p>{{ resultTexts?.gameoverSubtitle }}</p>
       <button @click="restartGame">Заново</button>
     </div>
 
     <div v-if="store.phase === 'victory'" class="victory-overlay">
-      <h1>ВЫ ВЫЖИЛИ</h1>
-      <p>Вы укрылись в убежище вовремя.</p>
+      <h1>{{ resultTexts?.victoryTitle ?? 'ВЫ ВЫЖИЛИ' }}</h1>
+      <p>{{ resultTexts?.victorySubtitle }}</p>
       <button @click="restartGame">Заново</button>
     </div>
   </div>

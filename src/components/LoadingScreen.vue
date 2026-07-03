@@ -1,13 +1,25 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useGameStore } from '@/stores/game'
-import { loadOSMData } from '@/engine/OverpassLoader'
+import { loadScenarioData } from '@/engine/OverpassLoader'
+import { loadScenario } from '@/scenarios'
 
 const store = useGameStore()
 
 onMounted(async () => {
-  await loadOSMData()
-  store.phase = 'playing'
+  if (!store.selectedScenarioId) {
+    store.phase = 'start'
+    return
+  }
+  try {
+    const scenario = await loadScenario(store.selectedScenarioId)
+    store.scenario = scenario
+    await loadScenarioData(scenario)
+    store.phase = 'playing'
+  } catch (e) {
+    console.error('Ошибка загрузки сценария', e)
+    store.phase = 'start'
+  }
 })
 </script>
 
@@ -15,6 +27,9 @@ onMounted(async () => {
   <div class="loading-screen">
     <div class="spinner"></div>
     <p class="loading-text">{{ store.loadingMessage }}</p>
+    <p v-if="store.scenario" class="loading-sub">
+      Сценарий: {{ store.scenario.config.title }}
+    </p>
   </div>
 </template>
 

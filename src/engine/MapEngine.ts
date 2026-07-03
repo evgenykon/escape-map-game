@@ -6,6 +6,7 @@ export class MapEngine {
   private map: maplibregl.Map | null = null
   private playerMarker: maplibregl.Marker | null = null
   private playerMarkerOuter: HTMLElement | null = null
+  private playerMarkerFlip: HTMLElement | null = null
   private playerMarkerImg: HTMLElement | null = null
   private carMarkers: Map<string, maplibregl.Marker> = new Map()
   private carMarkerInners: Map<string, HTMLElement> = new Map()
@@ -123,6 +124,12 @@ export class MapEngine {
     el.style.height = '28px'
     el.style.overflow = 'visible'
 
+    const flipWrap = document.createElement('div')
+    flipWrap.style.width = '100%'
+    flipWrap.style.height = '100%'
+    flipWrap.style.transform = 'rotate(180deg)'
+    flipWrap.style.transformOrigin = 'center'
+
     const inner = document.createElement('div')
     inner.style.width = '100%'
     inner.style.height = '100%'
@@ -130,8 +137,11 @@ export class MapEngine {
     const [px, py, pw, ph] = MapEngine.PERSON_CELL
     this.applyCellBackground(inner, px, py, pw, ph, this.playerBaseW, this.playerBaseH)
     inner.style.filter = 'drop-shadow(0 0 6px #0f0)'
-    el.appendChild(inner)
+
+    flipWrap.appendChild(inner)
+    el.appendChild(flipWrap)
     this.playerMarkerOuter = el
+    this.playerMarkerFlip = flipWrap
     this.playerMarkerImg = inner
 
     this.playerMarker = new maplibregl.Marker({ element: el })
@@ -202,7 +212,7 @@ export class MapEngine {
       let lng = car.longitude
       let lat = car.latitude
       let attempts = 0
-      while (this.isInsideBuilding(lng, lat) && attempts < 20) {
+      while (!this.isValidSpawnPoint(lng, lat) && attempts < 20) {
         const jitter = (Math.random() - 0.5) * 0.0006
         lng = car.longitude + jitter
         lat = car.latitude + jitter
@@ -333,6 +343,9 @@ export class MapEngine {
     this.playerBaseW = isCar ? 26 : 22
     this.playerBaseH = isCar ? 38 : 28
     this.playerIsCar = isCar
+    if (this.playerMarkerFlip) {
+      this.playerMarkerFlip.style.transform = isCar ? '' : 'rotate(180deg)'
+    }
     if (isCar) {
       this.playerMarkerImg.style.filter = 'drop-shadow(0 0 6px #48f)'
     } else {
@@ -379,6 +392,25 @@ export class MapEngine {
       const id = f.layer.id
       return id === 'water' || id === 'waterway' || id.startsWith('water_')
     })
+  }
+
+  isValidSpawnPoint(lng: number, lat: number): boolean {
+    return !this.isInsideBuilding(lng, lat) && !this.isOnWater(lng, lat)
+  }
+
+  findValidSpawnPoint(lng: number, lat: number, maxRadiusM: number = 500): { lat: number; lng: number } | null {
+    if (this.isValidSpawnPoint(lng, lat)) return { lat, lng }
+    const M_PER_DEG_LAT = 111320
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const angle = Math.random() * 2 * Math.PI
+      const dist = Math.random() * maxRadiusM
+      const dlat = (dist / M_PER_DEG_LAT) * Math.cos(angle)
+      const dlng = (dist / (M_PER_DEG_LAT * Math.cos(lat * Math.PI / 180))) * Math.sin(angle)
+      const newLat = lat + dlat
+      const newLng = lng + dlng
+      if (this.isValidSpawnPoint(newLng, newLat)) return { lat: newLat, lng: newLng }
+    }
+    return null
   }
 
   showExplosion(epicenterLng: number, epicenterLat: number, maxRadiusMeters: number) {

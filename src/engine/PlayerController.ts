@@ -32,7 +32,7 @@ export class PlayerController {
     const store = useGameStore()
     this.mapEngine = mapEngine
     this.carPhysics = new CarPhysics()
-    this.carPhysics.setConsumption(store.customFuelConsumption / 100 * 0.005)
+    this.carPhysics.setConsumption(store.fuelConsumption / 100 * 0.005)
     this.playerLng = store.playerLongitude
     this.playerLat = store.playerLatitude
   }
@@ -123,7 +123,7 @@ export class PlayerController {
     store.isHacking = true
     store.hackProgress = 0
     store.hackingCarId = car.id
-    this.hackDuration = store.customHackSec * (0.9 + Math.random() * 0.2) * 1000
+    this.hackDuration = store.hackSec * (0.9 + Math.random() * 0.2) * 1000
   }
 
   private cancelHack() {
@@ -465,6 +465,11 @@ export class PlayerController {
 
   getPosition(): { lng: number; lat: number } {
     return { lng: this.playerLng, lat: this.playerLat }
+  }
+
+  setPosition(lat: number, lng: number) {
+    this.playerLat = lat
+    this.playerLng = lng
   }
 
   getAngle(): number {
