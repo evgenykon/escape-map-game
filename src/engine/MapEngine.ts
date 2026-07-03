@@ -15,7 +15,6 @@ export class MapEngine {
   private playerBaseW = 22
   private playerBaseH = 28
   private playerIsCar = false
-  private movementScale = 1
   private onReadyCallback?: () => void
   private targetZoom: number | null = null
   private static readonly SHEET_W = 276
@@ -40,6 +39,10 @@ export class MapEngine {
     MapEngine.CAR_W,
     MapEngine.CAR_H,
   ]
+
+  static getScale(zoom: number): number {
+    return 1 + (zoom - 19) * 0.7
+  }
 
   private applyCellBackground(
     inner: HTMLElement,
@@ -73,7 +76,7 @@ export class MapEngine {
       keyboard: false,
     })
 
-    this.map.addControl(new maplibregl.NavigationControl(), 'top-right')
+    this.map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: false }), 'top-right')
 
     this.map.on('load', () => {
       try { this.addShelterMarkers() } catch (e) { console.warn('shelter markers fail', e) }
@@ -194,7 +197,7 @@ export class MapEngine {
   }
 
   private applyAllCarsZoom(zoom: number) {
-    const scale = (1 + (zoom - 18) * 0.2) * this.movementScale
+    const scale = MapEngine.getScale(zoom)
     const w = Math.round(26 * scale)
     const h = Math.round(38 * scale)
     for (const marker of this.carMarkers.values()) {
@@ -311,17 +314,25 @@ export class MapEngine {
     this.map?.flyTo({ zoom: z, duration: 600 })
   }
 
+  getCurrentZoom(): number {
+    return this.map?.getZoom() ?? 18
+  }
+
+  getCurrentScale(): number {
+    return MapEngine.getScale(this.getCurrentZoom())
+  }
+
   fitBounds(lng1: number, lat1: number, lng2: number, lat2: number, padding: number = 200) {
     this.map?.fitBounds([[lng1, lat1], [lng2, lat2]], { padding, duration: 1500 })
   }
 
-  setMovementScale(factor: number) {
-    this.movementScale = factor
+  setMovementScale(_factor: number) {
+    // no-op: scale is now purely zoom-based via MapEngine.getScale
   }
 
   private applyPlayerZoom(zoom: number) {
     if (!this.playerMarkerOuter) return
-    const scale = (1 + (zoom - 18) * 0.2) * this.movementScale
+    const scale = MapEngine.getScale(zoom)
     const w = Math.round(this.playerBaseW * scale)
     const h = Math.round(this.playerBaseH * scale)
     this.playerMarkerOuter.style.width = w + 'px'
@@ -374,7 +385,7 @@ export class MapEngine {
   isOnRoad(lng: number, lat: number): boolean {
     if (!this.map) return false
     const pt = this.map.project([lng, lat])
-    const r = 6
+    const r = 12
     const features = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
     return features.some(f => {
       if (!f.layer) return false
@@ -398,10 +409,10 @@ export class MapEngine {
     return !this.isInsideBuilding(lng, lat) && !this.isOnWater(lng, lat)
   }
 
-  findValidSpawnPoint(lng: number, lat: number, maxRadiusM: number = 500): { lat: number; lng: number } | null {
+  findValidSpawnPoint(lng: number, lat: number, maxRadiusM: number = 1500): { lat: number; lng: number } | null {
     if (this.isValidSpawnPoint(lng, lat)) return { lat, lng }
     const M_PER_DEG_LAT = 111320
-    for (let attempt = 0; attempt < 40; attempt++) {
+    for (let attempt = 0; attempt < 100; attempt++) {
       const angle = Math.random() * 2 * Math.PI
       const dist = Math.random() * maxRadiusM
       const dlat = (dist / M_PER_DEG_LAT) * Math.cos(angle)

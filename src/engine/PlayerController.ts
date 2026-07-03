@@ -20,7 +20,7 @@ export class PlayerController {
   private playerAngle: number = 0
   private activeCarId: string | null = null
   private hackDuration: number = 0
-  private hasDrivenBefore = false
+  private hackedCarIds: Set<string> = new Set()
   private spawnTimer: number = 0
   private nextCarId: number = 12
   private highlightedCar: string | null = null
@@ -90,7 +90,7 @@ export class PlayerController {
 
     const found = this.findNearbyCar()
     if (found) {
-      if (this.hasDrivenBefore) {
+      if (this.hackedCarIds.has(found.id)) {
         this.enterCarDirectly(found)
       } else {
         this.startHack(found)
@@ -140,7 +140,7 @@ export class PlayerController {
     const car = store.cars.find(c => c.id === carId)
     if (!car) return
 
-    this.hasDrivenBefore = true
+    this.hackedCarIds.add(carId)
     store.isHacking = false
     store.hackProgress = 0
     store.hackingCarId = null
@@ -163,11 +163,14 @@ export class PlayerController {
     this.playerLng = exitPos.geometry.coordinates[0]
     this.playerLat = exitPos.geometry.coordinates[1]
     if (this.activeCarId) {
-      this.mapEngine.showCarMarker(this.activeCarId, this.playerLng, this.playerLat)
+      const carPos = destination([this.playerLng, this.playerLat], -8, this.playerAngle * 180 / Math.PI, { units: 'meters' })
+      const carLng = carPos.geometry.coordinates[0]
+      const carLat = carPos.geometry.coordinates[1]
+      this.mapEngine.showCarMarker(this.activeCarId, carLng, carLat)
       const car = store.cars.find(c => c.id === this.activeCarId)
       if (car) {
-        car.longitude = this.playerLng
-        car.latitude = this.playerLat
+        car.longitude = carLng
+        car.latitude = carLat
       }
       store.activeCarId = null
       this.activeCarId = null
@@ -233,20 +236,22 @@ export class PlayerController {
 
     if (this.isMapMode) return
 
+    if (store.isHacking) {
+      const hackZoom = 21
+      this.mapEngine.updatePlayerPosition(this.playerLng, this.playerLat, this.playerAngle, hackZoom)
+      return
+    }
+
     if (store.isInCar) {
       this.updateCar(forward, rotation, dt)
       const speedKmh = Math.abs(this.getCarSpeed()) * 3.6
       const t = Math.min(1, Math.max(0, (speedKmh - 30) / 30))
       const zoom = 19 - t * 2
-      const carScale = speedKmh < 1 ? 0.55 : 1
-      this.mapEngine.setMovementScale(carScale)
       this.mapEngine.updatePlayerPosition(this.playerLng, this.playerLat, this.playerAngle, zoom)
     } else {
       this.updateWalk(forward, rotation, dt)
       const isRunning = this.keys.has('shift')
-      const walkZoom = forward !== 0 ? (isRunning ? 20 : 19) : 18
-      const walkScale = forward !== 0 ? (isRunning ? 1.2 : 1) : 0.55
-      this.mapEngine.setMovementScale(walkScale)
+      const walkZoom = forward !== 0 ? (isRunning ? 18.5 : 19) : 19
       this.mapEngine.updatePlayerPosition(this.playerLng, this.playerLat, this.playerAngle, walkZoom)
     }
   }

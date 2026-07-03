@@ -23,6 +23,7 @@ let timerInterval: ReturnType<typeof setInterval>
 let shelterInterval: ReturnType<typeof setInterval>
 let carInfoInterval: ReturnType<typeof setInterval>
 const smsTimeouts: ReturnType<typeof setTimeout>[] = []
+const spawnValidationTimeouts: ReturnType<typeof setTimeout>[] = []
 
 const shelterHeading = ref(0)
 const shelterDist = ref(0)
@@ -73,19 +74,29 @@ function updateShelterInfo() {
   shelterDist.value = info.dist
 }
 
+function validateSpawn() {
+  if (!mapEngine) return
+  const valid = mapEngine.findValidSpawnPoint(store.playerLongitude, store.playerLatitude)
+  if (valid) {
+    store.playerLatitude = valid.lat
+    store.playerLongitude = valid.lng
+    playerController.setPosition(valid.lat, valid.lng)
+    mapEngine.updatePlayerPosition(valid.lng, valid.lat)
+  }
+}
+
 const smsTexts = computed<string[]>(() => store.scenario?.smsTexts ?? [])
+
+const debugZoom = ref(18)
+const debugScale = ref(1)
 
 onMounted(() => {
   mapEngine = new MapEngine()
   mapEngine.init(mapContainer.value!)
   mapEngine.onReady(() => {
-    const valid = mapEngine.findValidSpawnPoint(store.playerLongitude, store.playerLatitude)
-    if (valid) {
-      store.playerLatitude = valid.lat
-      store.playerLongitude = valid.lng
-      playerController.setPosition(valid.lat, valid.lng)
-      mapEngine.updatePlayerPosition(valid.lng, valid.lat)
-    }
+    validateSpawn()
+    spawnValidationTimeouts.push(setTimeout(validateSpawn, 800))
+    spawnValidationTimeouts.push(setTimeout(validateSpawn, 2500))
     startTimer()
     scheduleSMS()
   })
@@ -96,6 +107,8 @@ onMounted(() => {
   carInfoInterval = setInterval(() => {
     carSpeed.value = playerController.getCarSpeed()
     carGear.value = playerController.getCarGear()
+    debugZoom.value = mapEngine.getCurrentZoom()
+    debugScale.value = mapEngine.getCurrentScale()
   }, 200)
 })
 
@@ -105,6 +118,7 @@ onUnmounted(() => {
   clearInterval(shelterInterval)
   clearInterval(carInfoInterval)
   smsTimeouts.forEach(clearTimeout)
+  spawnValidationTimeouts.forEach(clearTimeout)
   mapEngine?.destroy()
 })
 
@@ -202,7 +216,7 @@ function formatTime(seconds: number): string {
 }
 
 function formatSpeed(speed: number): string {
-  const kmh = Math.round(Math.abs(speed) / 0.00002 * 120)
+  const kmh = Math.round(Math.abs(speed) * 3.6)
   return `${kmh} км/ч`
 }
 
@@ -224,6 +238,11 @@ const resultTexts = computed(() => store.scenario?.resultTexts)
 <template>
   <div class="game-wrapper">
     <div ref="mapContainer" class="map-container"></div>
+
+    <div class="debug-panel">
+      <div>zoom: {{ debugZoom.toFixed(2) }}</div>
+      <div>scale: {{ debugScale.toFixed(2) }}</div>
+    </div>
 
     <div class="hud">
       <div class="hud-time" :class="{ warning: store.timeLeft < 60 }">
@@ -295,6 +314,20 @@ const resultTexts = computed(() => store.scenario?.resultTexts)
 .map-container {
   width: 100%;
   height: 100%;
+}
+.debug-panel {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(0, 0, 0, 0.6);
+  color: #0f0;
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  border-radius: 4px;
+  z-index: 50;
+  pointer-events: none;
 }
 .hud {
   position: absolute;

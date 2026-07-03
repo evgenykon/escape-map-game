@@ -56,7 +56,7 @@ export const nuclearScenario: Scenario = {
     const carCount = 12
     for (let i = 0; i < carCount; i++) {
       const placeAngle = Math.random() * 2 * Math.PI
-      const dist = randomInRange(100, 700)
+      const dist = randomInRange(100, 350)
       const { lat, lng } = offsetMeters(ctx.playerLatitude, ctx.playerLongitude, dist, placeAngle)
       cars.push({
         id: `car-${i}`,

@@ -111,7 +111,7 @@ export class CarPhysics {
   }
 
   applyOffRoadDrag(dt: number) {
-    const drag = FRICTION * dt * 5
+    const drag = FRICTION * dt * 1.5
     if (this.state.speed > 0) {
       this.state.speed = Math.max(this.state.speed - drag, 0)
     } else if (this.state.speed < 0) {
