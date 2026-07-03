@@ -13,14 +13,10 @@ run:
 	docker compose --profile production up frontend -d
 
 deploy-gh-pages:
-	npm run build && \
-	cp -r dist /tmp/escape-gh-pages 2>/dev/null || true; \
-	cp -r dist/* /tmp/escape-gh-pages/ 2>/dev/null; \
-	cp -r dist /tmp/escape-gh-pages 2>/dev/null; \
-	git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages; \
-	rm -rf *; \
-	cp -r /tmp/escape-gh-pages/* .; \
-	git add .; \
-	git commit -m "deploy"; \
-	git push origin gh-pages; \
-	git checkout main
+	docker compose run --rm --entrypoint sh frontend-dev -c "GH_PAGES=1 npx vue-tsc --noEmit && GH_PAGES=1 npx vite build" && \
+	rm -rf /tmp/escape-gh-pages && cp -r dist /tmp/escape-gh-pages && \
+	git worktree add -B gh-pages /tmp/escape-gh-worktree origin/gh-pages 2>/dev/null || git worktree add -B gh-pages /tmp/escape-gh-worktree && \
+	rm -rf /tmp/escape-gh-worktree/* && cp -r /tmp/escape-gh-pages/* /tmp/escape-gh-worktree/ && \
+	cd /tmp/escape-gh-worktree && git add . && git -c user.email=deploy@local -c user.name=deploy commit -m "deploy" && \
+	cd /tmp/escape-gh-worktree && git push origin gh-pages --force && \
+	git worktree remove /tmp/escape-gh-worktree --force
