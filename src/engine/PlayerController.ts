@@ -7,7 +7,7 @@ import { soundEngine } from './SoundEngine'
 
 const MOVE_SPEED_WALK = 2
 const ROTATION_SPEED = 2.4
-const CAR_COLLISION_DIST = 3
+const CAR_COLLISION_DIST = 1.5
 const SWIM_SPEED = 0.3
 
 export class PlayerController {
@@ -448,7 +448,7 @@ export class PlayerController {
       }
       const moved = destination([this.playerLng, this.playerLat], dist, bearing, { units: 'meters' })
       const [newLng, newLat] = moved.geometry.coordinates
-      if (!this.mapEngine.isInsideBuilding(newLng, newLat)) {
+      if (!this.mapEngine.isInsideBuilding2d(newLng, newLat)) {
         this.playerLng = newLng
         this.playerLat = newLat
       }
@@ -499,7 +499,7 @@ export class PlayerController {
         soundEngine.playCarCrash()
       }
     } else {
-      if (!this.mapEngine.isOnRoad(newLng, newLat)) {
+      if (!this.mapEngine.isOnRoad(newLng, newLat) && !this.mapEngine.hasBuilding3d(newLng, newLat)) {
         this.carPhysics.applyOffRoadDrag(dt)
       }
       this.playerLng = newLng

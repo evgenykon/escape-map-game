@@ -101,14 +101,21 @@ export class MapEngine {
 
     this.map.on('move', () => {
       if (!this.map) return
-      const pt = this.map.getCenter()
-      const features = this.map.queryRenderedFeatures(this.map.project(pt))
-      const ids = new Set<string>()
+    })
+
+    let lastFeatureKey = ''
+    this.map.on('mousemove', (e) => {
+      if (!this.map) return
+      const features = this.map.queryRenderedFeatures(e.point)
+      const types = new Set<string>()
       for (const f of features) {
-        if (f.layer) ids.add(f.layer.id)
+        const cls = f.properties?.class ?? f.properties?.subclass
+        types.add(`${f.layer?.id ?? '?'}${cls ? ':' + cls : ''}`)
       }
-      if (ids.size > 0) {
-        console.log('[MapEngine] features under center:', [...ids].join(', '))
+      const key = [...types].sort().join('|')
+      if (key !== lastFeatureKey) {
+        lastFeatureKey = key
+        console.log('[MapEngine] surface under cursor:', key || 'none')
       }
     })
 
@@ -142,7 +149,6 @@ export class MapEngine {
     this.map.on('error', (e) => {
       console.error('Map error:', e.error?.message || e)
     })
-
 
   }
 
@@ -233,7 +239,8 @@ export class MapEngine {
   }
 
   private applyAllCarsZoom(zoom: number) {
-    const scale = MapEngine.getScale(zoom)
+    const natural = MapEngine.getScale(zoom)
+    const scale = Math.max(0.5, natural - 0.2)
     const w = Math.round(26 * scale)
     const h = Math.round(38 * scale)
     for (const marker of this.carMarkers.values()) {
@@ -417,7 +424,7 @@ export class MapEngine {
     const sheetH = frame.h * frame.count * s
     const frameH = frame.h * s
     if (this.playerMarkerFrameWrap) {
-      this.playerMarkerFrameWrap.style.height = `${frameH.toFixed(2)}px`
+      this.playerMarkerFrameWrap.style.height = `${(frameH - 2).toFixed(2)}px`
       this.playerMarkerFrameWrap.style.top = `${((boxH - frameH) / 2).toFixed(2)}px`
     }
     this.playerMarkerImg.style.backgroundImage = `url(${import.meta.env.BASE_URL}${frame.url})`
@@ -470,8 +477,29 @@ export class MapEngine {
   isInsideBuilding(lng: number, lat: number): boolean {
     if (!this.map) return false
     const pt = this.map.project([lng, lat])
-    const features = this.map.queryRenderedFeatures(pt)
+    const r = 8
+    const features = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
+    const hasBridgePath = features.some(f => f.layer?.id.startsWith('bridge_path_'))
+    if (hasBridgePath) return false
     return features.some(f => f.layer && (f.layer.id === 'building' || f.layer.id === 'building-3d'))
+  }
+
+  isInsideBuilding2d(lng: number, lat: number): boolean {
+    if (!this.map) return false
+    const pt = this.map.project([lng, lat])
+    const r = 8
+    const features = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
+    const hasBridgePath = features.some(f => f.layer?.id.startsWith('bridge_path_'))
+    if (hasBridgePath) return false
+    return features.some(f => f.layer && f.layer.id === 'building')
+  }
+
+  hasBuilding3d(lng: number, lat: number): boolean {
+    if (!this.map) return false
+    const pt = this.map.project([lng, lat])
+    const r = 8
+    const features = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
+    return features.some(f => f.layer?.id === 'building-3d')
   }
 
   isOnRoad(lng: number, lat: number): boolean {

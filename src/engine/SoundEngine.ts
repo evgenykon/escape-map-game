@@ -10,6 +10,9 @@ type SoundKey =
   | 'footstepsRun'
   | 'swimming'
   | 'hacking'
+  | 'cityNoise1'
+  | 'cityNoise2'
+  | 'nuclearDanger'
 
 const SOUND_PATHS: Record<SoundKey, string> = {
   openingCarDoor: `${import.meta.env.BASE_URL}sounds/opening-car-door.mp3`,
@@ -23,6 +26,9 @@ const SOUND_PATHS: Record<SoundKey, string> = {
   footstepsRun: `${import.meta.env.BASE_URL}sounds/footsteps-running.mp3`,
   swimming: `${import.meta.env.BASE_URL}sounds/swimming.mp3`,
   hacking: `${import.meta.env.BASE_URL}sounds/hacking.mp3`,
+  cityNoise1: `${import.meta.env.BASE_URL}sounds/city-noise-1.mp3`,
+  cityNoise2: `${import.meta.env.BASE_URL}sounds/city-noise-2.mp3`,
+  nuclearDanger: `${import.meta.env.BASE_URL}sounds/nuclear-danger.mp3`,
 }
 
 const ONE_SHOT_KEYS: SoundKey[] = [
@@ -32,6 +38,7 @@ const ONE_SHOT_KEYS: SoundKey[] = [
   'engineBreakdown',
   'incomingMessage',
   'explosion',
+  'nuclearDanger',
 ]
 
 const LOOP_KEYS: SoundKey[] = [
@@ -40,6 +47,8 @@ const LOOP_KEYS: SoundKey[] = [
   'footstepsRun',
   'swimming',
   'hacking',
+  'cityNoise1',
+  'cityNoise2',
 ]
 
 interface LoopHandle {
@@ -63,6 +72,9 @@ class SoundEngine {
     footstepsRun: 1,
     swimming: 1,
     hacking: 1,
+    cityNoise1: 0.4,
+    cityNoise2: 0.4,
+    nuclearDanger: 1,
   }
   private loops: Partial<Record<SoundKey, LoopHandle>> = {}
   private muted = false
@@ -166,6 +178,7 @@ class SoundEngine {
   playEngineBreakdown(): void { this.playOneShot('engineBreakdown') }
   playIncomingMessage(): void { this.playOneShot('incomingMessage') }
   playExplosion(): void { this.playOneShot('explosion') }
+  playNuclearDanger(): void { this.playOneShot('nuclearDanger') }
 
   startCarDrivenLoop(): void { this.startLoop('carDriven') }
   stopCarDrivenLoop(): void { this.stopLoop('carDriven') }
@@ -191,6 +204,19 @@ class SoundEngine {
 
   startHackingLoop(): void { this.startLoop('hacking') }
   stopHackingLoop(): void { this.stopLoop('hacking') }
+
+  startCityNoiseLoop(): void {
+    if (this.muted) return
+    const key: SoundKey = Math.random() < 0.5 ? 'cityNoise1' : 'cityNoise2'
+    if (this.loops[key]) return
+    if (this.loops['cityNoise1']) return
+    if (this.loops['cityNoise2']) return
+    this.startLoop(key)
+  }
+  stopCityNoiseLoop(): void {
+    this.stopLoop('cityNoise1')
+    this.stopLoop('cityNoise2')
+  }
 
   stopAllLoops(): void {
     for (const key of LOOP_KEYS) this.stopLoop(key)

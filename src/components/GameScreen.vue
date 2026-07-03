@@ -98,6 +98,7 @@ onMounted(() => {
     validateSpawn()
     spawnValidationTimeouts.push(setTimeout(validateSpawn, 800))
     spawnValidationTimeouts.push(setTimeout(validateSpawn, 2500))
+    soundEngine.startCityNoiseLoop()
     startTimer()
     scheduleSMS()
   })
@@ -130,6 +131,10 @@ function startTimer() {
   timerInterval = setInterval(() => {
     store.timeLeft--
     hudTimeLeft.value = store.timeLeft
+
+    if (store.timeLeft === 60) {
+      soundEngine.playNuclearDanger()
+    }
 
     if (store.timeLeft <= 0) {
       clearInterval(timerInterval)
