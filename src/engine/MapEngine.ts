@@ -7,6 +7,7 @@ export class MapEngine {
   private playerMarker: maplibregl.Marker | null = null
   private playerMarkerOuter: HTMLElement | null = null
   private playerMarkerFlip: HTMLElement | null = null
+  private playerMarkerFrameWrap: HTMLElement | null = null
   private playerMarkerImg: HTMLElement | null = null
   private carMarkers: Map<string, maplibregl.Marker> = new Map()
   private carMarkerInners: Map<string, HTMLElement> = new Map()
@@ -39,6 +40,12 @@ export class MapEngine {
     MapEngine.CAR_W,
     MapEngine.CAR_H,
   ]
+
+  private static readonly PLAYER_IDLE = { url: 'sprites/player-idle.png', w: 42, h: 48, count: 10, duration: 3 }
+  private static readonly PLAYER_WALK = { url: 'sprites/player-walking.png', w: 42, h: 48, count: 6, duration: 0.6 }
+  private static readonly PLAYER_HACK = { url: 'sprites/player-hacking.png', w: 42, h: 48, count: 4, duration: 1 }
+
+  private playerAnimState: 'idle' | 'walking' | 'running' | 'hacking' = 'idle'
 
   static getScale(zoom: number): number {
     return 1 + (zoom - 19) * 0.7
@@ -84,6 +91,25 @@ export class MapEngine {
       try { this.createPlayerMarker() } catch (e) { console.warn('player marker fail', e) }
       this.applyAllCarsZoom(this.map!.getZoom())
       this.onReadyCallback?.()
+
+      const layers = this.map!.getStyle().layers
+      console.log('[MapEngine] All layer IDs:')
+      for (const layer of layers) {
+        console.log('  ', layer.id)
+      }
+    })
+
+    this.map.on('move', () => {
+      if (!this.map) return
+      const pt = this.map.getCenter()
+      const features = this.map.queryRenderedFeatures(this.map.project(pt))
+      const ids = new Set<string>()
+      for (const f of features) {
+        if (f.layer) ids.add(f.layer.id)
+      }
+      if (ids.size > 0) {
+        console.log('[MapEngine] features under center:', [...ids].join(', '))
+      }
     })
 
     this.map.on('zoom', () => {
@@ -125,27 +151,37 @@ export class MapEngine {
     el.style.zIndex = '100'
     el.style.width = '22px'
     el.style.height = '28px'
-    el.style.overflow = 'visible'
+    el.style.overflow = 'hidden'
+    el.style.filter = 'drop-shadow(0 0 6px #0f0)'
 
     const flipWrap = document.createElement('div')
     flipWrap.style.width = '100%'
     flipWrap.style.height = '100%'
-    flipWrap.style.transform = 'rotate(180deg)'
+    flipWrap.style.overflow = 'hidden'
+    flipWrap.style.transform = ''
     flipWrap.style.transformOrigin = 'center'
+
+    const frameWrap = document.createElement('div')
+    frameWrap.style.width = '100%'
+    frameWrap.style.overflow = 'hidden'
+    frameWrap.style.position = 'relative'
 
     const inner = document.createElement('div')
     inner.style.width = '100%'
-    inner.style.height = '100%'
-    inner.style.overflow = 'hidden'
-    const [px, py, pw, ph] = MapEngine.PERSON_CELL
-    this.applyCellBackground(inner, px, py, pw, ph, this.playerBaseW, this.playerBaseH)
-    inner.style.filter = 'drop-shadow(0 0 6px #0f0)'
+    inner.style.backgroundRepeat = 'no-repeat'
+    inner.style.position = 'absolute'
+    inner.style.top = '0'
+    inner.style.left = '0'
 
-    flipWrap.appendChild(inner)
+    frameWrap.appendChild(inner)
+    flipWrap.appendChild(frameWrap)
     el.appendChild(flipWrap)
     this.playerMarkerOuter = el
     this.playerMarkerFlip = flipWrap
+    this.playerMarkerFrameWrap = frameWrap
     this.playerMarkerImg = inner
+
+    this.setPlayerFrame(this.playerAnimState)
 
     this.playerMarker = new maplibregl.Marker({ element: el })
       .setLngLat([useGameStore().playerLongitude, useGameStore().playerLatitude])
@@ -251,6 +287,11 @@ export class MapEngine {
     }
   }
 
+  setCarMarkerAngle(id: string, angle: number) {
+    const marker = this.carMarkers.get(id)
+    if (marker) marker.getElement().style.transform = `rotate(${angle}rad)`
+  }
+
   addCarMarker(id: string, lng: number, lat: number, angle?: number) {
     if (this.carMarkers.has(id)) return
     const el = this.createCarImage(angle)
@@ -332,20 +373,80 @@ export class MapEngine {
 
   private applyPlayerZoom(zoom: number) {
     if (!this.playerMarkerOuter) return
-    const scale = MapEngine.getScale(zoom)
+    const natural = MapEngine.getScale(zoom)
+    const store = useGameStore()
+    let scale: number
+    if (store.isHacking) {
+      scale = 3
+    } else if (this.playerIsCar) {
+      scale = Math.max(0.5, natural - 0.2)
+    } else {
+      scale = natural
+    }
     const w = Math.round(this.playerBaseW * scale)
-    const h = Math.round(this.playerBaseH * scale)
+    const h = Math.round(this.playerBaseH * scale) - 2
     this.playerMarkerOuter.style.width = w + 'px'
     this.playerMarkerOuter.style.height = h + 'px'
-    if (this.playerMarkerImg) {
-      const [cx, cy, cw, ch] = this.playerIsCar ? MapEngine.CAR_CELL : MapEngine.PERSON_CELL
-      this.applyCellBackground(this.playerMarkerImg, cx, cy, cw, ch, w, h)
+    this.applyPlayerBackground(scale, w, h)
+  }
+
+  private applyPlayerBackground(scale: number, boxW: number, boxH: number) {
+    if (!this.playerMarkerImg) return
+    if (this.playerIsCar) {
+      const [cx, cy, cw, ch] = MapEngine.CAR_CELL
+      const s = Math.min(boxW / cw, boxH / ch)
+      const sheetW = MapEngine.SHEET_W * s
+      const sheetH = MapEngine.SHEET_H * s
+      this.playerMarkerImg.style.backgroundImage = `url(${import.meta.env.BASE_URL}sprites.png)`
+      this.playerMarkerImg.style.backgroundRepeat = 'no-repeat'
+      this.playerMarkerImg.style.backgroundSize = `${sheetW.toFixed(2)}px ${sheetH.toFixed(2)}px`
+      this.playerMarkerImg.style.backgroundPosition = `-${(cx * s).toFixed(2)}px -${(cy * s).toFixed(2)}px`
+      this.playerMarkerImg.style.width = `${sheetW.toFixed(2)}px`
+      this.playerMarkerImg.style.height = `${sheetH.toFixed(2)}px`
+      if (this.playerMarkerFrameWrap) {
+        this.playerMarkerFrameWrap.style.height = `${(ch * s).toFixed(2)}px`
+        this.playerMarkerFrameWrap.style.top = `${((boxH - ch * s) / 2).toFixed(2)}px`
+      }
+      return
+    }
+    const frame = this.playerAnimState === 'hacking' ? MapEngine.PLAYER_HACK
+      : this.playerAnimState === 'walking' || this.playerAnimState === 'running' ? MapEngine.PLAYER_WALK
+      : MapEngine.PLAYER_IDLE
+    const s = Math.min(boxW / frame.w, boxH / frame.h)
+    const sheetW = frame.w * s
+    const sheetH = frame.h * frame.count * s
+    const frameH = frame.h * s
+    if (this.playerMarkerFrameWrap) {
+      this.playerMarkerFrameWrap.style.height = `${frameH.toFixed(2)}px`
+      this.playerMarkerFrameWrap.style.top = `${((boxH - frameH) / 2).toFixed(2)}px`
+    }
+    this.playerMarkerImg.style.backgroundImage = `url(${import.meta.env.BASE_URL}${frame.url})`
+    this.playerMarkerImg.style.backgroundSize = `${sheetW.toFixed(2)}px ${sheetH.toFixed(2)}px`
+    this.playerMarkerImg.style.backgroundPosition = '0 0'
+    this.playerMarkerImg.style.width = `${sheetW.toFixed(2)}px`
+    this.playerMarkerImg.style.height = `${sheetH.toFixed(2)}px`
+  }
+
+  setPlayerFrame(state: 'idle' | 'walking' | 'running' | 'hacking') {
+    if (!this.playerMarkerImg) return
+    this.playerAnimState = state
+    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle')
+    this.applyPlayerZoom(this.map?.getZoom() ?? 18)
+    if (state === 'walking' || state === 'running') {
+      this.playerMarkerImg.classList.add('walking')
+      if (state === 'running') {
+        this.playerMarkerImg.classList.add('running')
+      }
+    } else if (state === 'hacking') {
+      this.playerMarkerImg.classList.add('hacking')
+    } else {
+      this.playerMarkerImg.classList.add('idle')
     }
   }
 
   setPlayerMarkerShadow(shadow: string) {
-    if (this.playerMarkerImg) {
-      this.playerMarkerImg.style.filter = `drop-shadow(0 0 6px ${shadow})`
+    if (this.playerMarkerOuter) {
+      this.playerMarkerOuter.style.filter = `drop-shadow(0 0 6px ${shadow})`
     }
   }
 
@@ -355,23 +456,14 @@ export class MapEngine {
     this.playerBaseH = isCar ? 38 : 28
     this.playerIsCar = isCar
     if (this.playerMarkerFlip) {
-      this.playerMarkerFlip.style.transform = isCar ? '' : 'rotate(180deg)'
+      this.playerMarkerFlip.style.transform = ''
     }
     if (isCar) {
-      this.playerMarkerImg.style.filter = 'drop-shadow(0 0 6px #48f)'
+      this.setPlayerMarkerShadow('#48f')
     } else {
-      this.playerMarkerImg.style.filter = 'drop-shadow(0 0 6px #0f0)'
+      this.setPlayerMarkerShadow('#0f0')
     }
-    this.playerMarkerImg.classList.remove('walking', 'running')
-    this.applyPlayerZoom(this.map?.getZoom() ?? 18)
-  }
-
-  setPlayerWalkFrame(frame: number) {
-    if (!this.playerMarkerImg) return
-    const isIdle = frame === 0
-    const isRunning = frame === 2
-    this.playerMarkerImg.classList.toggle('walking', !isIdle)
-    this.playerMarkerImg.classList.toggle('running', isRunning)
+    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle')
     this.applyPlayerZoom(this.map?.getZoom() ?? 18)
   }
 
@@ -390,7 +482,7 @@ export class MapEngine {
     return features.some(f => {
       if (!f.layer) return false
       const id = f.layer.id
-      return id.startsWith('road_') || id.startsWith('tunnel_') || id.startsWith('bridge_') || id.startsWith('highway-')
+      return id.startsWith('road_') || id.startsWith('tunnel_') || id.startsWith('bridge_') || id.startsWith('highway-') || id.includes('crossing')
     })
   }
 

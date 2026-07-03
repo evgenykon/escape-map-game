@@ -55,6 +55,7 @@ export const useGameStore = defineStore('game', () => {
   const loadingMessage = ref('Загрузка карты...')
   const playerDistFromEpicenter = ref(0)
   const shelterHudVisible = ref(false)
+  const isMuted = ref(false)
 
   const cacheBustTag = 'bust-2026-07-02-19-45'
 
@@ -85,6 +86,7 @@ export const useGameStore = defineStore('game', () => {
     loadingMessage,
     playerDistFromEpicenter,
     shelterHudVisible,
+    isMuted,
     cacheBustTag,
   }
 })

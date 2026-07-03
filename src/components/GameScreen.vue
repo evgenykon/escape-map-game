@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { MapEngine } from '@/engine/MapEngine'
 import { PlayerController } from '@/engine/PlayerController'
+import { soundEngine } from '@/engine/SoundEngine'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
@@ -147,10 +148,12 @@ function scheduleSMS() {
   texts.forEach((text, i) => {
     if (i === 0) {
       showSMS(text)
+      soundEngine.playIncomingMessage()
     } else {
       const id = setTimeout(() => {
         if (store.phase !== 'playing') return
         showSMS(text)
+        soundEngine.playIncomingMessage()
         if (i === 4) store.shelterHudVisible = true
       }, Math.round(gap * i))
       smsTimeouts.push(id)
@@ -170,6 +173,8 @@ function showSMS(text: string) {
 
 function triggerExplosion() {
   playerController.stop()
+  soundEngine.stopAllLoops()
+  soundEngine.playExplosion()
 
   const pos = playerController.getPosition()
   const dlat = (pos.lat - store.epicenterLatitude) * 111320
@@ -233,6 +238,11 @@ function restartGame() {
 }
 
 const resultTexts = computed(() => store.scenario?.resultTexts)
+
+function toggleMute() {
+  store.isMuted = !store.isMuted
+  soundEngine.setMuted(store.isMuted)
+}
 </script>
 
 <template>
@@ -248,6 +258,14 @@ const resultTexts = computed(() => store.scenario?.resultTexts)
       <div class="hud-time" :class="{ warning: store.timeLeft < 60 }">
         {{ formatTime(hudTimeLeft) }}
       </div>
+
+      <button
+        class="mute-btn"
+        :title="store.isMuted ? 'Включить звук' : 'Выключить звук'"
+        @click="toggleMute"
+      >
+        {{ store.isMuted ? '🔇' : '🔊' }}
+      </button>
 
       <div class="hud-status">
         <span v-if="store.isInCar">🚗 В машине</span>
@@ -351,6 +369,28 @@ const resultTexts = computed(() => store.scenario?.resultTexts)
   color: #f44;
   border-color: #f44;
   animation: blink 0.5s infinite;
+}
+.mute-btn {
+  margin-top: 0.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid #0ff;
+  border-radius: 4px;
+  color: #0ff;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s, transform 0.1s;
+}
+.mute-btn:hover {
+  background: rgba(0, 50, 80, 0.7);
+}
+.mute-btn:active {
+  transform: scale(0.92);
 }
 @keyframes blink {
   50% { opacity: 0.5; }
@@ -564,14 +604,28 @@ const resultTexts = computed(() => store.scenario?.resultTexts)
 </style>
 
 <style>
-@keyframes player-walk {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-4px); }
+@keyframes player-idle-anim {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-100%); }
+}
+@keyframes player-walk-anim {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-100%); }
+}
+@keyframes player-hack-anim {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-100%); }
+}
+.idle {
+  animation: player-idle-anim 3s steps(10) infinite;
 }
 .walking {
-  animation: player-walk 0.36s linear infinite;
+  animation: player-walk-anim 0.6s steps(6) infinite;
 }
 .walking.running {
-  animation-duration: 0.18s;
+  animation: player-walk-anim 0.3s steps(6) infinite;
+}
+.hacking {
+  animation: player-hack-anim 1s steps(4) infinite;
 }
 </style>
