@@ -45,8 +45,9 @@ export class MapEngine {
   private static readonly PLAYER_WALK = { url: 'sprites/player-walking.png', w: 48, h: 48, count: 6, duration: 0.6 }
   private static readonly PLAYER_HACK = { url: 'sprites/player-hacking.png', w: 48, h: 48, count: 4, duration: 1 }
   private static readonly PLAYER_DEAD = { url: 'sprites/dead.png', w: 32, h: 32, count: 1, duration: 0 }
+  private static readonly PLAYER_SWIM = { url: 'sprites/player_swimming.png', w: 48, h: 48, count: 7, duration: 0.8 }
 
-  private playerAnimState: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' = 'idle'
+  private playerAnimState: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' | 'swimming' = 'idle'
 
   static getScale(zoom: number): number {
     return Math.max(0.4, 1 + (zoom - 19) * 0.7)
@@ -321,7 +322,9 @@ export class MapEngine {
   }
 
   setCarMarkersVisible(visible: boolean) {
-    for (const marker of this.carMarkers.values()) {
+    const store = useGameStore()
+    for (const [id, marker] of this.carMarkers) {
+      if (visible && id === store.activeCarId) continue
       marker.getElement().style.display = visible ? '' : 'none'
     }
   }
@@ -425,6 +428,7 @@ export class MapEngine {
     const frame = this.playerAnimState === 'hacking' ? MapEngine.PLAYER_HACK
       : this.playerAnimState === 'walking' || this.playerAnimState === 'running' ? MapEngine.PLAYER_WALK
       : this.playerAnimState === 'dead' ? MapEngine.PLAYER_DEAD
+      : this.playerAnimState === 'swimming' ? MapEngine.PLAYER_SWIM
       : MapEngine.PLAYER_IDLE
     const s = Math.min(boxW / frame.w, boxH / frame.h)
     const sheetW = frame.w * s
@@ -441,10 +445,10 @@ export class MapEngine {
     this.playerMarkerImg.style.height = `${sheetH.toFixed(2)}px`
   }
 
-  setPlayerFrame(state: 'idle' | 'walking' | 'running' | 'hacking' | 'dead') {
+  setPlayerFrame(state: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' | 'swimming') {
     if (!this.playerMarkerImg) return
     this.playerAnimState = state
-    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'dead')
+    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'dead', 'swimming')
     this.applyPlayerZoom(this.map?.getZoom() ?? 18)
     if (state === 'walking' || state === 'running') {
       this.playerMarkerImg.classList.add('walking')
@@ -455,6 +459,8 @@ export class MapEngine {
       this.playerMarkerImg.classList.add('hacking')
     } else if (state === 'dead') {
       this.playerMarkerImg.classList.add('dead')
+    } else if (state === 'swimming') {
+      this.playerMarkerImg.classList.add('swimming')
     } else {
       this.playerMarkerImg.classList.add('idle')
     }

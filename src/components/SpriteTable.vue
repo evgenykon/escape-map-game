@@ -18,6 +18,7 @@ const sprites: SpriteDef[] = [
   { name: 'Walk', url: 'sprites/player-walking.png', w: 48, h: 48, count: 6, duration: 0.6 },
   { name: 'Hack', url: 'sprites/player-hacking.png', w: 48, h: 48, count: 4, duration: 1 },
   { name: 'Dead', url: 'sprites/dead.png', w: 32, h: 32, count: 1, duration: 0 },
+  { name: 'Swim', url: 'sprites/player_swimming.png', w: 48, h: 48, count: 7, duration: 0.8 },
 ]
 
 const frames = ref<number[]>(sprites.map(() => 0))

@@ -707,4 +707,11 @@ function toggleMute() {
 .hacking {
   animation: player-hack-anim 1s steps(4) infinite;
 }
+@keyframes player-swim-anim {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-100%); }
+}
+.swimming {
+  animation: player-swim-anim 0.8s steps(7) infinite;
+}
 </style>

@@ -30,7 +30,7 @@ export class PlayerController {
   private isMapMode = false
   private wasFuelEmpty = false
   private lastCrashAt = 0
-  private lastFrameState: 'idle' | 'walking' | 'running' | 'hacking' | null = null
+  private lastFrameState: 'idle' | 'walking' | 'running' | 'hacking' | 'swimming' | null = null
   private wasBraking = false
 
   constructor(mapEngine: MapEngine) {
@@ -257,15 +257,17 @@ export class PlayerController {
 
     if (this.isMapMode) return
 
-    const newFrameState: 'idle' | 'walking' | 'running' | 'hacking' | null = store.isHacking
+    const newFrameState: 'idle' | 'walking' | 'running' | 'hacking' | 'swimming' | null = store.isHacking
       ? 'hacking'
       : store.isInCar
         ? null
-        : this.lastWalkState === 2
-          ? 'running'
-          : this.lastWalkState === 1
-            ? 'walking'
-            : 'idle'
+        : store.isSwimming
+          ? 'swimming'
+          : this.lastWalkState === 2
+            ? 'running'
+            : this.lastWalkState === 1
+              ? 'walking'
+              : 'idle'
     if (newFrameState && newFrameState !== this.lastFrameState) {
       this.lastFrameState = newFrameState
       this.mapEngine.setPlayerFrame(newFrameState)
