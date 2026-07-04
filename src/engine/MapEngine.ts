@@ -41,14 +41,15 @@ export class MapEngine {
     MapEngine.CAR_H,
   ]
 
-  private static readonly PLAYER_IDLE = { url: 'sprites/player-idle.png', w: 42, h: 48, count: 10, duration: 3 }
-  private static readonly PLAYER_WALK = { url: 'sprites/player-walking.png', w: 42, h: 48, count: 6, duration: 0.6 }
-  private static readonly PLAYER_HACK = { url: 'sprites/player-hacking.png', w: 42, h: 48, count: 4, duration: 1 }
+  private static readonly PLAYER_IDLE = { url: 'sprites/player-idle.png', w: 48, h: 48, count: 10, duration: 3 }
+  private static readonly PLAYER_WALK = { url: 'sprites/player-walking.png', w: 48, h: 48, count: 6, duration: 0.6 }
+  private static readonly PLAYER_HACK = { url: 'sprites/player-hacking.png', w: 48, h: 48, count: 4, duration: 1 }
+  private static readonly PLAYER_DEAD = { url: 'sprites/dead.png', w: 32, h: 32, count: 1, duration: 0 }
 
-  private playerAnimState: 'idle' | 'walking' | 'running' | 'hacking' = 'idle'
+  private playerAnimState: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' = 'idle'
 
   static getScale(zoom: number): number {
-    return 1 + (zoom - 19) * 0.7
+    return Math.max(0.4, 1 + (zoom - 19) * 0.7)
   }
 
   private applyCellBackground(
@@ -423,6 +424,7 @@ export class MapEngine {
     }
     const frame = this.playerAnimState === 'hacking' ? MapEngine.PLAYER_HACK
       : this.playerAnimState === 'walking' || this.playerAnimState === 'running' ? MapEngine.PLAYER_WALK
+      : this.playerAnimState === 'dead' ? MapEngine.PLAYER_DEAD
       : MapEngine.PLAYER_IDLE
     const s = Math.min(boxW / frame.w, boxH / frame.h)
     const sheetW = frame.w * s
@@ -439,10 +441,10 @@ export class MapEngine {
     this.playerMarkerImg.style.height = `${sheetH.toFixed(2)}px`
   }
 
-  setPlayerFrame(state: 'idle' | 'walking' | 'running' | 'hacking') {
+  setPlayerFrame(state: 'idle' | 'walking' | 'running' | 'hacking' | 'dead') {
     if (!this.playerMarkerImg) return
     this.playerAnimState = state
-    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle')
+    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'dead')
     this.applyPlayerZoom(this.map?.getZoom() ?? 18)
     if (state === 'walking' || state === 'running') {
       this.playerMarkerImg.classList.add('walking')
@@ -451,6 +453,8 @@ export class MapEngine {
       }
     } else if (state === 'hacking') {
       this.playerMarkerImg.classList.add('hacking')
+    } else if (state === 'dead') {
+      this.playerMarkerImg.classList.add('dead')
     } else {
       this.playerMarkerImg.classList.add('idle')
     }
@@ -575,7 +579,7 @@ export class MapEngine {
   }
 
   flyToPlayer(lat: number, lng: number, cb: () => void) {
-    this.map?.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 })
+    this.map?.flyTo({ center: [lng, lat], zoom: 19, duration: 1500 })
     this.map?.once('moveend', cb)
   }
 
@@ -618,6 +622,7 @@ export class MapEngine {
     el.style.borderRadius = '50%'
     el.style.mixBlendMode = 'screen'
     el.style.pointerEvents = 'none'
+    el.style.zIndex = '2'
 
     new maplibregl.Marker({ element: el })
       .setLngLat([epicenterLng, epicenterLat])
@@ -644,6 +649,7 @@ export class MapEngine {
     el.style.position = 'absolute'
     el.style.borderRadius = '50%'
     el.style.pointerEvents = 'none'
+    el.style.zIndex = '1'
     el.style.background = 'radial-gradient(circle, rgba(80,80,80,0.7) 0%, rgba(80,80,80,0.35) 40%, rgba(80,80,80,0) 70%)'
 
     const marker = new maplibregl.Marker({ element: el })

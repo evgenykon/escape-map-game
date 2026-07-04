@@ -210,12 +210,13 @@ function triggerExplosion() {
       mapEngine.showShockwave(store.epicenterLongitude, store.epicenterLatitude, store.explosionRadius)
       setTimeout(() => mapEngine.flyToZoom(11), 3000)
 
+      const survived = store.isInShelter || store.playerDistFromEpicenter > store.explosionRadius
       setTimeout(() => {
         mapEngine.setMarkersVisible(true)
         mapEngine.setPlayerMarkerShape(false)
-        mapEngine.setPlayerFrame('idle')
+        mapEngine.setPlayerFrame(survived ? 'idle' : 'dead')
         mapEngine.flyToPlayer(pos.lat, pos.lng, () => {
-          mapEngine.setPlayerZoom(16)
+          mapEngine.setPlayerZoom(19)
           setTimeout(() => {
             mapEngine.setMarkersVisible(false)
             checkGameResult()

@@ -2,12 +2,15 @@
 import { ref } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { scenarioRegistry } from '@/scenarios'
+import SpriteTable from '@/components/SpriteTable.vue'
 
+const isDev = import.meta.env.DEV
 const BUILD_TAG = 'build-2026-07-02-r2'
 
 const store = useGameStore()
 const selectedId = ref<string | null>(scenarioRegistry[0]?.meta.id ?? null)
 const isStarting = ref(false)
+const showSpriteTable = ref(false)
 
 async function startGame() {
   if (!selectedId.value || isStarting.value) return
@@ -34,7 +37,8 @@ async function startGame() {
 </script>
 
 <template>
-  <div class="start-screen">
+  <SpriteTable v-if="showSpriteTable" @close="showSpriteTable = false" />
+  <div v-else class="start-screen">
     <h1 class="title">ESCAPE MAP GAME</h1>
     <p class="subtitle">Симуляция побега из опасной зоны, которой становится ваш дом.</p>
 
@@ -62,6 +66,10 @@ async function startGame() {
       @click="startGame"
     >
       {{ isStarting ? 'ЗАГРУЗКА…' : 'СТАРТ' }}
+    </button>
+
+    <button v-if="isDev" class="sprite-btn" @click="showSpriteTable = true">
+      Таблица спрайтов
     </button>
 
     <p class="build-tag">{{ BUILD_TAG }}</p>
@@ -168,6 +176,21 @@ async function startGame() {
   background: #444;
   cursor: not-allowed;
   opacity: 0.5;
+}
+.sprite-btn {
+  margin-top: 1rem;
+  padding: 0.5rem 1.5rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: #333;
+  color: #fff;
+  border: 1px solid #555;
+  cursor: pointer;
+  letter-spacing: 0.1rem;
+  transition: all 0.15s;
+}
+.sprite-btn:hover {
+  background: #555;
 }
 .build-tag {
   position: absolute;
