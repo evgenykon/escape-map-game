@@ -9,6 +9,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 const store = useGameStore()
+const baseUrl = import.meta.env.BASE_URL
 const mapContainer = ref<HTMLDivElement>()
 const hudTimeLeft = ref(0)
 const gameReady = ref(false)
@@ -211,8 +212,10 @@ function triggerExplosion() {
 
       setTimeout(() => {
         mapEngine.setMarkersVisible(true)
+        mapEngine.setPlayerMarkerShape(false)
         mapEngine.setPlayerFrame('idle')
         mapEngine.flyToPlayer(pos.lat, pos.lng, () => {
+          mapEngine.setPlayerZoom(16)
           setTimeout(() => {
             mapEngine.setMarkersVisible(false)
             checkGameResult()
@@ -330,6 +333,7 @@ function toggleMute() {
     </div>
 
     <div v-if="store.phase === 'gameover'" class="gameover-overlay">
+      <img :src="baseUrl + 'sprites/dead.png'" class="dead-sprite" alt="" />
       <h1>{{ resultTexts?.gameoverTitle ?? 'GAME OVER' }}</h1>
       <p>{{ resultTexts?.gameoverSubtitle }}</p>
       <button @click="restartGame">Заново</button>
@@ -612,6 +616,12 @@ function toggleMute() {
   z-index: 30;
   color: #fff;
   font-family: 'Courier New', monospace;
+}
+.dead-sprite {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+  margin-bottom: 0.5rem;
 }
 .gameover-overlay h1 {
   font-size: 4rem;

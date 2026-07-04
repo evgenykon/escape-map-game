@@ -185,6 +185,7 @@ export class MapEngine {
     this.playerMarkerOuter = el
     this.playerMarkerFlip = flipWrap
     this.playerMarkerFrameWrap = frameWrap
+    frameWrap.style.overflow = 'hidden'
     this.playerMarkerImg = inner
 
     this.setPlayerFrame(this.playerAnimState)
@@ -328,6 +329,10 @@ export class MapEngine {
     if (!this.map) return null
     const b = this.map.getBounds()
     return { n: b.getNorth(), s: b.getSouth(), e: b.getEast(), w: b.getWest() }
+  }
+
+  setPlayerZoom(zoom: number) {
+    this.applyPlayerZoom(zoom)
   }
 
   updatePlayerPosition(lng: number, lat: number, angle?: number, zoom?: number) {
@@ -626,22 +631,34 @@ export class MapEngine {
   showShockwave(epicenterLng: number, epicenterLat: number, maxRadiusMeters: number) {
     if (!this.map) return
 
-    const id = 'shockwave'
     const duration = 15000
     const startRadiusKm = maxRadiusMeters / 1000
     const endRadiusKm = startRadiusKm * 12
     const start = performance.now()
+    const latRad = epicenterLat * Math.PI / 180
+    const lineId = 'shockwave-line'
+    const lineSourceId = 'shockwave-line-src'
 
+    // Gradient circle marker (stays after explosion)
+    const el = document.createElement('div')
+    el.style.position = 'absolute'
+    el.style.borderRadius = '50%'
+    el.style.pointerEvents = 'none'
+    el.style.background = 'radial-gradient(circle, rgba(80,80,80,0.7) 0%, rgba(80,80,80,0.35) 40%, rgba(80,80,80,0) 70%)'
+
+    const marker = new maplibregl.Marker({ element: el })
+      .setLngLat([epicenterLng, epicenterLat])
+      .addTo(this.map)
+
+    // Red dashed line (removed after animation)
     const initial = circle([epicenterLng, epicenterLat], startRadiusKm, {
       steps: 64, units: 'kilometers',
     })
-
-    if (this.map.getSource(id)) return
-    this.map.addSource(id, { type: 'geojson', data: initial as GeoJSON.Feature })
+    this.map.addSource(lineSourceId, { type: 'geojson', data: initial as GeoJSON.Feature })
     this.map.addLayer({
-      id: 'shockwave-layer',
+      id: lineId,
       type: 'line',
-      source: id,
+      source: lineSourceId,
       paint: {
         'line-color': '#f00',
         'line-dasharray': [4, 6],
@@ -654,21 +671,39 @@ export class MapEngine {
       const elapsed = performance.now() - start
       const t = Math.min(elapsed / duration, 1)
       const radiusKm = startRadiusKm + (endRadiusKm - startRadiusKm) * t
-      const width = Math.max(1, Math.round(8 * (1 - t * 0.875)))
+      const zoom = this.map.getZoom()
+      const metersPerPixel = 156543.03 * Math.cos(latRad) / Math.pow(2, zoom)
+      const radiusPx = (radiusKm * 1000) / metersPerPixel
 
+      // Update gradient marker
+      el.style.width = Math.round(radiusPx * 2) + 'px'
+      el.style.height = Math.round(radiusPx * 2) + 'px'
+
+      // Update dashed line
       const poly = circle([epicenterLng, epicenterLat], radiusKm, {
         steps: 64, units: 'kilometers',
       })
-      const src = this.map.getSource(id) as maplibregl.GeoJSONSource
+      const src = this.map.getSource(lineSourceId) as maplibregl.GeoJSONSource
       if (src) src.setData(poly as GeoJSON.Feature)
-
-      this.map.setPaintProperty('shockwave-layer', 'line-width', width)
+      const width = Math.max(1, Math.round(8 * (1 - t * 0.875)))
+      this.map.setPaintProperty(lineId, 'line-width', width)
 
       if (t < 1) {
         requestAnimationFrame(tick)
       } else {
-        if (this.map.getLayer('shockwave-layer')) this.map.removeLayer('shockwave-layer')
-        if (this.map.getSource(id)) this.map.removeSource(id)
+        if (this.map.getLayer(lineId)) this.map.removeLayer(lineId)
+        if (this.map.getSource(lineSourceId)) this.map.removeSource(lineSourceId)
+        // keep gradient marker sized to current zoom
+        const keepTick = () => {
+          if (!this.map || !this.map.getStyle()) return
+          const zoom = this.map.getZoom()
+          const mpp = 156543.03 * Math.cos(latRad) / Math.pow(2, zoom)
+          const px = Math.round((endRadiusKm * 1000) / mpp * 2)
+          el.style.width = px + 'px'
+          el.style.height = px + 'px'
+          requestAnimationFrame(keepTick)
+        }
+        requestAnimationFrame(keepTick)
       }
     }
     requestAnimationFrame(tick)
