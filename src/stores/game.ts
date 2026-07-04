@@ -52,6 +52,7 @@ export const useGameStore = defineStore('game', () => {
 
   const isSwimming = ref(false)
   const isWalking = ref(true)
+  const surfaceType = ref<string>('default')
   const loadingMessage = ref('Загрузка карты...')
   const playerDistFromEpicenter = ref(0)
   const shelterHudVisible = ref(false)
@@ -87,6 +88,7 @@ export const useGameStore = defineStore('game', () => {
     playerDistFromEpicenter,
     shelterHudVisible,
     isMuted,
+    surfaceType,
     cacheBustTag,
   }
 })

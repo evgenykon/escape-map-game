@@ -476,6 +476,7 @@ export class PlayerController {
 
     const store = useGameStore()
     store.isSwimming = this.mapEngine.isOnWater(this.playerLng, this.playerLat)
+    store.surfaceType = this.mapEngine.getSurfaceType(this.playerLng, this.playerLat)
   }
 
   private checkCarCollision(lng: number, lat: number, excludeId?: string): boolean {

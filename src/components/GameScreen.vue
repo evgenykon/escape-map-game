@@ -20,6 +20,29 @@ const currentFuel = computed(() => {
   const car = store.cars.find(c => c.id === store.activeCarId)
   return car?.fuel ?? 0
 })
+const surfaceEmojiMap: Record<string, string> = {
+  building: '🏢',
+  water: '🌊',
+  forest: '🌲',
+  park: '🌳',
+  grass: '🌿',
+  road: '🛣️',
+  default: '🚶',
+}
+const surfaceLabelMap: Record<string, string> = {
+  building: 'в здании',
+  water: 'в воде',
+  forest: 'в лесу',
+  park: 'в парке',
+  grass: 'на траве',
+  road: 'на дороге',
+  default: 'пешком',
+}
+const surfaceDisplay = computed(() => ({
+  emoji: surfaceEmojiMap[store.surfaceType] ?? '🚶',
+  label: surfaceLabelMap[store.surfaceType] ?? 'пешком',
+  cssClass: `status-${store.surfaceType}`,
+}))
 
 let mapEngine: MapEngine
 let playerController: PlayerController
@@ -292,9 +315,11 @@ function toggleMute() {
         {{ store.isMuted ? '🔇' : '🔊' }}
       </button>
 
-      <div class="hud-status">
-        <span v-if="store.isInCar">🚗 В машине</span>
-        <span v-else>🚶 Пешком</span>
+      <div v-if="store.isInCar" class="hud-status status-car">
+        🚗 В машине
+      </div>
+      <div v-else class="hud-status" :class="surfaceDisplay.cssClass">
+        {{ surfaceDisplay.emoji }} {{ surfaceDisplay.label }}
       </div>
       <div v-if="store.isHacking" class="hack-bar">
         <div class="hack-bar-fill" :style="{ width: store.hackProgress * 100 + '%' }"></div>
@@ -434,12 +459,22 @@ function toggleMute() {
   transform: scale(0.92);
 }
 .hud-status {
-  background: rgba(0,0,0,0.7);
+  background: rgba(0, 0, 0, 0.55);
   color: #fff;
-  padding: 0.3rem 0.8rem;
-  font-size: 0.9rem;
-  border: 1px solid #444;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  border-left: 4px solid #666;
+  backdrop-filter: blur(2px);
 }
+.status-car     { border-left-color: #48f; }
+.status-building { border-left-color: #f60; }
+.status-water    { border-left-color: #0af; }
+.status-forest   { border-left-color: #2a2; }
+.status-park     { border-left-color: #4c4; }
+.status-grass    { border-left-color: #8c4; }
+.status-road     { border-left-color: #888; }
+.status-default  { border-left-color: #666; }
 .hack-bar {
   position: relative;
   background: rgba(0,0,0,0.8);

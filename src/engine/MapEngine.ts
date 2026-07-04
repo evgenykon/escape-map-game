@@ -548,6 +548,55 @@ export class MapEngine {
     })
   }
 
+  private isOnForest(lng: number, lat: number): boolean {
+    if (!this.map) return false
+    const pt = this.map.project([lng, lat])
+    const r = 12
+    const features = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
+    return features.some(f => {
+      if (!f.layer) return false
+      const id = f.layer.id
+      const cls = f.properties?.class
+      return id.startsWith('landcover_wood') || cls === 'wood'
+    })
+  }
+
+  private isOnGrass(lng: number, lat: number): boolean {
+    if (!this.map) return false
+    const pt = this.map.project([lng, lat])
+    const r = 12
+    const features = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
+    return features.some(f => {
+      if (!f.layer) return false
+      const id = f.layer.id
+      const cls = f.properties?.class
+      return id.startsWith('landcover_grass') || cls === 'grass'
+    })
+  }
+
+  private isOnPark(lng: number, lat: number): boolean {
+    if (!this.map) return false
+    const pt = this.map.project([lng, lat])
+    const r = 12
+    const features = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
+    return features.some(f => {
+      if (!f.layer) return false
+      const id = f.layer.id
+      const cls = f.properties?.class
+      return id.startsWith('landuse_park') || id.startsWith('leisure_') || cls === 'park' || cls === 'leisure'
+    })
+  }
+
+  getSurfaceType(lng: number, lat: number): string {
+    if (this.isInsideBuilding(lng, lat)) return 'building'
+    if (this.isOnWater(lng, lat)) return 'water'
+    if (this.isOnPark(lng, lat)) return 'park'
+    if (this.isOnForest(lng, lat)) return 'forest'
+    if (this.isOnGrass(lng, lat)) return 'grass'
+    if (this.isOnRoad(lng, lat)) return 'road'
+    return 'default'
+  }
+
   isValidSpawnPoint(lng: number, lat: number): boolean {
     return !this.isInsideBuilding(lng, lat) && !this.isOnWater(lng, lat)
   }
