@@ -121,12 +121,19 @@ onMounted(() => {
 onUnmounted(() => {
   playerController.stop()
   clearInterval(timerInterval)
+  clearInterval(explosionTimer!)
   clearInterval(shelterInterval)
   clearInterval(carInfoInterval)
   smsTimeouts.forEach(clearTimeout)
   spawnValidationTimeouts.forEach(clearTimeout)
   mapEngine?.destroy()
 })
+
+function debugSetTimer(sec: number) {
+  console.log('[debugSetTimer]', sec)
+  store.timeLeft = sec
+  hudTimeLeft.value = sec
+}
 
 function startTimer() {
   store.timeLeft = store.timerMinutes * 60
@@ -136,8 +143,12 @@ function startTimer() {
     store.timeLeft--
     hudTimeLeft.value = store.timeLeft
 
-    if (store.timeLeft === 60) {
-      soundEngine.playNuclearDanger()
+    if (store.timeLeft === 30) {
+      soundEngine.startNuclearDangerLoop()
+    }
+
+    if (store.timeLeft <= 5 && store.timeLeft > 0) {
+      soundEngine.setNuclearDangerVolume(store.timeLeft / 5)
     }
 
     if (store.timeLeft <= 0) {
@@ -173,37 +184,43 @@ function showSMS(text: string) {
   }, 8000)
 }
 
+let explosionTimer: ReturnType<typeof setInterval> | null = null
+
 function triggerExplosion() {
+  if (store.phase !== 'playing') return
+  store.phase = 'explosion'
+  mapEngine.setMarkersVisible(false)
   playerController.stop()
   soundEngine.stopAllLoops()
-  soundEngine.playExplosion()
+
+  hudTimeLeft.value = 0
+  if (explosionTimer) clearInterval(explosionTimer)
+  explosionTimer = setInterval(() => { hudTimeLeft.value++ }, 1000)
 
   const pos = playerController.getPosition()
   const dlat = (pos.lat - store.epicenterLatitude) * 111320
   const dlng = (pos.lng - store.epicenterLongitude) * 111320 * Math.cos(pos.lat * Math.PI / 180)
   store.playerDistFromEpicenter = Math.sqrt(dlat * dlat + dlng * dlng)
 
-  showSplash.value = true
-  splashText.value = 'ВЗРЫВ'
-  setTimeout(() => { showSplash.value = false }, 1000)
+  mapEngine.flyToEpicenter(store.epicenterLongitude, store.epicenterLatitude, () => {
+    setTimeout(() => {
+      soundEngine.playExplosion()
+      mapEngine.showExplosion(store.epicenterLongitude, store.epicenterLatitude, store.explosionRadius)
+      mapEngine.showShockwave(store.epicenterLongitude, store.epicenterLatitude, store.explosionRadius)
+      setTimeout(() => mapEngine.flyToZoom(11), 3000)
 
-  const radiusDeg = store.explosionRadius / 111320
-  const rLng = radiusDeg / Math.cos(store.epicenterLatitude * Math.PI / 180)
-  const swLng = Math.min(store.epicenterLongitude - rLng, pos.lng)
-  const swLat = Math.min(store.epicenterLatitude - radiusDeg, pos.lat)
-  const neLng = Math.max(store.epicenterLongitude + rLng, pos.lng)
-  const neLat = Math.max(store.epicenterLatitude + radiusDeg, pos.lat)
-  mapEngine.fitBounds(swLng, swLat, neLng, neLat, 60)
-
-  setTimeout(() => {
-    const radius = store.explosionRadius
-    mapEngine.showExplosion(store.epicenterLongitude, store.epicenterLatitude, radius)
-  }, 1600)
-
-  setTimeout(() => {
-    if (store.phase !== 'playing') return
-    checkGameResult()
-  }, 10000)
+      setTimeout(() => {
+        mapEngine.setMarkersVisible(true)
+        mapEngine.setPlayerFrame('idle')
+        mapEngine.flyToPlayer(pos.lat, pos.lng, () => {
+          setTimeout(() => {
+            mapEngine.setMarkersVisible(false)
+            checkGameResult()
+          }, 10000)
+        })
+      }, 20000)
+    }, 2000)
+  })
 }
 
 function checkGameResult() {
@@ -256,13 +273,13 @@ function toggleMute() {
       <p class="loading-text">{{ store.loadingMessage }}</p>
     </div>
 
-    <div v-if="isDev" class="debug-panel">
-      <div>{{ formatTime(hudTimeLeft) }}</div>
+    <div v-if="isDev" class="debug-panel" @click="debugSetTimer(15)">
+      <div>{{ store.phase === 'explosion' ? '-' : '' }}{{ formatTime(hudTimeLeft) }}</div>
       <div>zoom: {{ debugZoom.toFixed(2) }}</div>
       <div>scale: {{ debugScale.toFixed(2) }}</div>
     </div>
 
-    <div class="hud">
+    <div v-if="store.phase === 'playing'" class="hud">
       <button
         class="mute-btn"
         :title="store.isMuted ? 'Включить звук' : 'Выключить звук'"
@@ -369,6 +386,8 @@ function toggleMute() {
   position: absolute;
   left: 0.5rem;
   bottom: 0.5rem;
+  cursor: pointer;
+  z-index: 100;
   padding: 0.5rem 0.75rem;
   background: rgba(0, 0, 0, 0.6);
   color: #0f0;
@@ -376,8 +395,6 @@ function toggleMute() {
   font-size: 0.75rem;
   line-height: 1.3;
   border-radius: 4px;
-  z-index: 50;
-  pointer-events: none;
 }
 .hud {
   position: absolute;

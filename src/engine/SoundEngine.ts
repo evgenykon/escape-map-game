@@ -41,11 +41,11 @@ const ONE_SHOT_KEYS: SoundKey[] = [
   'carBrake',
   'incomingMessage',
   'explosion',
-  'nuclearDanger',
 ]
 
 const LOOP_KEYS: SoundKey[] = [
   'carDriven',
+  'nuclearDanger',
   'footstepsWalk',
   'footstepsRun',
   'swimming',
@@ -183,7 +183,9 @@ class SoundEngine {
   playCarBrake(): void { this.playOneShot('carBrake') }
   playIncomingMessage(): void { this.playOneShot('incomingMessage') }
   playExplosion(): void { this.playOneShot('explosion') }
-  playNuclearDanger(): void { this.playOneShot('nuclearDanger') }
+  startNuclearDangerLoop(): void { this.startLoop('nuclearDanger') }
+  stopNuclearDangerLoop(): void { this.stopLoop('nuclearDanger') }
+  setNuclearDangerVolume(v: number): void { this.setVolume('nuclearDanger', v) }
 
   startCarDrivenLoop(): void { this.startLoop('carDriven') }
   stopCarDrivenLoop(): void { this.stopLoop('carDriven') }

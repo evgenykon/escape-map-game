@@ -83,7 +83,7 @@ export const nuclearScenario: Scenario = {
 
   resultTexts: {
     victoryTitle: 'ВЫ ВЫЖИЛИ',
-    victorySubtitle: 'Вы укрылись в убежище вовремя.',
+    victorySubtitle: '',
     gameoverTitle: 'GAME OVER',
     gameoverSubtitle: 'Вы не успели укрыться от взрыва.',
   },

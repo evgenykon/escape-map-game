@@ -20,8 +20,17 @@ function preloadSprite(url: string): Promise<void> {
   })
 }
 
+function preloadVideo(url: string): void {
+  const link = document.createElement('link')
+  link.rel = 'preload'
+  link.as = 'video'
+  link.href = url
+  document.head.appendChild(link)
+}
+
 async function preloadSprites(): Promise<void> {
   const baseUrl = import.meta.env.BASE_URL
+  preloadVideo(`${baseUrl}explosion.mp4`)
   await Promise.all([
     preloadSprite(`${baseUrl}sprites.png`),
     preloadSprite(`${baseUrl}sprites/player-idle.png`),

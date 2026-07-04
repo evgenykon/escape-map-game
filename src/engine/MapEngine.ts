@@ -1,4 +1,4 @@
-import { destination } from '@turf/turf'
+import { circle } from '@turf/turf'
 import maplibregl from 'maplibre-gl'
 import { useGameStore } from '@/stores/game'
 
@@ -558,74 +558,120 @@ export class MapEngine {
     return null
   }
 
+  setMarkersVisible(visible: boolean) {
+    const v = visible ? '' : 'none'
+    if (this.playerMarker) this.playerMarker.getElement().style.display = v
+    for (const c of this.carMarkers.values()) c.getElement().style.display = v
+  }
+
+  flyToEpicenter(lng: number, lat: number, cb: () => void) {
+    this.map?.flyTo({ center: [lng, lat], zoom: 13, duration: 3000 })
+    this.map?.once('moveend', cb)
+  }
+
+  flyToPlayer(lat: number, lng: number, cb: () => void) {
+    this.map?.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 })
+    this.map?.once('moveend', cb)
+  }
+
+  flyToZoom(zoom: number) {
+    if (this.map) {
+      this.map.flyTo({ zoom, duration: 2000 })
+    }
+  }
+
   showExplosion(epicenterLng: number, epicenterLat: number, maxRadiusMeters: number) {
     if (!this.map) return
 
-    const store = useGameStore()
-    const id = 'explosion-circle'
-    const layerId = 'explosion-layer'
+    const id = 'blast-zone'
+    if (!this.map.getSource(id)) {
+      const polygon = circle([epicenterLng, epicenterLat], maxRadiusMeters / 1000, {
+        steps: 64, units: 'kilometers',
+      })
+      this.map.addSource(id, { type: 'geojson', data: polygon as GeoJSON.Feature })
+      this.map.addLayer({
+        id: 'blast-zone-layer',
+        type: 'fill',
+        source: id,
+        paint: { 'fill-color': '#000', 'fill-opacity': 0.5 },
+      })
+      this.map.addLayer({
+        id: 'blast-zone-outline',
+        type: 'line',
+        source: id,
+        paint: { 'line-color': '#000', 'line-width': 3 },
+      })
+    }
 
-    this.map.addSource(id, {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'Point',
-          coordinates: [epicenterLng, epicenterLat],
-        },
-      },
+    const el = document.createElement('video')
+    el.src = import.meta.env.BASE_URL + 'explosion.mp4'
+    el.muted = true
+    el.playsInline = true
+    el.style.width = '600px'
+    el.style.height = '600px'
+    el.style.objectFit = 'cover'
+    el.style.borderRadius = '50%'
+    el.style.mixBlendMode = 'screen'
+    el.style.pointerEvents = 'none'
+
+    new maplibregl.Marker({ element: el })
+      .setLngLat([epicenterLng, epicenterLat])
+      .addTo(this.map)
+
+    el.play().catch(() => {})
+
+    setTimeout(() => el.remove(), 15500)
+  }
+
+  showShockwave(epicenterLng: number, epicenterLat: number, maxRadiusMeters: number) {
+    if (!this.map) return
+
+    const id = 'shockwave'
+    const duration = 15000
+    const startRadiusKm = maxRadiusMeters / 1000
+    const endRadiusKm = startRadiusKm * 12
+    const start = performance.now()
+
+    const initial = circle([epicenterLng, epicenterLat], startRadiusKm, {
+      steps: 64, units: 'kilometers',
     })
 
+    if (this.map.getSource(id)) return
+    this.map.addSource(id, { type: 'geojson', data: initial as GeoJSON.Feature })
     this.map.addLayer({
-      id: layerId,
-      type: 'circle',
+      id: 'shockwave-layer',
+      type: 'line',
       source: id,
       paint: {
-        'circle-radius': 0,
-        'circle-color': '#f44',
-        'circle-opacity': 0.4,
-        'circle-stroke-width': 2,
-        'circle-stroke-color': '#f44',
+        'line-color': '#f00',
+        'line-dasharray': [4, 6],
+        'line-width': 8,
       },
     })
 
-    const blastZoneId = 'blast-zone'
-    this.map.addSource(blastZoneId, {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        properties: {},
-        geometry: { type: 'Point', coordinates: [epicenterLng, epicenterLat] },
-      },
-    })
-    this.map.addLayer({
-      id: 'blast-zone-layer',
-      type: 'circle',
-      source: blastZoneId,
-      paint: {
-        'circle-radius': 30,
-        'circle-color': '#f44',
-        'circle-opacity': 0.6,
-        'circle-stroke-width': 3,
-        'circle-stroke-color': '#f80',
-        'circle-blur': 0.3,
-      },
-    })
+    const tick = () => {
+      if (!this.map) return
+      const elapsed = performance.now() - start
+      const t = Math.min(elapsed / duration, 1)
+      const radiusKm = startRadiusKm + (endRadiusKm - startRadiusKm) * t
+      const width = Math.max(1, Math.round(8 * (1 - t * 0.875)))
 
-    const dest = destination([epicenterLng, epicenterLat], maxRadiusMeters, 90, { units: 'meters' })
-    const maxPixels = this.map.project([epicenterLng, epicenterLat]).x - this.map.project(dest.geometry.coordinates as [number, number]).x
+      const poly = circle([epicenterLng, epicenterLat], radiusKm, {
+        steps: 64, units: 'kilometers',
+      })
+      const src = this.map.getSource(id) as maplibregl.GeoJSONSource
+      if (src) src.setData(poly as GeoJSON.Feature)
 
-    let radius = 0
-    const interval = setInterval(() => {
-      radius += maxPixels / 50
-      if (radius >= maxPixels) {
-        clearInterval(interval)
+      this.map.setPaintProperty('shockwave-layer', 'line-width', width)
+
+      if (t < 1) {
+        requestAnimationFrame(tick)
+      } else {
+        if (this.map.getLayer('shockwave-layer')) this.map.removeLayer('shockwave-layer')
+        if (this.map.getSource(id)) this.map.removeSource(id)
       }
-      if (this.map && this.map.getLayer(layerId)) {
-        this.map.setPaintProperty(layerId, 'circle-radius', radius)
-      }
-    }, 100)
+    }
+    requestAnimationFrame(tick)
   }
 
   highlightShelter(id: string) {

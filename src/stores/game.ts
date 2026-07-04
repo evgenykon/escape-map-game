@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, shallowRef } from 'vue'
 import type { Scenario } from '@/scenarios/types'
 
-export type GamePhase = 'start' | 'loading' | 'playing' | 'gameover' | 'victory'
+export type GamePhase = 'start' | 'loading' | 'playing' | 'explosion' | 'gameover' | 'victory'
 
 export interface Shelter {
   id: string

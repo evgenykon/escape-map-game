@@ -310,6 +310,17 @@ export class PlayerController {
     this.spawnTimer = 0
 
     const store = useGameStore()
+    const maxDist = 2000
+    for (let i = store.cars.length - 1; i >= 0; i--) {
+      const car = store.cars[i]
+      if (car.id === store.activeCarId) continue
+      const d = distance([this.playerLng, this.playerLat], [car.longitude, car.latitude], { units: 'meters' })
+      if (d > maxDist) {
+        this.mapEngine.removeCarMarker(car.id)
+        store.cars.splice(i, 1)
+      }
+    }
+
     const bounds = this.mapEngine.getBounds()
     if (!bounds) return
 

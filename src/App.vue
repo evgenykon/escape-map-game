@@ -10,5 +10,5 @@ const store = useGameStore()
 <template>
   <StartScreen v-if="store.phase === 'start'" />
   <LoadingScreen v-else-if="store.phase === 'loading'" />
-  <GameScreen v-else-if="store.phase === 'playing' || store.phase === 'gameover' || store.phase === 'victory'" />
+  <GameScreen v-else-if="store.phase === 'playing' || store.phase === 'explosion' || store.phase === 'gameover' || store.phase === 'victory'" />
 </template>
