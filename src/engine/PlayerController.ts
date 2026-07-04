@@ -9,6 +9,8 @@ const MOVE_SPEED_WALK = 2
 const ROTATION_SPEED = 2.4
 const CAR_COLLISION_DIST = 0.2
 const SWIM_SPEED = 0.3
+const DOOR_SLOW_SPEED = 0.1
+const DOOR_SLOW_DURATION = 1
 
 export class PlayerController {
   private keys: Set<string> = new Set()
@@ -26,6 +28,8 @@ export class PlayerController {
   private nextCarId: number = 12
   private highlightedCar: string | null = null
   private lastWalkState = 0
+  private wasInsideBuilding = false
+  private doorSlowTimer = 0
   private isMapMode = false
   private wasFuelEmpty = false
   private lastCrashAt = 0
@@ -442,16 +446,31 @@ export class PlayerController {
 
     const isRunning = this.keys.has('shift')
 
+    if (this.doorSlowTimer > 0) {
+      this.doorSlowTimer = Math.max(0, this.doorSlowTimer - dt)
+    }
+
     if (forward !== 0) {
       let bearing = this.playerAngle * 180 / Math.PI
       const inWater = this.mapEngine.isOnWater(this.playerLng, this.playerLat)
-      const speed = inWater ? SWIM_SPEED : (isRunning ? 6 : MOVE_SPEED_WALK)
+      let speed = inWater ? SWIM_SPEED : (isRunning ? 6 : MOVE_SPEED_WALK)
+      if (this.doorSlowTimer > 0) speed = Math.min(speed, DOOR_SLOW_SPEED)
       let dist = Math.abs(forward) * speed * dt
       if (forward < 0) {
         bearing += 180
       }
       const moved = destination([this.playerLng, this.playerLat], dist, bearing, { units: 'meters' })
       const [newLng, newLat] = moved.geometry.coordinates
+      const enteringBuilding = this.mapEngine.isInsideBuilding(newLng, newLat)
+      if (enteringBuilding !== this.wasInsideBuilding) {
+        if (enteringBuilding) {
+          soundEngine.playDoorOpeningClosing()
+        } else {
+          soundEngine.playDoorClosing()
+        }
+        this.doorSlowTimer = DOOR_SLOW_DURATION
+        this.wasInsideBuilding = enteringBuilding
+      }
       if (!this.mapEngine.isInsideBuilding2d(newLng, newLat)) {
         this.playerLng = newLng
         this.playerLat = newLat

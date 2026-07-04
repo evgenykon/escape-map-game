@@ -14,6 +14,8 @@ type SoundKey =
   | 'cityNoise1'
   | 'cityNoise2'
   | 'nuclearDanger'
+  | 'doorOpeningClosing'
+  | 'doorClosing'
 
 const SOUND_PATHS: Record<SoundKey, string> = {
   openingCarDoor: `${import.meta.env.BASE_URL}sounds/opening-car-door.mp3`,
@@ -31,6 +33,8 @@ const SOUND_PATHS: Record<SoundKey, string> = {
   cityNoise1: `${import.meta.env.BASE_URL}sounds/city-noise-1.mp3`,
   cityNoise2: `${import.meta.env.BASE_URL}sounds/city-noise-2.mp3`,
   nuclearDanger: `${import.meta.env.BASE_URL}sounds/nuclear-danger.mp3`,
+  doorOpeningClosing: `${import.meta.env.BASE_URL}sounds/door-opening-closing.mp3`,
+  doorClosing: `${import.meta.env.BASE_URL}sounds/door-closing.mp3`,
 }
 
 const ONE_SHOT_KEYS: SoundKey[] = [
@@ -41,6 +45,8 @@ const ONE_SHOT_KEYS: SoundKey[] = [
   'carBrake',
   'incomingMessage',
   'explosion',
+  'doorOpeningClosing',
+  'doorClosing',
 ]
 
 const LOOP_KEYS: SoundKey[] = [
@@ -72,6 +78,8 @@ class SoundEngine {
     carBrake: 1,
     incomingMessage: 1,
     explosion: 1,
+    doorOpeningClosing: 0.8,
+    doorClosing: 0.8,
     footstepsWalk: 1,
     footstepsRun: 1,
     swimming: 1,
@@ -183,6 +191,8 @@ class SoundEngine {
   playCarBrake(): void { this.playOneShot('carBrake') }
   playIncomingMessage(): void { this.playOneShot('incomingMessage') }
   playExplosion(): void { this.playOneShot('explosion') }
+  playDoorOpeningClosing(): void { this.playOneShot('doorOpeningClosing') }
+  playDoorClosing(): void { this.playOneShot('doorClosing') }
   startNuclearDangerLoop(): void { this.startLoop('nuclearDanger') }
   stopNuclearDangerLoop(): void { this.stopLoop('nuclearDanger') }
   setNuclearDangerVolume(v: number): void { this.setVolume('nuclearDanger', v) }
