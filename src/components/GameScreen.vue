@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useGameStore } from '@/stores/game'
-import type { SMSEntry } from '@/scenarios/types'
+import type { SMSEntry, ThoughtEntry } from '@/scenarios/types'
 import { MapEngine } from '@/engine/MapEngine'
 import { PlayerController } from '@/engine/PlayerController'
 import { soundEngine } from '@/engine/SoundEngine'
@@ -50,6 +50,7 @@ let timerInterval: ReturnType<typeof setInterval>
 let shelterInterval: ReturnType<typeof setInterval>
 let carInfoInterval: ReturnType<typeof setInterval>
 const smsTimeouts: ReturnType<typeof setTimeout>[] = []
+const thoughtTimeouts: ReturnType<typeof setTimeout>[] = []
 const spawnValidationTimeouts: ReturnType<typeof setTimeout>[] = []
 
 const shelterHeading = ref(0)
@@ -113,6 +114,7 @@ function validateSpawn() {
 }
 
 const smsTexts = computed<SMSEntry[]>(() => store.scenario?.smsTexts ?? [])
+const thoughtTexts = computed<ThoughtEntry[]>(() => store.scenario?.thoughts ?? [])
 const isDev = import.meta.env.DEV
 
 const debugZoom = ref(18)
@@ -128,6 +130,7 @@ onMounted(() => {
     soundEngine.startCityNoiseLoop()
     startTimer()
     scheduleSMS()
+    scheduleThoughts()
     setTimeout(() => { gameReady.value = true }, 1000)
   })
 
@@ -149,6 +152,7 @@ onUnmounted(() => {
   clearInterval(shelterInterval)
   clearInterval(carInfoInterval)
   smsTimeouts.forEach(clearTimeout)
+  thoughtTimeouts.forEach(clearTimeout)
   spawnValidationTimeouts.forEach(clearTimeout)
   mapEngine?.destroy()
 })
@@ -195,6 +199,20 @@ function scheduleSMS() {
       if (entry.triggerShelterHud) store.shelterHudVisible = true
     }, delayMs)
     smsTimeouts.push(id)
+  }
+}
+
+function scheduleThoughts() {
+  const entries = thoughtTexts.value
+  if (entries.length === 0) return
+
+  for (const entry of entries) {
+    const delayMs = entry.timeSec * 1000
+    const id = setTimeout(() => {
+      if (store.phase !== 'playing') return
+      mapEngine.setThought(entry.text)
+    }, delayMs)
+    thoughtTimeouts.push(id)
   }
 }
 

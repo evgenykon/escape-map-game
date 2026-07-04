@@ -12,6 +12,15 @@ const SWIM_SPEED = 0.3
 const DOOR_SLOW_SPEED = 0.1
 const DOOR_SLOW_DURATION = 1
 
+const HACK_THOUGHTS = [
+  'Надеюсь, я тут один...',
+  'Надеюсь, никто не заметит...',
+  'Так, почти бы всё готово...',
+  'Где-то я уже видел эту машину...',
+  'Главное - чтобы бензин был...',
+  'Ну давай, давай!',
+]
+
 export class PlayerController {
   private keys: Set<string> = new Set()
   private mapEngine: MapEngine
@@ -143,6 +152,7 @@ export class PlayerController {
     store.hackingCarId = car.id
     this.hackDuration = store.hackSec * (0.9 + Math.random() * 0.2) * 1000
     soundEngine.startHackingLoop()
+    this.mapEngine.setThought(HACK_THOUGHTS[Math.floor(Math.random() * HACK_THOUGHTS.length)])
   }
 
   private cancelHack() {

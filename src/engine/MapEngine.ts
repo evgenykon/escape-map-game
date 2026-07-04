@@ -17,6 +17,8 @@ export class MapEngine {
   private onReadyCallback?: () => void
   private targetZoom: number | null = null
   private crosshairMarker: maplibregl.Marker | null = null
+  private playerThoughtEl: HTMLElement | null = null
+  private thoughtTimer: ReturnType<typeof setTimeout> | null = null
   private static readonly SHEET_W = 276
   private static readonly SHEET_H = 262
   private static readonly PERSON_X = 185
@@ -158,8 +160,12 @@ export class MapEngine {
     el.style.zIndex = '100'
     el.style.width = '22px'
     el.style.height = '28px'
-    el.style.overflow = 'hidden'
-    el.style.filter = 'drop-shadow(0 0 6px #0f0)'
+    this.playerMarkerOuter = el
+
+    const shadowWrap = document.createElement('div')
+    shadowWrap.style.width = '100%'
+    shadowWrap.style.height = '100%'
+    shadowWrap.style.filter = 'drop-shadow(0 0 6px #0f0)'
 
     const flipWrap = document.createElement('div')
     flipWrap.style.width = '100%'
@@ -172,6 +178,7 @@ export class MapEngine {
     frameWrap.style.width = '100%'
     frameWrap.style.overflow = 'hidden'
     frameWrap.style.position = 'relative'
+    frameWrap.style.overflow = 'hidden'
 
     const inner = document.createElement('div')
     inner.style.width = '100%'
@@ -180,13 +187,38 @@ export class MapEngine {
     inner.style.top = '0'
     inner.style.left = '0'
 
+    const thoughtEl = document.createElement('div')
+    thoughtEl.style.cssText = `
+      position:absolute; right:100%; bottom:100%;
+      margin:0 12px 10px 0;
+      background:rgba(255,255,255,0.95); color:#111;
+      padding:6px 12px;
+      border-radius:16px 16px 4px 16px;
+      font-family:'Courier New',monospace; font-size:11px; line-height:1.3;
+      max-width:220px;
+      pointer-events:none; user-select:none;
+      transition:opacity 0.4s; opacity:0;
+      box-shadow:0 2px 10px rgba(0,0,0,0.25);
+      z-index:200;
+    `
+    const tail = document.createElement('div')
+    tail.style.cssText = `
+      position:absolute; bottom:-5px; right:10px;
+      width:10px; height:10px;
+      background:rgba(255,255,255,0.95);
+      transform:rotate(45deg);
+      border-radius:2px;
+    `
+    thoughtEl.appendChild(tail)
+    el.appendChild(thoughtEl)
+    this.playerThoughtEl = thoughtEl
+
     frameWrap.appendChild(inner)
     flipWrap.appendChild(frameWrap)
-    el.appendChild(flipWrap)
-    this.playerMarkerOuter = el
+    shadowWrap.appendChild(flipWrap)
+    el.appendChild(shadowWrap)
     this.playerMarkerFlip = flipWrap
     this.playerMarkerFrameWrap = frameWrap
-    frameWrap.style.overflow = 'hidden'
     this.playerMarkerImg = inner
 
     this.setPlayerFrame(this.playerAnimState)
@@ -233,6 +265,21 @@ export class MapEngine {
     if (!this.playerMarker || !this.crosshairMarker) return
     this.playerMarker.getElement().style.display = show ? 'none' : ''
     this.crosshairMarker.getElement().style.display = show ? '' : 'none'
+  }
+
+  setThought(text: string | null) {
+    if (!this.playerThoughtEl) return
+    if (this.thoughtTimer) { clearTimeout(this.thoughtTimer); this.thoughtTimer = null }
+    if (!text) {
+      this.playerThoughtEl.style.opacity = '0'
+      return
+    }
+    this.playerThoughtEl.textContent = text
+    this.playerThoughtEl.style.opacity = '1'
+    this.thoughtTimer = setTimeout(() => {
+      if (this.playerThoughtEl) this.playerThoughtEl.style.opacity = '0'
+      this.thoughtTimer = null
+    }, 4000)
   }
 
   private createCarImage(angle?: number): HTMLElement {

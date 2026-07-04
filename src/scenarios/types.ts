@@ -47,6 +47,11 @@ export interface SMSEntry {
   triggerShelterHud?: boolean
 }
 
+export interface ThoughtEntry {
+  timeSec: number
+  text: string
+}
+
 export interface Scenario {
   config: ScenarioConfig
   timerMinutes: number
@@ -57,5 +62,6 @@ export interface Scenario {
   computeEpicenter(ctx: SpawnContext): EpicenterSpec
   computeSpawn(ctx: SpawnContext, epicenter: EpicenterSpec): SpawnResult
   smsTexts: SMSEntry[]
+  thoughts: ThoughtEntry[]
   resultTexts: ResultTexts
 }
