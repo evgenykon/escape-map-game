@@ -4,6 +4,7 @@ type SoundKey =
   | 'carDriven'
   | 'carCrash'
   | 'engineBreakdown'
+  | 'carBrake'
   | 'incomingMessage'
   | 'explosion'
   | 'footstepsWalk'
@@ -20,6 +21,7 @@ const SOUND_PATHS: Record<SoundKey, string> = {
   carDriven: `${import.meta.env.BASE_URL}sounds/car-driven.mp3`,
   carCrash: `${import.meta.env.BASE_URL}sounds/car-crash.mp3`,
   engineBreakdown: `${import.meta.env.BASE_URL}sounds/breaking-down-engine.mp3`,
+  carBrake: `${import.meta.env.BASE_URL}sounds/brakes-pads-creak.mp3`,
   incomingMessage: `${import.meta.env.BASE_URL}sounds/incoming-message.mp3`,
   explosion: `${import.meta.env.BASE_URL}sounds/nuclear-bomb-explosion.mp3`,
   footstepsWalk: `${import.meta.env.BASE_URL}sounds/footsteps-walking.mp3`,
@@ -36,6 +38,7 @@ const ONE_SHOT_KEYS: SoundKey[] = [
   'engineStart',
   'carCrash',
   'engineBreakdown',
+  'carBrake',
   'incomingMessage',
   'explosion',
   'nuclearDanger',
@@ -66,6 +69,7 @@ class SoundEngine {
     carDriven: 1,
     carCrash: 1,
     engineBreakdown: 1,
+    carBrake: 1,
     incomingMessage: 1,
     explosion: 1,
     footstepsWalk: 1,
@@ -176,6 +180,7 @@ class SoundEngine {
   playEngineStart(): void { this.playOneShot('engineStart') }
   playCarCrash(): void { this.playOneShot('carCrash') }
   playEngineBreakdown(): void { this.playOneShot('engineBreakdown') }
+  playCarBrake(): void { this.playOneShot('carBrake') }
   playIncomingMessage(): void { this.playOneShot('incomingMessage') }
   playExplosion(): void { this.playOneShot('explosion') }
   playNuclearDanger(): void { this.playOneShot('nuclearDanger') }

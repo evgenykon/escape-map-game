@@ -10,7 +10,7 @@ const MAX_SPEED = 50
 const MAX_REVERSE_SPEED = 15
 const ACCELERATION = 3
 const REVERSE_ACCELERATION = 3
-const BRAKE_FORCE = 8
+const BRAKE_FORCE = 16
 const FRICTION = 2
 const TURN_SPEED_BASE = 2.4
 const DRIFT_FACTOR = 0.03
@@ -116,6 +116,15 @@ export class CarPhysics {
       this.state.speed = Math.max(this.state.speed - drag, 0)
     } else if (this.state.speed < 0) {
       this.state.speed = Math.min(this.state.speed + drag, 0)
+    }
+  }
+
+  applyOffRoadSpeedCap(dt: number) {
+    const cap = 40 / 3.6
+    if (this.state.speed > cap) {
+      this.state.speed = Math.max(this.state.speed - BRAKE_FORCE * 0.8 * dt, cap)
+    } else if (this.state.speed < -cap) {
+      this.state.speed = Math.min(this.state.speed + BRAKE_FORCE * 0.8 * dt, -cap)
     }
   }
 

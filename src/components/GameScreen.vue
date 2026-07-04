@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useGameStore } from '@/stores/game'
+import type { SMSEntry } from '@/scenarios/types'
 import { MapEngine } from '@/engine/MapEngine'
 import { PlayerController } from '@/engine/PlayerController'
 import { soundEngine } from '@/engine/SoundEngine'
@@ -10,6 +11,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 const store = useGameStore()
 const mapContainer = ref<HTMLDivElement>()
 const hudTimeLeft = ref(0)
+const gameReady = ref(false)
 const hudSms = ref<{ id: number; text: string; visible: boolean }[]>([])
 const showSplash = ref(false)
 const splashText = ref('')
@@ -86,7 +88,8 @@ function validateSpawn() {
   }
 }
 
-const smsTexts = computed<string[]>(() => store.scenario?.smsTexts ?? [])
+const smsTexts = computed<SMSEntry[]>(() => store.scenario?.smsTexts ?? [])
+const isDev = import.meta.env.DEV
 
 const debugZoom = ref(18)
 const debugScale = ref(1)
@@ -101,6 +104,7 @@ onMounted(() => {
     soundEngine.startCityNoiseLoop()
     startTimer()
     scheduleSMS()
+    setTimeout(() => { gameReady.value = true }, 1000)
   })
 
   playerController = new PlayerController(mapEngine)
@@ -144,26 +148,19 @@ function startTimer() {
 }
 
 function scheduleSMS() {
-  const texts = smsTexts.value
-  const totalMs = store.timerMinutes * 60 * 1000
-  const count = texts.length
-  if (count === 0) return
-  const gap = count > 1 ? totalMs * 0.85 / (count - 1) : 0
+  const entries = smsTexts.value
+  if (entries.length === 0) return
 
-  texts.forEach((text, i) => {
-    if (i === 0) {
-      showSMS(text)
+  for (const entry of entries) {
+    const delayMs = entry.timeSec * 1000
+    const id = setTimeout(() => {
+      if (store.phase !== 'playing') return
+      showSMS(entry.text)
       soundEngine.playIncomingMessage()
-    } else {
-      const id = setTimeout(() => {
-        if (store.phase !== 'playing') return
-        showSMS(text)
-        soundEngine.playIncomingMessage()
-        if (i === 4) store.shelterHudVisible = true
-      }, Math.round(gap * i))
-      smsTimeouts.push(id)
-    }
-  })
+      if (entry.triggerShelterHud) store.shelterHudVisible = true
+    }, delayMs)
+    smsTimeouts.push(id)
+  }
 }
 
 function showSMS(text: string) {
@@ -254,16 +251,18 @@ function toggleMute() {
   <div class="game-wrapper">
     <div ref="mapContainer" class="map-container"></div>
 
-    <div class="debug-panel">
+    <div v-if="!gameReady" class="game-loading-overlay">
+      <div class="spinner"></div>
+      <p class="loading-text">{{ store.loadingMessage }}</p>
+    </div>
+
+    <div v-if="isDev" class="debug-panel">
+      <div>{{ formatTime(hudTimeLeft) }}</div>
       <div>zoom: {{ debugZoom.toFixed(2) }}</div>
       <div>scale: {{ debugScale.toFixed(2) }}</div>
     </div>
 
     <div class="hud">
-      <div class="hud-time" :class="{ warning: store.timeLeft < 60 }">
-        {{ formatTime(hudTimeLeft) }}
-      </div>
-
       <button
         class="mute-btn"
         :title="store.isMuted ? 'Включить звук' : 'Выключить звук'"
@@ -338,6 +337,34 @@ function toggleMute() {
   width: 100%;
   height: 100%;
 }
+.game-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #111;
+  z-index: 200;
+}
+.game-loading-overlay .spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid #333;
+  border-top-color: #f44;
+  border-radius: 50%;
+  animation: game-load-spin 1s linear infinite;
+  margin-bottom: 2rem;
+}
+@keyframes game-load-spin {
+  to { transform: rotate(360deg); }
+}
+.game-loading-overlay .loading-text {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+}
 .debug-panel {
   position: absolute;
   left: 0.5rem;
@@ -362,19 +389,6 @@ function toggleMute() {
   z-index: 10;
   font-family: 'Courier New', monospace;
 }
-.hud-time {
-  background: rgba(0,0,0,0.7);
-  color: #0f0;
-  padding: 0.5rem 1rem;
-  font-size: 2rem;
-  letter-spacing: 0.2rem;
-  border: 1px solid #0f0;
-}
-.hud-time.warning {
-  color: #f44;
-  border-color: #f44;
-  animation: blink 0.5s infinite;
-}
 .mute-btn {
   margin-top: 0.5rem;
   width: 2.5rem;
@@ -396,9 +410,6 @@ function toggleMute() {
 }
 .mute-btn:active {
   transform: scale(0.92);
-}
-@keyframes blink {
-  50% { opacity: 0.5; }
 }
 .hud-status {
   background: rgba(0,0,0,0.7);

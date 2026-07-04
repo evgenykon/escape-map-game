@@ -7,15 +7,35 @@ const STEPS: Step[] = [
   { delay: 0, message: 'Загрузка данных карты...' },
   { delay: 500, message: 'Поиск убежищ...' },
   { delay: 1000, message: 'Поиск транспорта...' },
-  { delay: 1500, finalize: true },
+  { delay: 1500, message: 'Загрузка графики...' },
+  { delay: 2000, finalize: true },
 ]
 
-export function loadScenarioData(scenario: Scenario): Promise<void> {
+function preloadSprite(url: string): Promise<void> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => resolve()
+    img.onerror = () => resolve()
+    img.src = url
+  })
+}
+
+async function preloadSprites(): Promise<void> {
+  const baseUrl = import.meta.env.BASE_URL
+  await Promise.all([
+    preloadSprite(`${baseUrl}sprites.png`),
+    preloadSprite(`${baseUrl}sprites/player-idle.png`),
+    preloadSprite(`${baseUrl}sprites/player-walking.png`),
+    preloadSprite(`${baseUrl}sprites/player-hacking.png`),
+  ])
+}
+
+export async function loadScenarioData(scenario: Scenario): Promise<void> {
   const store = useGameStore()
 
   store.loadingMessage = STEPS[0].message!
 
-  return new Promise((resolve) => {
+  await new Promise<void>((resolve) => {
     for (const step of STEPS) {
       setTimeout(() => {
         if (!step.finalize) {
@@ -49,4 +69,7 @@ export function loadScenarioData(scenario: Scenario): Promise<void> {
       }, step.delay)
     }
   })
+
+  store.loadingMessage = 'Загрузка графики...'
+  await preloadSprites()
 }

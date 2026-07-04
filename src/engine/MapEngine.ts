@@ -514,6 +514,20 @@ export class MapEngine {
     })
   }
 
+  isOnOffroadSurface(lng: number, lat: number): boolean {
+    if (!this.map) return false
+    const pt = this.map.project([lng, lat])
+    const r = 12
+    const features = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
+    return features.some(f => {
+      if (!f.layer) return false
+      const id = f.layer.id
+      const cls = f.properties?.class
+      return id.startsWith('landcover_grass') || cls === 'grass'
+          || id.startsWith('landcover_wood') || cls === 'wood'
+    })
+  }
+
   isOnWater(lng: number, lat: number): boolean {
     if (!this.map) return false
     const pt = this.map.project([lng, lat])

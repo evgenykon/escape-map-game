@@ -7,7 +7,7 @@ import { soundEngine } from './SoundEngine'
 
 const MOVE_SPEED_WALK = 2
 const ROTATION_SPEED = 2.4
-const CAR_COLLISION_DIST = 1.5
+const CAR_COLLISION_DIST = 0.2
 const SWIM_SPEED = 0.3
 
 export class PlayerController {
@@ -31,6 +31,7 @@ export class PlayerController {
   private wasFuelEmpty = false
   private lastCrashAt = 0
   private lastFrameState: 'idle' | 'walking' | 'running' | 'hacking' | null = null
+  private wasBraking = false
 
   constructor(mapEngine: MapEngine) {
     const store = useGameStore()
@@ -330,10 +331,12 @@ export class PlayerController {
         if (this.mapEngine.isInsideBuilding(lng, lat)) continue
         if (!this.mapEngine.isOnRoad(lng, lat)) continue
 
+        const zoom = this.mapEngine.getCurrentZoom()
+        const minDist = 30 * Math.pow(2, 19 - zoom)
         let tooClose = false
         for (const car of store.cars) {
           const cd = distance([lng, lat], [car.longitude, car.latitude], { units: 'meters' })
-          if (cd < 30) {
+          if (cd < minDist) {
             tooClose = true
             break
           }
@@ -467,8 +470,7 @@ export class PlayerController {
   private checkCarCollision(lng: number, lat: number, excludeId?: string): boolean {
     const store = useGameStore()
     const speed = Math.abs(this.carPhysics.getSpeed())
-    const scale = MapEngine.getScale(this.mapEngine.getCurrentZoom())
-    const threshold = Math.max(CAR_COLLISION_DIST, speed * 0.4) * scale
+    const threshold = Math.max(CAR_COLLISION_DIST, speed * 0.02)
     for (const car of store.cars) {
       if (car.id === excludeId) continue
       const dist = distance([lng, lat], [car.longitude, car.latitude], { units: 'meters' })
@@ -481,6 +483,10 @@ export class PlayerController {
     const store = useGameStore()
     const currentCar = this.activeCarId ? store.cars.find(c => c.id === this.activeCarId) : null
     const fuel = currentCar?.fuel ?? 1
+    const speed = this.carPhysics.getSpeed()
+    const isBraking = forward < 0 && speed > 0.5
+    if (isBraking && !this.wasBraking) soundEngine.playCarBrake()
+    this.wasBraking = isBraking
     const result = this.carPhysics.update(forward, rotation, dt, fuel, this.playerLng, this.playerLat, this.playerAngle)
     const newLng = result.lng
     const newLat = result.lat
@@ -499,8 +505,8 @@ export class PlayerController {
         soundEngine.playCarCrash()
       }
     } else {
-      if (!this.mapEngine.isOnRoad(newLng, newLat) && !this.mapEngine.hasBuilding3d(newLng, newLat)) {
-        this.carPhysics.applyOffRoadDrag(dt)
+      if (this.mapEngine.isOnOffroadSurface(newLng, newLat) || (!this.mapEngine.isOnRoad(newLng, newLat) && !this.mapEngine.hasBuilding3d(newLng, newLat))) {
+        this.carPhysics.applyOffRoadSpeedCap(dt)
       }
       this.playerLng = newLng
       this.playerLat = newLat
