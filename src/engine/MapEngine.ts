@@ -11,13 +11,12 @@ export class MapEngine {
   private playerMarkerImg: HTMLElement | null = null
   private carMarkers: Map<string, maplibregl.Marker> = new Map()
   private carMarkerInners: Map<string, HTMLElement> = new Map()
-  private shelterMarkers: Map<string, maplibregl.Marker> = new Map()
-  private shelterMarkerEls: Map<string, HTMLElement> = new Map()
   private playerBaseW = 22
   private playerBaseH = 28
   private playerIsCar = false
   private onReadyCallback?: () => void
   private targetZoom: number | null = null
+  private crosshairMarker: maplibregl.Marker | null = null
   private static readonly SHEET_W = 276
   private static readonly SHEET_H = 262
   private static readonly PERSON_X = 185
@@ -88,9 +87,9 @@ export class MapEngine {
     this.map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: false }), 'top-right')
 
     this.map.on('load', () => {
-      try { this.addShelterMarkers() } catch (e) { console.warn('shelter markers fail', e) }
       try { this.addCarMarkers() } catch (e) { console.warn('car markers fail', e) }
       try { this.createPlayerMarker() } catch (e) { console.warn('player marker fail', e) }
+      this.createCrosshairMarker()
       this.applyAllCarsZoom(this.map!.getZoom())
       this.onReadyCallback?.()
 
@@ -197,26 +196,43 @@ export class MapEngine {
       .addTo(this.map!)
   }
 
-  private addShelterMarkers() {
-    const store = useGameStore()
+  private createCrosshairMarker() {
+    const el = document.createElement('div')
+    el.style.width = '12px'
+    el.style.height = '12px'
+    el.style.zIndex = '100'
 
-    for (const shelter of store.shelters) {
-      const el = document.createElement('div')
-      el.style.width = '20px'
-      el.style.height = '20px'
-      el.style.background = '#ff0'
-      el.style.border = '3px solid #fa0'
-      el.style.transform = 'rotate(45deg)'
-      el.style.boxShadow = '0 0 15px #ff0'
-      el.style.zIndex = '80'
+    const h = document.createElement('div')
+    h.style.position = 'absolute'
+    h.style.left = '0'
+    h.style.top = '5px'
+    h.style.width = '12px'
+    h.style.height = '2px'
+    h.style.background = '#fff'
+    h.style.boxShadow = '0 0 2px rgba(0,0,0,0.9)'
 
-      const marker = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
-        .setLngLat([shelter.longitude, shelter.latitude])
-        .setPopup(new maplibregl.Popup({ offset: 10 }).setText('Убежище'))
-        .addTo(this.map!)
-      this.shelterMarkers.set(shelter.id, marker)
-      this.shelterMarkerEls.set(shelter.id, el)
-    }
+    const v = document.createElement('div')
+    v.style.position = 'absolute'
+    v.style.left = '5px'
+    v.style.top = '0'
+    v.style.width = '2px'
+    v.style.height = '12px'
+    v.style.background = '#fff'
+    v.style.boxShadow = '0 0 2px rgba(0,0,0,0.9)'
+
+    el.appendChild(h)
+    el.appendChild(v)
+
+    this.crosshairMarker = new maplibregl.Marker({ element: el })
+      .setLngLat([useGameStore().playerLongitude, useGameStore().playerLatitude])
+      .addTo(this.map!)
+    this.crosshairMarker.getElement().style.display = 'none'
+  }
+
+  setMapModeCrosshair(show: boolean) {
+    if (!this.playerMarker || !this.crosshairMarker) return
+    this.playerMarker.getElement().style.display = show ? 'none' : ''
+    this.crosshairMarker.getElement().style.display = show ? '' : 'none'
   }
 
   private createCarImage(angle?: number): HTMLElement {
@@ -322,9 +338,7 @@ export class MapEngine {
   }
 
   setCarMarkersVisible(visible: boolean) {
-    const store = useGameStore()
-    for (const [id, marker] of this.carMarkers) {
-      if (visible && id === store.activeCarId) continue
+    for (const marker of this.carMarkers.values()) {
       marker.getElement().style.display = visible ? '' : 'none'
     }
   }
@@ -485,7 +499,7 @@ export class MapEngine {
     } else {
       this.setPlayerMarkerShadow('#0f0')
     }
-    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle')
+    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'swimming', 'dead')
     this.applyPlayerZoom(this.map?.getZoom() ?? 18)
   }
 
@@ -768,22 +782,6 @@ export class MapEngine {
       }
     }
     requestAnimationFrame(tick)
-  }
-
-  highlightShelter(id: string) {
-    const el = this.shelterMarkerEls.get(id)
-    if (el) {
-      el.style.boxShadow = '0 0 30px #0f0'
-      el.style.borderColor = '#0f0'
-    }
-  }
-
-  unhighlightShelter(id: string) {
-    const el = this.shelterMarkerEls.get(id)
-    if (el) {
-      el.style.boxShadow = '0 0 15px #ff0'
-      el.style.borderColor = '#fa0'
-    }
   }
 
   highlightCar(id: string) {

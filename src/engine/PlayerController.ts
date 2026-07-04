@@ -25,7 +25,6 @@ export class PlayerController {
   private spawnTimer: number = 0
   private nextCarId: number = 12
   private highlightedCar: string | null = null
-  private highlightedShelter: string | null = null
   private lastWalkState = 0
   private isMapMode = false
   private wasFuelEmpty = false
@@ -65,6 +64,11 @@ export class PlayerController {
       this.isMapMode = !this.isMapMode
       this.mapEngine.setMapZoom(this.isMapMode ? 10 : 20)
       this.mapEngine.setCarMarkersVisible(!this.isMapMode)
+      this.mapEngine.setMapModeCrosshair(this.isMapMode)
+      if (!this.isMapMode) {
+        const store = useGameStore()
+        if (store.activeCarId) this.mapEngine.hideCarMarker(store.activeCarId)
+      }
       return
     }
     if (['w', 'a', 's', 'd', 'e', 'shift'].includes(key)) {
@@ -407,22 +411,6 @@ export class PlayerController {
       this.highlightedCar = closestCar
     }
 
-    let closestShelter: string | null = null
-    let minShelterDist = shelterThreshold
-
-    for (const shelter of store.shelters) {
-      const dist = distance([this.playerLng, this.playerLat], [shelter.longitude, shelter.latitude], { units: 'meters' })
-      if (dist < minShelterDist) {
-        minShelterDist = dist
-        closestShelter = shelter.id
-      }
-    }
-
-    if (closestShelter !== this.highlightedShelter) {
-      if (this.highlightedShelter) this.mapEngine.unhighlightShelter(this.highlightedShelter)
-      if (closestShelter) this.mapEngine.highlightShelter(closestShelter)
-      this.highlightedShelter = closestShelter
-    }
   }
 
   private sinkPlayerCar() {
