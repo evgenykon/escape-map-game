@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { scenarioRegistry } from '@/scenarios'
 import SpriteTable from '@/components/SpriteTable.vue'
@@ -11,6 +11,7 @@ const store = useGameStore()
 const selectedId = ref<string | null>(scenarioRegistry[0]?.meta.id ?? null)
 const isStarting = ref(false)
 const showSpriteTable = ref(false)
+const webglDisabled = ref(false)
 
 const LOCATION_TYPE_GEO = 'geo'
 const LOCATION_TYPE_CITY = 'city'
@@ -30,6 +31,12 @@ const cities = [
   { name: 'Санкт-Петербург', lat: 59.9343, lng: 30.3351 },
   { name: 'Сочи', lat: 43.5855, lng: 39.7231 },
 ]
+
+onMounted(() => {
+  const canvas = document.createElement('canvas')
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
+  if (!gl) webglDisabled.value = true
+})
 
 async function startGame() {
   if (!selectedId.value || isStarting.value) return
@@ -69,6 +76,11 @@ async function startGame() {
   <div v-else class="start-screen">
     <h1 class="title">ESCAPE MAP GAME</h1>
     <p class="subtitle">Симуляция побега из опасной зоны, которой становится ваш дом.</p>
+
+    <div v-if="webglDisabled" class="webgl-warning">
+      ⚠️ Аппаратное ускорение отключено! Карта и анимации могут работать некорректно.
+      Включите в настройках браузера "Использовать аппаратное ускорение".
+    </div>
 
     <div class="scenarios">
       <p class="label">Выберите сценарий:</p>
@@ -148,6 +160,19 @@ async function startGame() {
   opacity: 0.7;
   text-align: center;
   max-width: 520px;
+}
+.webgl-warning {
+  width: 100%;
+  max-width: 520px;
+  margin-bottom: 1rem;
+  padding: 0.6rem 1rem;
+  background: rgba(255, 200, 0, 0.15);
+  border: 1px solid rgba(255, 200, 0, 0.5);
+  border-radius: 6px;
+  color: #fc0;
+  font-size: 0.8rem;
+  text-align: center;
+  line-height: 1.4;
 }
 .scenarios {
   width: 100%;
