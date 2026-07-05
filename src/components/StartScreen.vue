@@ -137,6 +137,12 @@ async function startGame() {
     </button>
 
     <p class="build-tag">{{ BUILD_TAG }}</p>
+
+    <div class="footer-links">
+      <a href="https://github.com/evgenykon/escape-map-game" target="_blank" rel="noopener">GitHub</a>
+      <span class="footer-sep">·</span>
+      <a href="https://evgenykon.github.io" target="_blank" rel="noopener">evgenykon.github.io</a>
+    </div>
   </div>
 </template>
 
@@ -330,5 +336,25 @@ async function startGame() {
   right: 0.75rem;
   opacity: 0.3;
   font-size: 0.7rem;
+}
+.footer-links {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 0.75rem;
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  opacity: 0.5;
+}
+.footer-links a {
+  color: #888;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.footer-links a:hover {
+  color: #fff;
+}
+.footer-sep {
+  color: #555;
 }
 </style>
