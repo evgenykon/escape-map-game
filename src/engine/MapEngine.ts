@@ -1174,7 +1174,7 @@ export class MapEngine {
 
   showBuildingDamageLabel(lng: number, lat: number, percent: number) {
     if (!this.map) return
-    const dest = destination([lng, lat], 50, 90, { units: 'meters' })
+    const dest = destination([lng, lat], 5, 90, { units: 'meters' })
     const pos = dest.geometry.coordinates as [number, number]
     const el = document.createElement('div')
     el.textContent = `Повреждение здания: ${Math.round(percent * 100)}%`
@@ -1202,13 +1202,13 @@ export class MapEngine {
   showExplosionInfoMarker(lng: number, lat: number, text: string) {
     if (!this.map) return
     if (this.explosionInfoMarker) this.explosionInfoMarker.remove()
-    const dest = destination([lng, lat], 50, -90, { units: 'meters' })
+    const dest = destination([lng, lat], 5, -90, { units: 'meters' })
     const pos = dest.geometry.coordinates as [number, number]
     const el = document.createElement('div')
     el.textContent = text
     el.style.cssText = `
       color:#fff; font-family:'Courier New',monospace;
-      font-size:1.2rem; font-weight:bold;
+      font-size:0.8rem; font-weight:bold;
       text-shadow:0 0 4px rgba(0,0,0,0.8);
       pointer-events:none; user-select:none;
       z-index:200;
