@@ -174,6 +174,7 @@ export class PlayerController {
     soundEngine.playEngineStart()
     soundEngine.startCarDrivenLoop()
     soundEngine.stopFootstepsLoop()
+    soundEngine.stopSwimmingLoop()
     this.mapEngine.setFuelZonesVisible(true)
   }
 
@@ -363,13 +364,15 @@ export class PlayerController {
       if (store.isSwimming) {
         soundEngine.startSwimmingLoop()
         soundEngine.stopFootstepsLoop()
-      } else if (this.lastWalkState === 2) {
-        soundEngine.startFootstepsRunLoop()
-      } else if (this.lastWalkState === 1) {
-        soundEngine.startFootstepsWalkLoop()
       } else {
-        soundEngine.stopFootstepsLoop()
         soundEngine.stopSwimmingLoop()
+        if (this.lastWalkState === 2) {
+          soundEngine.startFootstepsRunLoop()
+        } else if (this.lastWalkState === 1) {
+          soundEngine.startFootstepsWalkLoop()
+        } else {
+          soundEngine.stopFootstepsLoop()
+        }
       }
     }
   }
