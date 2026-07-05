@@ -645,7 +645,7 @@ export class PlayerController {
       }
       const isStationary = Math.abs(this.carPhysics.getSpeed()) < 0.5
       const inFuelZone = this.mapEngine.isInFuelZone(this.playerLng, this.playerLat)
-      const isRefueling = inFuelZone && isStationary && currentCar.fuel < 1.0
+      const isRefueling = inFuelZone && isStationary && currentCar.fuel < 1.0 && !store.fuelStationsDisabled
       if (isRefueling) {
         currentCar.fuel = Math.min(currentCar.fuel + 0.01 * dt, 1.0)
         if (!this.refuelThoughtShown) {

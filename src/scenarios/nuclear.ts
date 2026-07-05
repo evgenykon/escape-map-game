@@ -62,6 +62,6 @@ export const nuclearScenario: Scenario = {
     gameoverTitle: 'ВЫ ПОГИБЛИ',
     gameoverSubtitle: 'Как и миллионы других.',
     collapseTitle: 'ЗДАНИЕ РУХНУЛО',
-    collapseSubtitle: 'Укрытие не спасло от обрушения.',
+    collapseSubtitle: 'Вы погибли от ран под завалами',
   },
 }

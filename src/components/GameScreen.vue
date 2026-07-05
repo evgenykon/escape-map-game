@@ -20,6 +20,7 @@ const buildingDamagePercent = ref(0)
 const hudSms = ref<{ id: number; text: string; visible: boolean }[]>([])
 const showSplash = ref(false)
 const splashText = ref('')
+const showExplosionInfo = ref(false)
 const currentFuel = computed(() => {
   const car = store.cars.find(c => c.id === store.activeCarId)
   return car?.fuel ?? 0
@@ -189,6 +190,7 @@ function debugAdvanceTimer() {
 function startTimer() {
   totalTime.value = timeline.value.find(e => e.type === 'explosion')?.timeSec ?? store.timerMinutes * 60
   store.timeLeft = totalTime.value
+  store.fuelStationsDisabled = false
   hudTimeLeft.value = store.timeLeft
   gameElapsed.value = 0
   processedEvents.clear()
@@ -209,6 +211,7 @@ function startTimer() {
 
     if (store.timeLeft === 30) {
       soundEngine.startNuclearDangerLoop()
+      store.fuelStationsDisabled = true
     }
 
     if (store.timeLeft <= 5 && store.timeLeft > 0) {
@@ -236,7 +239,6 @@ let explosionTimer: ReturnType<typeof setInterval> | null = null
 
 function triggerExplosion() {
   if (store.phase !== 'playing') return
-  store.phase = 'explosion'
   mapEngine.setMarkersVisible(false)
   playerController.stop()
   soundEngine.stopAllLoops()
@@ -282,10 +284,6 @@ function triggerExplosion() {
     deathReason.value = 'explosion'
   }
 
-  if (buildingDamagePercent.value > 0) {
-    mapEngine.showBuildingDamageLabel(pos.lng, pos.lat, buildingDamagePercent.value)
-  }
-
   mapEngine.flyToEpicenter(store.epicenterLongitude, store.epicenterLatitude, () => {
     setTimeout(() => {
       soundEngine.playExplosion()
@@ -299,6 +297,13 @@ function triggerExplosion() {
         mapEngine.setPlayerFrame(survived ? 'idle' : 'dead')
         mapEngine.flyToPlayer(pos.lat, pos.lng, () => {
           mapEngine.setPlayerZoom(19)
+          store.phase = 'explosion'
+          showExplosionInfo.value = true
+          const infoText = `💥 Мощность: ${formatPower(store.explosionRadius)}\nЗона поражения: ${((Math.PI * store.explosionRadius ** 2) / 1e6).toFixed(1)} км²\nЗона ударной волны: ${((Math.PI * (store.explosionRadius * 12) ** 2) / 1e6).toFixed(1)} км²`
+          mapEngine.showExplosionInfoMarker(pos.lng, pos.lat, infoText)
+          if (buildingDamagePercent.value > 0) {
+            mapEngine.showBuildingDamageLabel(pos.lng, pos.lat, buildingDamagePercent.value)
+          }
           setTimeout(() => {
             mapEngine.setMarkersVisible(false)
             checkGameResult()
@@ -310,6 +315,11 @@ function triggerExplosion() {
 }
 
 function checkGameResult() {
+  clearInterval(explosionTimer!)
+  clearInterval(shelterInterval)
+  clearInterval(carInfoInterval)
+  mapEngine.removeBuildingDamageLabel()
+  mapEngine.removeExplosionInfoMarker()
   if (deathReason.value === 'collapse' || deathReason.value === 'explosion') {
     store.phase = 'gameover'
   } else {
@@ -321,6 +331,12 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
   return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+function formatPower(radius: number): string {
+  const kt = (radius / 1000) ** 3 * 25
+  if (kt >= 1000) return (kt / 1000).toFixed(1) + ' Мт'
+  return Math.round(kt) + ' кт'
 }
 
 function formatSpeed(speed: number): string {
@@ -358,7 +374,7 @@ function toggleMute() {
     </div>
 
     <div v-if="isDev" class="debug-panel" @click="debugAdvanceTimer()">
-      <div>{{ store.phase === 'explosion' ? '-' : '' }}{{ formatTime(hudTimeLeft) }}</div>
+      <div>{{ showExplosionInfo ? '-' : '' }}{{ formatTime(hudTimeLeft) }}</div>
       <div>{{ hudTimeLeft.toFixed(0) }} сек</div>
       <div>+{{ gameElapsed }}с</div>
       <div>cars: {{ store.cars.length }}</div>
@@ -391,12 +407,6 @@ function toggleMute() {
         <span>⛽ Топливо: {{ Math.round(currentFuel * 100) }}%</span>
       </div>
       <div v-if="store.isInCar" class="hud-speed">{{ carGear }} {{ formatSpeed(carSpeed) }}</div>
-    </div>
-
-    <div v-if="store.phase === 'explosion'" class="explosion-info">
-      <div>💥 Мощность: {{ store.explosionRadius }} м</div>
-      <div>Зона поражения: {{ ((Math.PI * store.explosionRadius ** 2) / 1e6).toFixed(1) }} км²</div>
-      <div>Зона ударной волны: {{ ((Math.PI * (store.explosionRadius * 12) ** 2) / 1e6).toFixed(1) }} км²</div>
     </div>
 
     <div v-if="store.shelterHudVisible" class="shelter-hud">
@@ -663,20 +673,6 @@ function toggleMute() {
   color: #ff0;
   font-size: 0.8rem;
   letter-spacing: 0.03rem;
-}
-.explosion-info {
-  position: absolute;
-  top: 5rem;
-  left: 1rem;
-  z-index: 10;
-  background: rgba(0,0,0,0.7);
-  color: #f44;
-  padding: 0.5rem 0.8rem;
-  border: 1px solid #f44;
-  border-radius: 6px;
-  font-family: 'Courier New', monospace;
-  font-size: 0.8rem;
-  line-height: 1.5;
 }
 .sms-container {
   position: absolute;

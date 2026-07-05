@@ -1,4 +1,4 @@
-import { circle, distance } from '@turf/turf'
+import { circle, distance, destination } from '@turf/turf'
 import maplibregl from 'maplibre-gl'
 import { useGameStore } from '@/stores/game'
 
@@ -23,6 +23,8 @@ export class MapEngine {
   private playerThoughtEl: HTMLElement | null = null
   private thoughtTimer: ReturnType<typeof setTimeout> | null = null
   private shelterIconMarker: maplibregl.Marker | null = null
+  private buildingDamageMarker: maplibregl.Marker | null = null
+  private explosionInfoMarker: maplibregl.Marker | null = null
   private fuelStations: { lng: number; lat: number }[] = []
   private static readonly FUEL_ZONE_RADIUS_M = 20
   private initialCarsPlaced = false
@@ -1146,20 +1148,87 @@ export class MapEngine {
     for (const c of this.carMarkers.values()) c.getElement().style.display = v
   }
 
+  findBuildingCenterNear(lng: number, lat: number): { lng: number; lat: number } | null {
+    if (!this.map) return null
+    const pt = this.map.project([lng, lat])
+    const r = 64
+    const features = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]], { layers: ['building', 'building-3d'] }) as any[]
+    for (const f of features) {
+      if (f.geometry?.type === 'Polygon' || f.geometry?.type === 'MultiPolygon') {
+        let rings: number[][] = []
+        if (f.geometry.type === 'Polygon') rings = f.geometry.coordinates[0]
+        else if (f.geometry.type === 'MultiPolygon') {
+          const first = f.geometry.coordinates[0]
+          if (first?.length) rings = first[0]
+        }
+        if (!rings.length) continue
+        let cx = 0, cy = 0, n = 0
+        for (const [x, y] of rings) {
+          cx += x; cy += y; n++
+        }
+        return { lng: cx / n, lat: cy / n }
+      }
+    }
+    return null
+  }
+
   showBuildingDamageLabel(lng: number, lat: number, percent: number) {
     if (!this.map) return
     const el = document.createElement('div')
-    el.textContent = Math.round(percent * 100) + '%'
+    el.textContent = `Повреждение здания: ${Math.round(percent * 100)}%`
     el.style.cssText = `
-      color:#f44; font-family:'Courier New',monospace;
+      color:#000; font-family:'Courier New',monospace;
       font-size:1.2rem; font-weight:bold;
-      text-shadow:0 0 6px rgba(0,0,0,0.9);
+      text-shadow:0 0 4px rgba(255,255,255,0.8);
       pointer-events:none; user-select:none;
       z-index:200;
+      background:rgba(255,255,255,0.7);
+      padding:4px 8px;
+      border-radius:4px;
     `
-    new maplibregl.Marker({ element: el })
+    if (this.buildingDamageMarker) this.buildingDamageMarker.remove()
+    const marker = new maplibregl.Marker({ element: el })
       .setLngLat([lng, lat])
       .addTo(this.map)
+    this.buildingDamageMarker = marker
+  }
+
+  removeBuildingDamageLabel() {
+    if (this.buildingDamageMarker) {
+      this.buildingDamageMarker.remove()
+      this.buildingDamageMarker = null
+    }
+  }
+
+  showExplosionInfoMarker(lng: number, lat: number, text: string) {
+    if (!this.map) return
+    if (this.explosionInfoMarker) this.explosionInfoMarker.remove()
+    const dest = destination([lng, lat], 50, -90, { units: 'meters' })
+    const pos = dest.geometry.coordinates as [number, number]
+    const el = document.createElement('div')
+    el.textContent = text
+    el.style.cssText = `
+      color:#fff; font-family:'Courier New',monospace;
+      font-size:1.2rem; font-weight:bold;
+      text-shadow:0 0 4px rgba(0,0,0,0.8);
+      pointer-events:none; user-select:none;
+      z-index:200;
+      background:rgba(0,0,0,0.6);
+      padding:6px 10px;
+      border-radius:6px;
+      line-height:1.5;
+      white-space:pre-line;
+    `
+    this.explosionInfoMarker = new maplibregl.Marker({ element: el })
+      .setLngLat(pos)
+      .addTo(this.map)
+  }
+
+  removeExplosionInfoMarker() {
+    if (this.explosionInfoMarker) {
+      this.explosionInfoMarker.remove()
+      this.explosionInfoMarker = null
+    }
   }
 
   flyToEpicenter(lng: number, lat: number, cb: () => void) {
@@ -1183,10 +1252,10 @@ export class MapEngine {
 
     const id = 'blast-zone'
     if (!this.map.getSource(id)) {
-      const polygon = circle([epicenterLng, epicenterLat], maxRadiusMeters / 1000, {
+      const initial = circle([epicenterLng, epicenterLat], 0, {
         steps: 64, units: 'kilometers',
       })
-      this.map.addSource(id, { type: 'geojson', data: polygon as GeoJSON.Feature })
+      this.map.addSource(id, { type: 'geojson', data: initial as GeoJSON.Feature })
       this.map.addLayer({
         id: 'blast-zone-layer',
         type: 'fill',
@@ -1200,6 +1269,22 @@ export class MapEngine {
         paint: { 'line-color': '#000', 'line-width': 3 },
       })
     }
+
+    const start = performance.now()
+    const maxRadiusKm = maxRadiusMeters / 1000
+    const tick = () => {
+      if (!this.map) return
+      const elapsed = performance.now() - start
+      const t = Math.min(elapsed / 1000, 1)
+      const radiusKm = maxRadiusKm * t
+      const poly = circle([epicenterLng, epicenterLat], radiusKm, {
+        steps: 64, units: 'kilometers',
+      })
+      const src = this.map.getSource(id) as maplibregl.GeoJSONSource
+      if (src) src.setData(poly as GeoJSON.Feature)
+      if (t < 1) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
 
     const el = document.createElement('video')
     el.src = import.meta.env.BASE_URL + 'explosion.mp4'
