@@ -205,7 +205,7 @@ function startTimer() {
       const entry = thoughtTexts.value[i]
       if (entry.timeSec <= gameElapsed.value) {
         processedThoughts.add(i)
-        mapEngine.setThought(entry.text)
+        mapEngine.setThought(entry.texts[Math.floor(Math.random() * entry.texts.length)])
       }
     }
 

@@ -49,7 +49,7 @@ export interface SMSEntry {
 
 export interface ThoughtEntry {
   timeSec: number
-  text: string
+  texts: string[]
 }
 
 export interface Scenario {
