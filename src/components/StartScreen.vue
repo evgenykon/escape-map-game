@@ -139,9 +139,9 @@ async function startGame() {
     <p class="build-tag">{{ BUILD_TAG }}</p>
 
     <div class="footer-links">
-      <a href="https://github.com/evgenykon/escape-map-game" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/evgenykon/escape-map-game" target="_blank" rel="noopener">Report issues here</a>
       <span class="footer-sep">·</span>
-      <a href="https://evgenykon.github.io" target="_blank" rel="noopener">evgenykon.github.io</a>
+      <a href="https://evgenykon.github.io" target="_blank" rel="noopener">About author</a>
     </div>
   </div>
 </template>
