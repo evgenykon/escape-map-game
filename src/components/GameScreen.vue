@@ -291,7 +291,6 @@ function triggerExplosion() {
       soundEngine.playExplosion()
       mapEngine.showExplosion(store.epicenterLongitude, store.epicenterLatitude, store.explosionRadius)
       mapEngine.showShockwave(store.epicenterLongitude, store.epicenterLatitude, store.explosionRadius)
-      setTimeout(() => mapEngine.flyToZoom(11), 3000)
 
       setTimeout(() => {
         mapEngine.setMarkersVisible(true)

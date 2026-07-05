@@ -1271,6 +1271,8 @@ export class MapEngine {
 
     const start = performance.now()
     const maxRadiusKm = maxRadiusMeters / 1000
+    const startZoom = this.map.getZoom()
+    const endZoom = 11
     const tick = () => {
       if (!this.map) return
       const elapsed = performance.now() - start
@@ -1281,6 +1283,8 @@ export class MapEngine {
       })
       const src = this.map.getSource(id) as maplibregl.GeoJSONSource
       if (src) src.setData(poly as GeoJSON.Feature)
+      const zoom = startZoom + (endZoom - startZoom) * t
+      this.map.setZoom(zoom)
       if (t < 1) requestAnimationFrame(tick)
     }
     requestAnimationFrame(tick)
