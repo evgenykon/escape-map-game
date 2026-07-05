@@ -12,6 +12,25 @@ const selectedId = ref<string | null>(scenarioRegistry[0]?.meta.id ?? null)
 const isStarting = ref(false)
 const showSpriteTable = ref(false)
 
+const LOCATION_TYPE_GEO = 'geo'
+const LOCATION_TYPE_CITY = 'city'
+const locationType = ref(LOCATION_TYPE_GEO)
+const selectedCity = ref<string | null>(null)
+
+const cities = [
+  { name: 'Владивосток', lat: 43.1330, lng: 131.9116 },
+  { name: 'Екатеринбург', lat: 56.8389, lng: 60.6057 },
+  { name: 'Красноярск', lat: 56.0153, lng: 92.8932 },
+  { name: 'Москва', lat: 55.7558, lng: 37.6173 },
+  { name: 'Мурманск', lat: 68.9587, lng: 33.0906 },
+  { name: 'Нижний Новгород', lat: 56.2965, lng: 43.9361 },
+  { name: 'Пенза', lat: 53.1959, lng: 45.0184 },
+  { name: 'Петропавловск-Камчатский', lat: 53.0164, lng: 158.6460 },
+  { name: 'Самара', lat: 53.1959, lng: 50.1002 },
+  { name: 'Санкт-Петербург', lat: 59.9343, lng: 30.3351 },
+  { name: 'Сочи', lat: 43.5855, lng: 39.7231 },
+]
+
 async function startGame() {
   if (!selectedId.value || isStarting.value) return
   const entry = scenarioRegistry.find(s => s.meta.id === selectedId.value)
@@ -19,18 +38,25 @@ async function startGame() {
   isStarting.value = true
   store.selectedScenarioId = selectedId.value
 
-  store.playerLatitude = 55.7558
-  store.playerLongitude = 37.6173
-
-  try {
-    const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject,
-        { enableHighAccuracy: true, timeout: 10000 })
-    })
-    store.playerLatitude = pos.coords.latitude
-    store.playerLongitude = pos.coords.longitude
-  } catch {
-    // fallback to Moscow coordinates
+  if (locationType.value === LOCATION_TYPE_CITY && selectedCity.value) {
+    const city = cities.find(c => c.name === selectedCity.value)
+    if (city) {
+      store.playerLatitude = city.lat
+      store.playerLongitude = city.lng
+    }
+  } else {
+    store.playerLatitude = 55.7558
+    store.playerLongitude = 37.6173
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject,
+          { enableHighAccuracy: true, timeout: 10000 })
+      })
+      store.playerLatitude = pos.coords.latitude
+      store.playerLongitude = pos.coords.longitude
+    } catch {
+      // fallback to Moscow coordinates
+    }
   }
 
   store.phase = 'loading'
@@ -61,6 +87,23 @@ async function startGame() {
             <span v-if="entry.meta.comment" class="scenario-comment">{{ entry.meta.comment }}</span>
           </span>
         </button>
+      </div>
+    </div>
+
+    <div class="location">
+      <p class="label">Местоположение:</p>
+      <div class="location-options">
+        <label class="location-option" :class="{ selected: locationType === 'geo' }">
+          <input type="radio" name="location" :value="LOCATION_TYPE_GEO" v-model="locationType" />
+          По геопозиции
+        </label>
+        <label class="location-option" :class="{ selected: locationType === 'city' }">
+          <input type="radio" name="location" :value="LOCATION_TYPE_CITY" v-model="locationType" />
+          <select v-model="selectedCity" @click.stop="locationType = LOCATION_TYPE_CITY">
+            <option value="" disabled>Выберите город</option>
+            <option v-for="city in cities" :key="city.name" :value="city.name">{{ city.name }}</option>
+          </select>
+        </label>
       </div>
     </div>
 
@@ -195,6 +238,46 @@ async function startGame() {
   background: #444;
   cursor: not-allowed;
   opacity: 0.5;
+}
+.location {
+  width: 100%;
+  max-width: 520px;
+  margin-bottom: 2rem;
+}
+.location-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.location-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: #fff;
+  transition: all 0.15s;
+}
+.location-option.selected {
+  background: rgba(255, 68, 68, 0.1);
+  border-color: #f44;
+}
+.location-option select {
+  flex: 1;
+  background: #222;
+  color: #fff;
+  border: 1px solid #555;
+  padding: 0.3rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.location-option input[type="radio"] {
+  accent-color: #f44;
 }
 .sprite-btn {
   margin-top: 1rem;
