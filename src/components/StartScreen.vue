@@ -14,8 +14,8 @@ const showSpriteTable = ref(false)
 
 const LOCATION_TYPE_GEO = 'geo'
 const LOCATION_TYPE_CITY = 'city'
-const locationType = ref(LOCATION_TYPE_GEO)
-const selectedCity = ref<string | null>(null)
+const locationType = ref(LOCATION_TYPE_CITY)
+const selectedCity = ref('Москва')
 
 const cities = [
   { name: 'Владивосток', lat: 43.1330, lng: 131.9116 },
