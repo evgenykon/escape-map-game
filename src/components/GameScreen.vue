@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useGameStore } from '@/stores/game'
-import type { SMSEntry, ThoughtEntry } from '@/scenarios/types'
+import type { TimelineEvent } from '@/scenarios/types'
 import { MapEngine } from '@/engine/MapEngine'
 import { PlayerController } from '@/engine/PlayerController'
 import { soundEngine } from '@/engine/SoundEngine'
@@ -13,7 +13,9 @@ const baseUrl = import.meta.env.BASE_URL
 const mapContainer = ref<HTMLDivElement>()
 const hudTimeLeft = ref(0)
 const gameElapsed = ref(0)
+const totalTime = ref(0)
 const gameReady = ref(false)
+const deathReason = ref<'explosion' | 'collapse' | null>(null)
 const hudSms = ref<{ id: number; text: string; visible: boolean }[]>([])
 const showSplash = ref(false)
 const splashText = ref('')
@@ -51,8 +53,7 @@ let timerInterval: ReturnType<typeof setInterval>
 let shelterInterval: ReturnType<typeof setInterval>
 let carInfoInterval: ReturnType<typeof setInterval>
 const spawnValidationTimeouts: ReturnType<typeof setTimeout>[] = []
-const processedSms = new Set<number>()
-const processedThoughts = new Set<number>()
+const processedEvents = new Set<number>()
 
 const shelterHeading = ref(0)
 const shelterDist = ref(0)
@@ -114,8 +115,7 @@ function validateSpawn() {
   }
 }
 
-const smsTexts = computed<SMSEntry[]>(() => store.scenario?.smsTexts ?? [])
-const thoughtTexts = computed<ThoughtEntry[]>(() => store.scenario?.thoughts ?? [])
+const timeline = computed<TimelineEvent[]>(() => store.scenario?.timeline ?? [])
 const isDev = import.meta.env.DEV
 
 const debugZoom = ref(18)
@@ -154,16 +154,24 @@ onUnmounted(() => {
   mapEngine?.destroy()
 })
 
+function fireEvent(entry: TimelineEvent) {
+  if (entry.type === 'sms') {
+    showSMS(entry.text)
+    soundEngine.playIncomingMessage()
+  } else if (entry.type === 'thought') {
+    mapEngine.setThought(entry.texts[Math.floor(Math.random() * entry.texts.length)])
+  } else if (entry.type === 'shelter') {
+    store.shelterHudVisible = true
+    mapEngine.assignShelterBuilding(store.playerLongitude, store.playerLatitude, entry.minM, entry.maxM)
+  }
+}
+
 function debugAdvanceTimer() {
   gameElapsed.value += 30
-  const total = store.timerMinutes * 60
-  store.timeLeft = Math.max(0, total - gameElapsed.value)
+  store.timeLeft = Math.max(0, totalTime.value - gameElapsed.value)
   hudTimeLeft.value = store.timeLeft
-  for (let i = 0; i < smsTexts.value.length; i++) {
-    if (smsTexts.value[i].timeSec <= gameElapsed.value) processedSms.add(i)
-  }
-  for (let i = 0; i < thoughtTexts.value.length; i++) {
-    if (thoughtTexts.value[i].timeSec <= gameElapsed.value) processedThoughts.add(i)
+  for (let i = 0; i < timeline.value.length; i++) {
+    if (timeline.value[i].timeSec <= gameElapsed.value) processedEvents.add(i)
   }
   if (store.timeLeft <= 0) {
     if (timerInterval) clearInterval(timerInterval)
@@ -172,40 +180,23 @@ function debugAdvanceTimer() {
 }
 
 function startTimer() {
-  store.timeLeft = store.timerMinutes * 60
+  totalTime.value = timeline.value.find(e => e.type === 'explosion')?.timeSec ?? store.timerMinutes * 60
+  store.timeLeft = totalTime.value
   hudTimeLeft.value = store.timeLeft
   gameElapsed.value = 0
-  processedSms.clear()
-  processedThoughts.clear()
+  processedEvents.clear()
 
   timerInterval = setInterval(() => {
-    store.timeLeft--
-    hudTimeLeft.value = store.timeLeft
     gameElapsed.value++
+    store.timeLeft = totalTime.value - gameElapsed.value
+    hudTimeLeft.value = store.timeLeft
 
-    for (let i = 0; i < smsTexts.value.length; i++) {
-      if (processedSms.has(i)) continue
-      const entry = smsTexts.value[i]
+    for (let i = 0; i < timeline.value.length; i++) {
+      if (processedEvents.has(i)) continue
+      const entry = timeline.value[i]
       if (entry.timeSec <= gameElapsed.value) {
-        processedSms.add(i)
-        showSMS(entry.text)
-        soundEngine.playIncomingMessage()
-        if (entry.triggerShelterHud) {
-          mapEngine.assignShelterBuilding(
-            store.playerLongitude,
-            store.playerLatitude,
-            1500, 2000
-          )
-        }
-      }
-    }
-
-    for (let i = 0; i < thoughtTexts.value.length; i++) {
-      if (processedThoughts.has(i)) continue
-      const entry = thoughtTexts.value[i]
-      if (entry.timeSec <= gameElapsed.value) {
-        processedThoughts.add(i)
-        mapEngine.setThought(entry.texts[Math.floor(Math.random() * entry.texts.length)])
+        processedEvents.add(i)
+        fireEvent(entry)
       }
     }
 
@@ -248,9 +239,37 @@ function triggerExplosion() {
   explosionTimer = setInterval(() => { hudTimeLeft.value++ }, 1000)
 
   const pos = playerController.getPosition()
-  const dlat = (pos.lat - store.epicenterLatitude) * 111320
-  const dlng = (pos.lng - store.epicenterLongitude) * 111320 * Math.cos(pos.lat * Math.PI / 180)
-  store.playerDistFromEpicenter = Math.sqrt(dlat * dlat + dlng * dlng)
+  const dist = haversine(pos.lat, pos.lng, store.epicenterLatitude, store.epicenterLongitude)
+  store.playerDistFromEpicenter = dist
+
+  const blast = store.explosionRadius
+  const shockwave = blast * 12
+
+  let survived: boolean
+  deathReason.value = null
+
+  if (store.isInShelter) {
+    survived = true
+  } else if (mapEngine.isInsideBuilding(pos.lng, pos.lat)) {
+    let damage = 0
+    if (dist <= blast) {
+      damage = 0.8 + Math.random() * 0.2
+    } else if (dist <= shockwave) {
+      const t = (dist - blast) / (shockwave - blast)
+      damage = 0.5 * (1 - t)
+    }
+    if (Math.random() < damage) {
+      survived = false
+      deathReason.value = 'collapse'
+    } else {
+      survived = true
+    }
+  } else if (dist > shockwave) {
+    survived = true
+  } else {
+    survived = false
+    deathReason.value = 'explosion'
+  }
 
   mapEngine.flyToEpicenter(store.epicenterLongitude, store.epicenterLatitude, () => {
     setTimeout(() => {
@@ -259,7 +278,6 @@ function triggerExplosion() {
       mapEngine.showShockwave(store.epicenterLongitude, store.epicenterLatitude, store.explosionRadius)
       setTimeout(() => mapEngine.flyToZoom(11), 3000)
 
-      const survived = store.isInShelter || store.playerDistFromEpicenter > store.explosionRadius
       setTimeout(() => {
         mapEngine.setMarkersVisible(true)
         mapEngine.setPlayerMarkerShape(false)
@@ -277,12 +295,10 @@ function triggerExplosion() {
 }
 
 function checkGameResult() {
-  if (store.isInShelter) {
-    store.phase = 'victory'
-  } else if (store.playerDistFromEpicenter > store.explosionRadius) {
-    store.phase = 'victory'
-  } else {
+  if (deathReason.value === 'collapse' || deathReason.value === 'explosion') {
     store.phase = 'gameover'
+  } else {
+    store.phase = 'victory'
   }
 }
 
@@ -388,8 +404,8 @@ function toggleMute() {
 
     <div v-if="store.phase === 'gameover'" class="gameover-overlay">
       <img :src="baseUrl + 'sprites/dead.png'" class="dead-sprite" alt="" />
-      <h1>{{ resultTexts?.gameoverTitle ?? 'GAME OVER' }}</h1>
-      <p>{{ resultTexts?.gameoverSubtitle }}</p>
+      <h1>{{ deathReason === 'collapse' ? resultTexts?.collapseTitle : resultTexts?.gameoverTitle ?? 'GAME OVER' }}</h1>
+      <p>{{ deathReason === 'collapse' ? resultTexts?.collapseSubtitle : resultTexts?.gameoverSubtitle }}</p>
       <button @click="restartGame">Заново</button>
     </div>
 
@@ -563,20 +579,21 @@ function toggleMute() {
 }
 .shelter-hud {
   position: absolute;
-  bottom: 8rem;
-  right: 1rem;
+  top: 0.5rem;
+  right: 3.5rem;
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  background: rgba(0,0,0,0.75);
-  padding: 0.75rem 1rem;
+  gap: 0.4rem;
+  background: rgba(0,0,0,0.6);
+  padding: 0.3rem 0.6rem;
   border: 1px solid #fa0;
+  border-radius: 4px;
   font-family: 'Courier New', monospace;
 }
 .shelter-compass {
-  width: 44px;
-  height: 44px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 2px solid #fa0;
   display: flex;
@@ -586,31 +603,31 @@ function toggleMute() {
 }
 .shelter-arrow-wrap {
   position: relative;
-  width: 4px;
-  height: 34px;
+  width: 3px;
+  height: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   transition: transform 0.3s;
 }
 .shelter-arrow-stem {
-  width: 3px;
-  height: 22px;
+  width: 2px;
+  height: 12px;
   background: #fa0;
   border-radius: 1px;
 }
 .shelter-arrow-head {
   width: 0;
   height: 0;
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-bottom: 10px solid #fa0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 7px solid #fa0;
   margin-top: -1px;
 }
 .shelter-dist {
   color: #ff0;
-  font-size: 1.1rem;
-  letter-spacing: 0.05rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.03rem;
 }
 .sms-container {
   position: absolute;

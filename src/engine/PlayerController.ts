@@ -34,6 +34,7 @@ export class PlayerController {
   private hackDuration: number = 0
   private hackedCarIds: Set<string> = new Set()
   private spawnTimer: number = 0
+  private ownCarClaimed = false
   private nextCarId: number = 12
   private highlightedCar: string | null = null
   private lastWalkState = 0
@@ -41,6 +42,7 @@ export class PlayerController {
   private doorSlowTimer = 0
   private isMapMode = false
   private wasFuelEmpty = false
+  private lowFuelThoughtShown = false
   private lastCrashAt = 0
   private lastFrameState: 'idle' | 'walking' | 'running' | 'hacking' | 'swimming' | null = null
   private wasBraking = false
@@ -113,7 +115,11 @@ export class PlayerController {
 
     const found = this.findNearbyCar()
     if (found) {
-      if (this.hackedCarIds.has(found.id)) {
+      if (!this.ownCarClaimed) {
+        this.ownCarClaimed = true
+        this.hackedCarIds.add(found.id)
+        this.enterCarDirectly(found)
+      } else if (this.hackedCarIds.has(found.id)) {
         this.enterCarDirectly(found)
       } else {
         this.startHack(found)
@@ -214,6 +220,7 @@ export class PlayerController {
     store.isInCar = false
     soundEngine.stopCarDrivenLoop()
     soundEngine.playOpeningCarDoor()
+    this.lowFuelThoughtShown = false
   }
 
   private findNearbyCar(): Car | null {
@@ -376,7 +383,7 @@ export class PlayerController {
 
         const id = `car-${this.nextCarId++}`
         const angle = Math.random() * 2 * Math.PI
-        store.cars.push({ id, longitude: lng, latitude: lat, angle, fuel: 0.3 + Math.random() * 0.7 })
+        store.cars.push({ id, longitude: lng, latitude: lat, angle, fuel: 0.1 + Math.random() * 0.2 })
         this.mapEngine.addCarMarker(id, lng, lat, angle)
         break
       }
@@ -442,6 +449,7 @@ export class PlayerController {
     store.isSwimming = true
     soundEngine.stopCarDrivenLoop()
     soundEngine.playEngineBreakdown()
+    this.lowFuelThoughtShown = false
   }
 
   private removeTrafficCar(id: string) {
@@ -518,6 +526,8 @@ export class PlayerController {
     const isBraking = forward < 0 && speed > 0.5
     if (isBraking && !this.wasBraking) soundEngine.playCarBrake()
     this.wasBraking = isBraking
+    const isReversing = forward < 0 && speed < 0.5
+    if (isReversing) rotation = -rotation
     const result = this.carPhysics.update(forward, rotation, dt, fuel, this.playerLng, this.playerLat, this.playerAngle)
     const newLng = result.lng
     const newLat = result.lat
@@ -554,6 +564,18 @@ export class PlayerController {
         this.wasFuelEmpty = true
         soundEngine.playEngineBreakdown()
         soundEngine.stopCarDrivenLoop()
+      }
+      if (result.fuel > 0 && result.fuel <= 0.05 && !this.lowFuelThoughtShown) {
+        this.lowFuelThoughtShown = true
+        this.mapEngine.setThought('Надо заправиться или двигаться на чём-то другом…')
+      }
+      if (result.fuel === 0) {
+        const s = this.carPhysics.getSpeed()
+        if (Math.abs(s) > 0.5) {
+          this.carPhysics.setSpeed(s - Math.sign(s) * 20 * dt)
+        } else {
+          this.carPhysics.setSpeed(0)
+        }
       }
     }
   }

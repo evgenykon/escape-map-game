@@ -52,7 +52,8 @@ export async function loadScenarioData(scenario: Scenario): Promise<void> {
           return
         }
         scenario.init()
-        store.timerMinutes = scenario.timerMinutes
+        const explosionEntry = scenario.timeline.find(e => e.type === 'explosion')
+        store.timerMinutes = explosionEntry ? Math.round(explosionEntry.timeSec / 60) : 7
         store.explosionRadius = scenario.explosionRadius
         store.fuelConsumption = scenario.fuelConsumption
         store.hackSec = scenario.hackSec
@@ -64,15 +65,22 @@ export async function loadScenarioData(scenario: Scenario): Promise<void> {
         store.epicenterLatitude = epicenter.latitude
         store.epicenterLongitude = epicenter.longitude
 
-        const spawn = scenario.computeSpawn(
-          {
-            playerLatitude: store.playerLatitude,
-            playerLongitude: store.playerLongitude,
-          },
-          epicenter,
-        )
-        store.shelters = spawn.shelters
-        store.cars = spawn.cars
+        store.cars = []
+        const M_PER_DEG = 111320
+        const cosLat = Math.cos(store.playerLatitude * Math.PI / 180)
+        for (let i = 0; i < 12; i++) {
+          const angle = Math.random() * 2 * Math.PI
+          const dist = 100 + Math.random() * 250
+          const dlat = (dist / M_PER_DEG) * Math.cos(angle)
+          const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
+          store.cars.push({
+            id: `car-${i}`,
+            longitude: store.playerLongitude + dlng,
+            latitude: store.playerLatitude + dlat,
+            angle: Math.random() * 2 * Math.PI,
+            fuel: 0.1 + Math.random() * 0.2,
+          })
+        }
 
         resolve()
       }, step.delay)

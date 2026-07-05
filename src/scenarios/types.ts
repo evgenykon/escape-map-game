@@ -1,4 +1,4 @@
-import type { Shelter, Car } from '@/stores/game'
+import type { Car } from '@/stores/game'
 
 export interface ScenarioConfig {
   id: string
@@ -7,31 +7,9 @@ export interface ScenarioConfig {
   icon?: string
 }
 
-export interface SpawnContext {
-  playerLatitude: number
-  playerLongitude: number
-}
-
 export interface EpicenterSpec {
   latitude: number
   longitude: number
-}
-
-export interface ShelterSpawn {
-  latitude: number
-  longitude: number
-}
-
-export interface CarSpawn {
-  latitude: number
-  longitude: number
-  angle: number
-  fuel: number
-}
-
-export interface SpawnResult {
-  shelters: Shelter[]
-  cars: Car[]
 }
 
 export interface ResultTexts {
@@ -39,29 +17,23 @@ export interface ResultTexts {
   victorySubtitle: string
   gameoverTitle: string
   gameoverSubtitle: string
+  collapseTitle?: string
+  collapseSubtitle?: string
 }
 
-export interface SMSEntry {
-  timeSec: number
-  text: string
-  triggerShelterHud?: boolean
-}
-
-export interface ThoughtEntry {
-  timeSec: number
-  texts: string[]
-}
+export type TimelineEvent =
+  | { timeSec: number; type: 'sms'; text: string }
+  | { timeSec: number; type: 'thought'; texts: string[] }
+  | { timeSec: number; type: 'shelter'; minM: number; maxM: number }
+  | { timeSec: number; type: 'explosion' }
 
 export interface Scenario {
   config: ScenarioConfig
-  timerMinutes: number
   explosionRadius: number
   fuelConsumption: number
   hackSec: number
   init(): void
-  computeEpicenter(ctx: SpawnContext): EpicenterSpec
-  computeSpawn(ctx: SpawnContext, epicenter: EpicenterSpec): SpawnResult
-  smsTexts: SMSEntry[]
-  thoughts: ThoughtEntry[]
+  computeEpicenter(ctx: { playerLatitude: number; playerLongitude: number }): EpicenterSpec
+  timeline: TimelineEvent[]
   resultTexts: ResultTexts
 }

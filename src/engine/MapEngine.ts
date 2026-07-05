@@ -706,26 +706,16 @@ export class MapEngine {
       }
       cx /= n; cy /= n
       const dist = Math.sqrt(((cx - lng) * cosLat * M_PER_DEG) ** 2 + ((cy - lat) * M_PER_DEG) ** 2)
-      if (dist >= minM && dist <= maxM) candidates.push({ lng: cx, lat: cy })
+      if (dist >= minM && dist <= maxM && this.isInsideBuilding(cx, cy)) {
+        candidates.push({ lng: cx, lat: cy })
+      }
     }
 
     if (candidates.length > 0) return candidates[Math.floor(Math.random() * candidates.length)]
 
-    for (let attempt = 0; attempt < 200; attempt++) {
+    for (let attempt = 0; attempt < 500; attempt++) {
       const angle = Math.random() * 2 * Math.PI
       const dist = minM + Math.random() * (maxM - minM)
-      const dlat = (dist / M_PER_DEG) * Math.cos(angle)
-      const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
-      const clng = lng + dlng
-      const clat = lat + dlat
-      if (this.isInsideBuilding(clng, clat)) {
-        return { lng: clng, lat: clat }
-      }
-    }
-
-    for (let attempt = 0; attempt < 100; attempt++) {
-      const angle = Math.random() * 2 * Math.PI
-      const dist = 100 + Math.random() * 300
       const dlat = (dist / M_PER_DEG) * Math.cos(angle)
       const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
       const clng = lng + dlng
@@ -746,12 +736,30 @@ export class MapEngine {
 
     let building = this.findShelterBuilding(playerLng, playerLat, minM, maxM)
     if (!building) {
-      const angle = Math.random() * 2 * Math.PI
-      const dist = minM + Math.random() * (maxM - minM)
-      const dlat = (dist / M_PER_DEG) * Math.cos(angle)
-      const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
-      building = { lng: playerLng + dlng, lat: playerLat + dlat }
+      const targetAngle = Math.random() * 2 * Math.PI
+      const targetDist = minM + Math.random() * (maxM - minM)
+      const tLat = playerLat + (targetDist / M_PER_DEG) * Math.cos(targetAngle)
+      const tLng = playerLng + (targetDist / (M_PER_DEG * cosLat)) * Math.sin(targetAngle)
+      const savedZoom = this.map.getZoom()
+      const savedCenter = this.map.getCenter()
+
+      this.map.jumpTo({ center: [tLng, tLat], zoom: 14 })
+      this.map.once('idle', () => {
+        building = this.findShelterBuilding(playerLng, playerLat, minM, maxM)
+        if (!building) building = { lng: tLng, lat: tLat }
+        this._placeShelter(building)
+        this.map?.jumpTo({ center: savedCenter, zoom: savedZoom })
+      })
+      return true
     }
+
+    this._placeShelter(building)
+    return true
+  }
+
+  private _placeShelter(building: { lng: number; lat: number }) {
+    if (!this.map) return
+    const store = useGameStore()
 
     if (store.shelters.length === 0) {
       store.shelters.push({ id: 'shelter-evacuation', longitude: building.lng, latitude: building.lat })
@@ -761,14 +769,14 @@ export class MapEngine {
 
     const el = document.createElement('img')
     el.src = import.meta.env.BASE_URL + 'icons/shelter.png'
-    el.style.width = '12px'
-    el.style.height = '12px'
+    el.style.width = '32px'
+    el.style.height = '32px'
     el.style.zIndex = '90'
     el.style.filter = 'drop-shadow(0 0 6px rgba(255,200,0,0.6))'
 
     const marker = new maplibregl.Marker({ element: el })
       .setLngLat([building.lng, building.lat])
-      .addTo(this.map!)
+      .addTo(this.map)
     if (this.shelterIconMarker) this.shelterIconMarker.remove()
     this.shelterIconMarker = marker
 
@@ -791,7 +799,6 @@ export class MapEngine {
     }
 
     store.shelterHudVisible = true
-    return true
   }
 
   setMarkersVisible(visible: boolean) {
