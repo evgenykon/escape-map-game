@@ -415,10 +415,10 @@ function toggleMute() {
 
     <div v-if="store.shelterHudVisible" class="shelter-hud">
       <div class="shelter-compass">
-        <div class="shelter-arrow-wrap" :style="{ transform: `rotate(${shelterHeading}rad)` }">
-          <div class="shelter-arrow-stem"></div>
-          <div class="shelter-arrow-head"></div>
-        </div>
+          <div class="shelter-arrow-wrap" :style="{ transform: `rotate(${shelterHeading}rad)` }">
+            <div class="shelter-arrow-head"></div>
+            <div class="shelter-arrow-stem"></div>
+          </div>
       </div>
       <div class="shelter-dist">{{ (shelterDist / 1000).toFixed(1) }} км</div>
     </div>
@@ -670,8 +670,8 @@ function toggleMute() {
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-bottom: 7px solid #fa0;
-  margin-top: -1px;
+  border-top: 7px solid #fa0;
+  margin-bottom: -1px;
 }
 .shelter-dist {
   color: #ff0;
