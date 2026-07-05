@@ -422,6 +422,7 @@ export class PlayerController {
 
           if (this.mapEngine.isInsideBuilding(lng, lat)) continue
           if (this.mapEngine.isOnOffroadSurface(lng, lat)) continue
+          if (this.mapEngine.isOnWater(lng, lat)) continue
           if (pass === 0 && !this.mapEngine.isOnRoad(lng, lat)) continue
 
           let tooClose = false

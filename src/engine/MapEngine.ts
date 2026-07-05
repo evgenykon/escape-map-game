@@ -646,7 +646,7 @@ export class MapEngine {
   setPlayerFrame(state: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' | 'swimming') {
     if (!this.playerMarkerImg) return
     this.playerAnimState = state
-    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'dead', 'swimming')
+    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'dead', 'swimming', 'car-moving')
     this.applyPlayerZoom(this.map?.getZoom() ?? 18)
     if (state === 'walking' || state === 'running') {
       this.playerMarkerImg.classList.add('walking')
@@ -683,7 +683,7 @@ export class MapEngine {
     } else {
       this.setPlayerMarkerShadow('#0f0')
     }
-    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'swimming', 'dead')
+    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'swimming', 'dead', 'car-moving')
     this.applyPlayerZoom(this.map?.getZoom() ?? 18)
   }
 
@@ -788,7 +788,7 @@ export class MapEngine {
       if (!f.layer) return false
       const id = f.layer.id
       const cls = f.properties?.class
-      return id === 'water' || id === 'waterway' || id.startsWith('water_') || cls === 'water'
+      return id === 'water' || id === 'waterway' || id.startsWith('water_') || (typeof cls === 'string' && cls.startsWith('water'))
     })
   }
 
