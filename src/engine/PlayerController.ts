@@ -311,7 +311,7 @@ export class PlayerController {
     this.fuelStationScanTimer += dt
     if (this.fuelStationScanTimer >= 5) {
       this.fuelStationScanTimer = 0
-      this.mapEngine.scanAndAddFuelStations()
+      this.mapEngine.scanAndAddFuelStations(this.playerLng, this.playerLat)
     }
 
     this.updateProximityFeedback()

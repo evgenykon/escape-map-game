@@ -21,7 +21,7 @@ export const scenarioRegistry: ScenarioEntry[] = [
     meta: {
       id: 'military',
       title: 'Военная зона',
-      description: 'Город оцеплен военными. Вы в тылу врага, нужно пересечь границу зоны, избегая патрулей.',
+      description: 'На ваш город напали. Вы оказались в зоне боевых действий. Вам нужно выбраться, избегая ненужных встреч.',
       icon: '🔫',
       disabled: true,
       comment: 'Скоро…',

@@ -138,7 +138,8 @@ export class MapEngine {
 
     this.map.on('moveend', () => {
       if (this.map) this.applyAllCarsZoom(this.map.getZoom())
-      this.scanAndAddFuelStations()
+      const st = useGameStore()
+      this.scanAndAddFuelStations(st.playerLongitude, st.playerLatitude)
     })
 
     this.map.on('styleimagemissing', (e) => {
@@ -1005,11 +1006,10 @@ export class MapEngine {
     })
   }
 
-  private _scanFuelStations(): { lng: number; lat: number }[] {
+  private _scanFuelStations(playerLng: number, playerLat: number): { lng: number; lat: number }[] {
     if (!this.map) return []
     const found: { lng: number; lat: number }[] = []
-    const store = useGameStore()
-    const pt = this.map.project([store.playerLongitude, store.playerLatitude])
+    const pt = this.map.project([playerLng, playerLat])
     const r = 500
     const features = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]]) as any[]
     for (const f of features) {
@@ -1046,23 +1046,22 @@ export class MapEngine {
       const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
       const carLng = station.lng + dlng
       const carLat = station.lat + dlat
-      if (this.isInsideBuilding(carLng, carLat)) continue
       const id = `fuel-${station.lng}-${station.lat}-${i}`
-      const existing = store.cars.find(c => c.id === id)
-      if (!existing) {
-        store.cars.push({
-          id,
-          longitude: carLng,
-          latitude: carLat,
-          angle: Math.random() * 2 * Math.PI,
-          fuel: 0,
-        })
-      }
+      const existingCar = store.cars.find(c => c.id === id)
+      if (existingCar) continue
+      store.cars.push({
+        id,
+        longitude: carLng,
+        latitude: carLat,
+        angle: Math.random() * 2 * Math.PI,
+        fuel: 0,
+      })
+      this.addCarMarker(id, carLng, carLat, Math.random() * 2 * Math.PI)
     }
   }
 
-  scanAndAddFuelStations() {
-    const newStations = this._scanFuelStations()
+  scanAndAddFuelStations(playerLng: number, playerLat: number) {
+    const newStations = this._scanFuelStations(playerLng, playerLat)
     const reallyNew: { lng: number; lat: number }[] = []
     for (const s of newStations) {
       const existing = this.fuelStations.find(e => Math.abs(e.lng - s.lng) < 0.0001 && Math.abs(e.lat - s.lat) < 0.0001)
@@ -1087,7 +1086,7 @@ export class MapEngine {
   findAndPlaceFuelStations() {
     if (!this.map) return
     const store = useGameStore()
-    this.fuelStations = this._scanFuelStations()
+    this.fuelStations = this._scanFuelStations(store.playerLongitude, store.playerLatitude)
     if (this.fuelStations.length === 0) {
       const style = this.map.getStyle()
       const layerDef = style.layers?.find(l => l.id === 'poi_r1') as any
