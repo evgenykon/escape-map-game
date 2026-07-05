@@ -16,10 +16,11 @@ const DOOR_DEBOUNCE = 2
 const HACK_THOUGHTS = [
   'Надеюсь, я тут один...',
   'Надеюсь, никто не заметит...',
-  'Так, почти бы всё готово...',
+  'Так, почти готово...',
   'Где-то я уже видел эту машину...',
   'Главное - чтобы бензин был...',
   'Ну давай, давай!',
+  'Боже, неужели я это делаю...',
 ]
 
 export class PlayerController {
@@ -493,6 +494,7 @@ export class PlayerController {
     if (this.activeCarId) {
       this.mapEngine.removeCarMarker(this.activeCarId)
       this.mapEngine.setPlayerMarkerShape(false)
+      this.mapEngine.setPlayerFrame('swimming')
       this.mapEngine.setPlayerMarkerShadow('#0f0')
       this.mapEngine.clearPlayerCarSprite()
       this.mapEngine.setPlayerCarMoving(false)
@@ -529,7 +531,8 @@ export class PlayerController {
 
     if (forward !== 0) {
       let bearing = this.playerAngle * 180 / Math.PI
-      const inWater = this.mapEngine.isOnWater(this.playerLng, this.playerLat)
+      const onRoad = this.mapEngine.isOnRoad(this.playerLng, this.playerLat)
+      const inWater = this.mapEngine.isOnWater(this.playerLng, this.playerLat) && !onRoad
       let speed = inWater ? SWIM_SPEED : (isRunning ? 6 : MOVE_SPEED_WALK)
       if (this.doorSlowTimer > 0) speed = Math.min(speed, DOOR_SLOW_SPEED)
       let dist = Math.abs(forward) * speed * dt
@@ -564,7 +567,8 @@ export class PlayerController {
     }
 
     const store = useGameStore()
-    store.isSwimming = this.mapEngine.isOnWater(this.playerLng, this.playerLat)
+    const onRoad = this.mapEngine.isOnRoad(this.playerLng, this.playerLat)
+    store.isSwimming = this.mapEngine.isOnWater(this.playerLng, this.playerLat) && !onRoad
     store.surfaceType = this.mapEngine.getSurfaceType(this.playerLng, this.playerLat)
   }
 
@@ -604,7 +608,7 @@ export class PlayerController {
         this.lastBuildingCrashAt = now
         soundEngine.playCarCrash()
       }
-    } else if (this.mapEngine.isOnWater(newLng, newLat)) {
+    } else if (!this.mapEngine.isOnRoad(newLng, newLat) && this.mapEngine.isOnWater(newLng, newLat)) {
       this.sinkPlayerCar()
     } else if (this.checkCarCollision(newLng, newLat, this.activeCarId!)) {
       this.carPhysics.setSpeed(0)

@@ -833,11 +833,11 @@ export class MapEngine {
 
   getSurfaceType(lng: number, lat: number): string {
     if (this.isInsideBuilding(lng, lat)) return 'building'
+    if (this.isOnRoad(lng, lat)) return 'road'
     if (this.isOnWater(lng, lat)) return 'water'
     if (this.isOnPark(lng, lat)) return 'park'
     if (this.isOnForest(lng, lat)) return 'forest'
     if (this.isOnGrass(lng, lat)) return 'grass'
-    if (this.isOnRoad(lng, lat)) return 'road'
     return 'default'
   }
 
