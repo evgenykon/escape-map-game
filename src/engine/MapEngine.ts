@@ -1174,21 +1174,20 @@ export class MapEngine {
 
   showBuildingDamageLabel(lng: number, lat: number, percent: number) {
     if (!this.map) return
+    const dest = destination([lng, lat], 50, 90, { units: 'meters' })
+    const pos = dest.geometry.coordinates as [number, number]
     const el = document.createElement('div')
     el.textContent = `Повреждение здания: ${Math.round(percent * 100)}%`
     el.style.cssText = `
-      color:#000; font-family:'Courier New',monospace;
-      font-size:1.2rem; font-weight:bold;
-      text-shadow:0 0 4px rgba(255,255,255,0.8);
+      color:#fff; font-family:'Courier New',monospace;
+      font-size:0.8rem; font-weight:bold;
+      text-shadow:0 0 4px rgba(0,0,0,0.8);
       pointer-events:none; user-select:none;
       z-index:200;
-      background:rgba(255,255,255,0.7);
-      padding:4px 8px;
-      border-radius:4px;
     `
     if (this.buildingDamageMarker) this.buildingDamageMarker.remove()
     const marker = new maplibregl.Marker({ element: el })
-      .setLngLat([lng, lat])
+      .setLngLat(pos)
       .addTo(this.map)
     this.buildingDamageMarker = marker
   }
