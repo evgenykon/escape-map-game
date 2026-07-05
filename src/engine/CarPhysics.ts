@@ -35,6 +35,7 @@ export class CarPhysics {
     currentLng: number,
     currentLat: number,
     currentAngle: number,
+    offroad: boolean = false,
   ): { lng: number; lat: number; angle: number; fuel: number } {
     this.state.angle = currentAngle
 
@@ -85,7 +86,8 @@ export class CarPhysics {
     }
 
     if (speedAbs > 0 && fuel > 0) {
-      fuel = Math.max(fuel - this._fuelConsumption * speedRatio * dt, 0)
+      const consumptionMult = offroad ? 2 : 1
+      fuel = Math.max(fuel - this._fuelConsumption * speedRatio * dt * consumptionMult, 0)
     }
 
     const distance = this.state.speed * dt

@@ -26,6 +26,7 @@ export type TimelineEvent =
   | { timeSec: number; type: 'thought'; texts: string[] }
   | { timeSec: number; type: 'shelter'; minM: number; maxM: number }
   | { timeSec: number; type: 'explosion' }
+  | { timeSec: number; type: 'traffic' }
 
 export interface Scenario {
   config: ScenarioConfig

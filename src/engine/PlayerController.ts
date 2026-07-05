@@ -11,6 +11,7 @@ const CAR_COLLISION_DIST = 0.2
 const SWIM_SPEED = 0.3
 const DOOR_SLOW_SPEED = 0.1
 const DOOR_SLOW_DURATION = 1
+const DOOR_DEBOUNCE = 2
 
 const HACK_THOUGHTS = [
   'Надеюсь, я тут один...',
@@ -40,12 +41,14 @@ export class PlayerController {
   private lastWalkState = 0
   private wasInsideBuilding = false
   private doorSlowTimer = 0
+  private doorDebounceTimer = 0
   private isMapMode = false
   private wasFuelEmpty = false
   private lowFuelThoughtShown = false
   private lastCrashAt = 0
   private lastFrameState: 'idle' | 'walking' | 'running' | 'hacking' | 'swimming' | null = null
   private wasBraking = false
+  private trafficMode = false
 
   constructor(mapEngine: MapEngine) {
     const store = useGameStore()
@@ -149,6 +152,7 @@ export class PlayerController {
     soundEngine.playOpeningCarDoor()
     soundEngine.playEngineStart()
     soundEngine.startCarDrivenLoop()
+    soundEngine.stopFootstepsLoop()
   }
 
   private startHack(car: Car) {
@@ -193,6 +197,7 @@ export class PlayerController {
     soundEngine.stopHackingLoop()
     soundEngine.playEngineStart()
     soundEngine.startCarDrivenLoop()
+    soundEngine.stopFootstepsLoop()
   }
 
   private exitCar() {
@@ -331,13 +336,18 @@ export class PlayerController {
     }
   }
 
+  enableTrafficMode() {
+    this.trafficMode = true
+  }
+
   private carSpawnCheck(dt: number) {
+    const spawnInterval = this.trafficMode ? 0.8 : 1.5
     this.spawnTimer += dt
-    if (this.spawnTimer < 1.5) return
+    if (this.spawnTimer < spawnInterval) return
     this.spawnTimer = 0
 
     const store = useGameStore()
-    const maxDist = 2000
+    const maxDist = this.trafficMode ? 1500 : 2000
     for (let i = store.cars.length - 1; i >= 0; i--) {
       const car = store.cars[i]
       if (car.id === store.activeCarId) continue
@@ -348,33 +358,35 @@ export class PlayerController {
       }
     }
 
-    const bounds = this.mapEngine.getBounds()
-    if (!bounds) return
-
-    let totalInView = 0
+    const nearbyRadius = this.trafficMode ? 400 : 600
+    const targetCount = this.trafficMode ? 10 : 4
+    let totalNearby = 0
     for (const car of store.cars) {
-      if (car.longitude >= bounds.w && car.longitude <= bounds.e &&
-          car.latitude >= bounds.s && car.latitude <= bounds.n) {
-        totalInView++
-      }
+      const d = distance([this.playerLng, this.playerLat], [car.longitude, car.latitude], { units: 'meters' })
+      if (d < nearbyRadius) totalNearby++
     }
-    if (totalInView >= 2) return
+    if (totalNearby >= targetCount) return
 
-    const needed = 2 - totalInView
+    const needed = targetCount - totalNearby
+    const spawnDistMin = this.trafficMode ? 80 : 200
+    const spawnDistMax = this.trafficMode ? 350 : 400
+    const minCarDist = this.trafficMode ? 4 : 30
     for (let i = 0; i < needed; i++) {
-      for (let attempt = 0; attempt < 50; attempt++) {
-        const lng = bounds.w + Math.random() * (bounds.e - bounds.w)
-        const lat = bounds.s + Math.random() * (bounds.n - bounds.s)
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const angle = Math.random() * 2 * Math.PI
+        const dist = spawnDistMin + Math.random() * (spawnDistMax - spawnDistMin)
+        const dlat = (dist / 111320) * Math.cos(angle)
+        const dlng = (dist / (111320 * Math.cos(this.playerLat * Math.PI / 180))) * Math.sin(angle)
+        const lng = this.playerLng + dlng
+        const lat = this.playerLat + dlat
 
         if (this.mapEngine.isInsideBuilding(lng, lat)) continue
         if (!this.mapEngine.isOnRoad(lng, lat)) continue
 
-        const zoom = this.mapEngine.getCurrentZoom()
-        const minDist = 30 * Math.pow(2, 19 - zoom)
         let tooClose = false
         for (const car of store.cars) {
           const cd = distance([lng, lat], [car.longitude, car.latitude], { units: 'meters' })
-          if (cd < minDist) {
+          if (cd < minCarDist) {
             tooClose = true
             break
           }
@@ -382,9 +394,9 @@ export class PlayerController {
         if (tooClose) continue
 
         const id = `car-${this.nextCarId++}`
-        const angle = Math.random() * 2 * Math.PI
-        store.cars.push({ id, longitude: lng, latitude: lat, angle, fuel: 0.1 + Math.random() * 0.2 })
-        this.mapEngine.addCarMarker(id, lng, lat, angle)
+        const carAngle = Math.random() * 2 * Math.PI
+        store.cars.push({ id, longitude: lng, latitude: lat, angle: carAngle, fuel: 0.1 + Math.random() * 0.2 })
+        this.mapEngine.addCarMarker(id, lng, lat, carAngle)
         break
       }
     }
@@ -467,6 +479,9 @@ export class PlayerController {
     if (this.doorSlowTimer > 0) {
       this.doorSlowTimer = Math.max(0, this.doorSlowTimer - dt)
     }
+    if (this.doorDebounceTimer > 0) {
+      this.doorDebounceTimer = Math.max(0, this.doorDebounceTimer - dt)
+    }
 
     if (forward !== 0) {
       let bearing = this.playerAngle * 180 / Math.PI
@@ -481,12 +496,15 @@ export class PlayerController {
       const [newLng, newLat] = moved.geometry.coordinates
       const enteringBuilding = this.mapEngine.isInsideBuilding(newLng, newLat)
       if (enteringBuilding !== this.wasInsideBuilding) {
-        if (enteringBuilding) {
-          soundEngine.playDoorOpeningClosing()
-        } else {
-          soundEngine.playDoorClosing()
+        if (this.doorDebounceTimer <= 0) {
+          if (enteringBuilding) {
+            soundEngine.playDoorOpeningClosing()
+          } else {
+            soundEngine.playDoorClosing()
+          }
+          this.doorSlowTimer = DOOR_SLOW_DURATION
+          this.doorDebounceTimer = DOOR_DEBOUNCE
         }
-        this.doorSlowTimer = DOOR_SLOW_DURATION
         this.wasInsideBuilding = enteringBuilding
       }
       if (!this.mapEngine.isInsideBuilding2d(newLng, newLat)) {
@@ -528,7 +546,8 @@ export class PlayerController {
     this.wasBraking = isBraking
     const isReversing = forward < 0 && speed < 0.5
     if (isReversing) rotation = -rotation
-    const result = this.carPhysics.update(forward, rotation, dt, fuel, this.playerLng, this.playerLat, this.playerAngle)
+    const isOffroad = this.mapEngine.isOnOffroadSurface(this.playerLng, this.playerLat) || (!this.mapEngine.isOnRoad(this.playerLng, this.playerLat) && !this.mapEngine.hasBuilding3d(this.playerLng, this.playerLat))
+    const result = this.carPhysics.update(forward, rotation, dt, fuel, this.playerLng, this.playerLat, this.playerAngle, isOffroad)
     const newLng = result.lng
     const newLat = result.lat
 

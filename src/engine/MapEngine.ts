@@ -6,6 +6,7 @@ export class MapEngine {
   private map: maplibregl.Map | null = null
   private playerMarker: maplibregl.Marker | null = null
   private playerMarkerOuter: HTMLElement | null = null
+  private playerMarkerShadowWrap: HTMLElement | null = null
   private playerMarkerFlip: HTMLElement | null = null
   private playerMarkerFrameWrap: HTMLElement | null = null
   private playerMarkerImg: HTMLElement | null = null
@@ -167,6 +168,7 @@ export class MapEngine {
     shadowWrap.style.width = '100%'
     shadowWrap.style.height = '100%'
     shadowWrap.style.filter = 'drop-shadow(0 0 6px #0f0)'
+    this.playerMarkerShadowWrap = shadowWrap
 
     const flipWrap = document.createElement('div')
     flipWrap.style.width = '100%'
@@ -199,8 +201,7 @@ export class MapEngine {
       min-width:200px; max-width:280px;
       pointer-events:none; user-select:none;
       transition:opacity 0.4s; opacity:0;
-      box-shadow:0 2px 10px rgba(0,0,0,0.25);
-      z-index:200;
+      border:1px solid rgba(200,200,200,0.8); z-index:200;
     `
     const tail = document.createElement('div')
     tail.style.cssText = `
@@ -322,25 +323,18 @@ export class MapEngine {
     const store = useGameStore()
 
     for (const car of store.cars) {
-      let lng = car.longitude
-      let lat = car.latitude
-      let attempts = 0
-      while (!this.isValidSpawnPoint(lng, lat) && attempts < 20) {
-        const jitter = (Math.random() - 0.5) * 0.0006
-        lng = car.longitude + jitter
-        lat = car.latitude + jitter
-        attempts++
-      }
-      car.longitude = lng
-      car.latitude = lat
-
+      if (this.carMarkers.has(car.id)) continue
       const el = this.createCarImage(car.angle)
       const marker = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
-        .setLngLat([lng, lat])
+        .setLngLat([car.longitude, car.latitude])
         .addTo(this.map!)
       this.carMarkers.set(car.id, marker)
       this.carMarkerInners.set(car.id, el)
     }
+  }
+
+  refreshCarMarkers() {
+    this.addCarMarkers()
   }
 
   moveCarMarker(id: string, lng: number, lat: number) {
@@ -430,7 +424,7 @@ export class MapEngine {
   }
 
   setMapZoom(z: number) {
-    this.map?.flyTo({ zoom: z, duration: 600 })
+    this.map?.flyTo({ zoom: z, duration: 1500 })
   }
 
   getCurrentZoom(): number {
@@ -529,8 +523,8 @@ export class MapEngine {
   }
 
   setPlayerMarkerShadow(shadow: string) {
-    if (this.playerMarkerOuter) {
-      this.playerMarkerOuter.style.filter = `drop-shadow(0 0 6px ${shadow})`
+    if (this.playerMarkerShadowWrap) {
+      this.playerMarkerShadowWrap.style.filter = `drop-shadow(0 0 6px ${shadow})`
     }
   }
 
@@ -806,6 +800,22 @@ export class MapEngine {
     if (this.playerMarker) this.playerMarker.getElement().style.display = v
     if (this.shelterIconMarker) this.shelterIconMarker.getElement().style.display = v
     for (const c of this.carMarkers.values()) c.getElement().style.display = v
+  }
+
+  showBuildingDamageLabel(lng: number, lat: number, percent: number) {
+    if (!this.map) return
+    const el = document.createElement('div')
+    el.textContent = Math.round(percent * 100) + '%'
+    el.style.cssText = `
+      color:#f44; font-family:'Courier New',monospace;
+      font-size:1.2rem; font-weight:bold;
+      text-shadow:0 0 6px rgba(0,0,0,0.9);
+      pointer-events:none; user-select:none;
+      z-index:200;
+    `
+    new maplibregl.Marker({ element: el })
+      .setLngLat([lng, lat])
+      .addTo(this.map)
   }
 
   flyToEpicenter(lng: number, lat: number, cb: () => void) {

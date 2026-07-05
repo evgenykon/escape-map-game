@@ -70,7 +70,7 @@ export async function loadScenarioData(scenario: Scenario): Promise<void> {
         const cosLat = Math.cos(store.playerLatitude * Math.PI / 180)
         for (let i = 0; i < 12; i++) {
           const angle = Math.random() * 2 * Math.PI
-          const dist = 100 + Math.random() * 250
+          const dist = 15 + Math.random() * 65
           const dlat = (dist / M_PER_DEG) * Math.cos(angle)
           const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
           store.cars.push({

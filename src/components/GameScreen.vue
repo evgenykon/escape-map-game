@@ -16,6 +16,7 @@ const gameElapsed = ref(0)
 const totalTime = ref(0)
 const gameReady = ref(false)
 const deathReason = ref<'explosion' | 'collapse' | null>(null)
+const buildingDamagePercent = ref(0)
 const hudSms = ref<{ id: number; text: string; visible: boolean }[]>([])
 const showSplash = ref(false)
 const splashText = ref('')
@@ -130,7 +131,10 @@ onMounted(() => {
     spawnValidationTimeouts.push(setTimeout(validateSpawn, 2500))
     soundEngine.startCityNoiseLoop()
     startTimer()
-    setTimeout(() => { gameReady.value = true }, 1000)
+    setTimeout(() => {
+      mapEngine.refreshCarMarkers()
+      gameReady.value = true
+    }, 1000)
   })
 
   playerController = new PlayerController(mapEngine)
@@ -163,6 +167,8 @@ function fireEvent(entry: TimelineEvent) {
   } else if (entry.type === 'shelter') {
     store.shelterHudVisible = true
     mapEngine.assignShelterBuilding(store.playerLongitude, store.playerLatitude, entry.minM, entry.maxM)
+  } else if (entry.type === 'traffic') {
+    playerController.enableTrafficMode()
   }
 }
 
@@ -249,6 +255,7 @@ function triggerExplosion() {
   deathReason.value = null
 
   if (store.isInShelter) {
+    buildingDamagePercent.value = 0
     survived = true
   } else if (mapEngine.isInsideBuilding(pos.lng, pos.lat)) {
     let damage = 0
@@ -258,6 +265,7 @@ function triggerExplosion() {
       const t = (dist - blast) / (shockwave - blast)
       damage = 0.5 * (1 - t)
     }
+    buildingDamagePercent.value = damage
     if (Math.random() < damage) {
       survived = false
       deathReason.value = 'collapse'
@@ -265,10 +273,16 @@ function triggerExplosion() {
       survived = true
     }
   } else if (dist > shockwave) {
+    buildingDamagePercent.value = 0
     survived = true
   } else {
+    buildingDamagePercent.value = 0
     survived = false
     deathReason.value = 'explosion'
+  }
+
+  if (buildingDamagePercent.value > 0) {
+    mapEngine.showBuildingDamageLabel(pos.lng, pos.lat, buildingDamagePercent.value)
   }
 
   mapEngine.flyToEpicenter(store.epicenterLongitude, store.epicenterLatitude, () => {
@@ -360,10 +374,10 @@ function toggleMute() {
       </button>
 
       <div v-if="store.isInCar" class="hud-status status-car">
-        🚗 В машине
+        <span>🚗</span><span>В машине</span>
       </div>
       <div v-else class="hud-status" :class="surfaceDisplay.cssClass">
-        {{ surfaceDisplay.emoji }} {{ surfaceDisplay.label }}
+        <span>{{ surfaceDisplay.emoji }}</span><span>{{ surfaceDisplay.label }}</span>
       </div>
       <div v-if="store.isHacking" class="hack-bar">
         <div class="hack-bar-fill" :style="{ width: store.hackProgress * 100 + '%' }"></div>
@@ -374,6 +388,12 @@ function toggleMute() {
         <span>⛽ Топливо: {{ Math.round(currentFuel * 100) }}%</span>
       </div>
       <div v-if="store.isInCar" class="hud-speed">{{ carGear }} {{ formatSpeed(carSpeed) }}</div>
+    </div>
+
+    <div v-if="store.phase === 'explosion'" class="explosion-info">
+      <div>💥 Мощность: {{ store.explosionRadius }} м</div>
+      <div>Зона поражения: {{ ((Math.PI * store.explosionRadius ** 2) / 1e6).toFixed(1) }} км²</div>
+      <div>Зона ударной волны: {{ ((Math.PI * (store.explosionRadius * 12) ** 2) / 1e6).toFixed(1) }} км²</div>
     </div>
 
     <div v-if="store.shelterHudVisible" class="shelter-hud">
@@ -505,11 +525,21 @@ function toggleMute() {
 .hud-status {
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
-  padding: 0.35rem 0.8rem;
+  padding: 0.2rem 0.8rem;
   font-size: 0.85rem;
+  line-height: 1;
   border-radius: 6px;
   border-left: 4px solid #666;
   backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.hud-status span:first-child {
+  font-size: 0.7rem;
+}
+.hud-status span:last-child {
+  font-size: 1rem;
 }
 .status-car     { border-left-color: #48f; }
 .status-building { border-left-color: #f60; }
@@ -547,6 +577,7 @@ function toggleMute() {
   position: relative;
   background: rgba(0,0,0,0.8);
   border: 1px solid #48f;
+  border-radius: 6px;
   padding: 0.3rem;
   width: 200px;
   height: 2rem;
@@ -573,14 +604,15 @@ function toggleMute() {
   padding: 0.3rem 0.8rem;
   font-size: 1rem;
   border: 1px solid #0f0;
+  border-radius: 6px;
   text-align: center;
   font-family: 'Courier New', monospace;
   letter-spacing: 0.1rem;
 }
 .shelter-hud {
   position: absolute;
-  top: 0.5rem;
-  right: 3.5rem;
+  top: 3.5rem;
+  right: 0.5rem;
   z-index: 10;
   display: flex;
   align-items: center;
@@ -629,6 +661,20 @@ function toggleMute() {
   font-size: 0.8rem;
   letter-spacing: 0.03rem;
 }
+.explosion-info {
+  position: absolute;
+  top: 5rem;
+  left: 1rem;
+  z-index: 10;
+  background: rgba(0,0,0,0.7);
+  color: #f44;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid #f44;
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
 .sms-container {
   position: absolute;
   bottom: 2rem;
@@ -645,6 +691,7 @@ function toggleMute() {
   color: #ff0;
   padding: 0.75rem 1rem;
   border-left: 3px solid #ff0;
+  border-radius: 6px;
   font-family: 'Courier New', monospace;
   font-size: 0.85rem;
   line-height: 1.3;
