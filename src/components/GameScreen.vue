@@ -12,6 +12,7 @@ const store = useGameStore()
 const baseUrl = import.meta.env.BASE_URL
 const mapContainer = ref<HTMLDivElement>()
 const hudTimeLeft = ref(0)
+const gameElapsed = ref(0)
 const gameReady = ref(false)
 const hudSms = ref<{ id: number; text: string; visible: boolean }[]>([])
 const showSplash = ref(false)
@@ -49,9 +50,9 @@ let playerController: PlayerController
 let timerInterval: ReturnType<typeof setInterval>
 let shelterInterval: ReturnType<typeof setInterval>
 let carInfoInterval: ReturnType<typeof setInterval>
-const smsTimeouts: ReturnType<typeof setTimeout>[] = []
-const thoughtTimeouts: ReturnType<typeof setTimeout>[] = []
 const spawnValidationTimeouts: ReturnType<typeof setTimeout>[] = []
+const processedSms = new Set<number>()
+const processedThoughts = new Set<number>()
 
 const shelterHeading = ref(0)
 const shelterDist = ref(0)
@@ -129,8 +130,6 @@ onMounted(() => {
     spawnValidationTimeouts.push(setTimeout(validateSpawn, 2500))
     soundEngine.startCityNoiseLoop()
     startTimer()
-    scheduleSMS()
-    scheduleThoughts()
     setTimeout(() => { gameReady.value = true }, 1000)
   })
 
@@ -151,25 +150,64 @@ onUnmounted(() => {
   clearInterval(explosionTimer!)
   clearInterval(shelterInterval)
   clearInterval(carInfoInterval)
-  smsTimeouts.forEach(clearTimeout)
-  thoughtTimeouts.forEach(clearTimeout)
   spawnValidationTimeouts.forEach(clearTimeout)
   mapEngine?.destroy()
 })
 
-function debugSetTimer(sec: number) {
-  console.log('[debugSetTimer]', sec)
-  store.timeLeft = sec
-  hudTimeLeft.value = sec
+function debugAdvanceTimer() {
+  gameElapsed.value += 30
+  const total = store.timerMinutes * 60
+  store.timeLeft = Math.max(0, total - gameElapsed.value)
+  hudTimeLeft.value = store.timeLeft
+  for (let i = 0; i < smsTexts.value.length; i++) {
+    if (smsTexts.value[i].timeSec <= gameElapsed.value) processedSms.add(i)
+  }
+  for (let i = 0; i < thoughtTexts.value.length; i++) {
+    if (thoughtTexts.value[i].timeSec <= gameElapsed.value) processedThoughts.add(i)
+  }
+  if (store.timeLeft <= 0) {
+    if (timerInterval) clearInterval(timerInterval)
+    triggerExplosion()
+  }
 }
 
 function startTimer() {
   store.timeLeft = store.timerMinutes * 60
   hudTimeLeft.value = store.timeLeft
+  gameElapsed.value = 0
+  processedSms.clear()
+  processedThoughts.clear()
 
   timerInterval = setInterval(() => {
     store.timeLeft--
     hudTimeLeft.value = store.timeLeft
+    gameElapsed.value++
+
+    for (let i = 0; i < smsTexts.value.length; i++) {
+      if (processedSms.has(i)) continue
+      const entry = smsTexts.value[i]
+      if (entry.timeSec <= gameElapsed.value) {
+        processedSms.add(i)
+        showSMS(entry.text)
+        soundEngine.playIncomingMessage()
+        if (entry.triggerShelterHud) {
+          mapEngine.assignShelterBuilding(
+            store.playerLongitude,
+            store.playerLatitude,
+            1500, 2000
+          )
+        }
+      }
+    }
+
+    for (let i = 0; i < thoughtTexts.value.length; i++) {
+      if (processedThoughts.has(i)) continue
+      const entry = thoughtTexts.value[i]
+      if (entry.timeSec <= gameElapsed.value) {
+        processedThoughts.add(i)
+        mapEngine.setThought(entry.text)
+      }
+    }
 
     if (store.timeLeft === 30) {
       soundEngine.startNuclearDangerLoop()
@@ -184,36 +222,6 @@ function startTimer() {
       triggerExplosion()
     }
   }, 1000)
-}
-
-function scheduleSMS() {
-  const entries = smsTexts.value
-  if (entries.length === 0) return
-
-  for (const entry of entries) {
-    const delayMs = entry.timeSec * 1000
-    const id = setTimeout(() => {
-      if (store.phase !== 'playing') return
-      showSMS(entry.text)
-      soundEngine.playIncomingMessage()
-      if (entry.triggerShelterHud) store.shelterHudVisible = true
-    }, delayMs)
-    smsTimeouts.push(id)
-  }
-}
-
-function scheduleThoughts() {
-  const entries = thoughtTexts.value
-  if (entries.length === 0) return
-
-  for (const entry of entries) {
-    const delayMs = entry.timeSec * 1000
-    const id = setTimeout(() => {
-      if (store.phase !== 'playing') return
-      mapEngine.setThought(entry.text)
-    }, delayMs)
-    thoughtTimeouts.push(id)
-  }
 }
 
 function showSMS(text: string) {
@@ -318,8 +326,10 @@ function toggleMute() {
       <p class="loading-text">{{ store.loadingMessage }}</p>
     </div>
 
-    <div v-if="isDev" class="debug-panel" @click="debugSetTimer(15)">
+    <div v-if="isDev" class="debug-panel" @click="debugAdvanceTimer()">
       <div>{{ store.phase === 'explosion' ? '-' : '' }}{{ formatTime(hudTimeLeft) }}</div>
+      <div>{{ hudTimeLeft.toFixed(0) }} сек</div>
+      <div>+{{ gameElapsed }}с</div>
       <div>zoom: {{ debugZoom.toFixed(2) }}</div>
       <div>scale: {{ debugScale.toFixed(2) }}</div>
     </div>

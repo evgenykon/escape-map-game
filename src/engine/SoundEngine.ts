@@ -72,7 +72,7 @@ class SoundEngine {
   private volumes: Record<SoundKey, number> = {
     openingCarDoor: 1,
     engineStart: 1,
-    carDriven: 1,
+    carDriven: 0.5,
     carCrash: 1,
     engineBreakdown: 1,
     carBrake: 1,
@@ -86,7 +86,7 @@ class SoundEngine {
     hacking: 1,
     cityNoise1: 0.4,
     cityNoise2: 0.4,
-    nuclearDanger: 1,
+    nuclearDanger: 0.7,
   }
   private loops: Partial<Record<SoundKey, LoopHandle>> = {}
   private muted = false

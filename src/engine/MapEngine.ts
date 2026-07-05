@@ -19,6 +19,7 @@ export class MapEngine {
   private crosshairMarker: maplibregl.Marker | null = null
   private playerThoughtEl: HTMLElement | null = null
   private thoughtTimer: ReturnType<typeof setTimeout> | null = null
+  private shelterIconMarker: maplibregl.Marker | null = null
   private static readonly SHEET_W = 276
   private static readonly SHEET_H = 262
   private static readonly PERSON_X = 185
@@ -195,7 +196,7 @@ export class MapEngine {
       padding:6px 12px;
       border-radius:16px 16px 4px 16px;
       font-family:'Courier New',monospace; font-size:11px; line-height:1.3;
-      max-width:220px;
+      min-width:200px; max-width:280px;
       pointer-events:none; user-select:none;
       transition:opacity 0.4s; opacity:0;
       box-shadow:0 2px 10px rgba(0,0,0,0.25);
@@ -683,9 +684,120 @@ export class MapEngine {
     return null
   }
 
+  private findShelterBuilding(lng: number, lat: number, minM: number, maxM: number): { lng: number; lat: number } | null {
+    if (!this.map) return null
+    const M_PER_DEG = 111320
+    const cosLat = Math.cos(lat * Math.PI / 180)
+
+    const sourceFeatures = this.map.querySourceFeatures('openmaptiles', { sourceLayer: 'building' })
+    const candidates: { lng: number; lat: number }[] = []
+    for (const f of sourceFeatures) {
+      if (!f.geometry) continue
+      let rings: number[][] = []
+      if (f.geometry.type === 'Polygon') rings = f.geometry.coordinates[0]
+      else if (f.geometry.type === 'MultiPolygon') {
+        const first = f.geometry.coordinates[0]
+        if (first?.length) rings = first[0]
+      }
+      if (!rings.length) continue
+      let cx = 0, cy = 0, n = 0
+      for (const [x, y] of rings) {
+        cx += x; cy += y; n++
+      }
+      cx /= n; cy /= n
+      const dist = Math.sqrt(((cx - lng) * cosLat * M_PER_DEG) ** 2 + ((cy - lat) * M_PER_DEG) ** 2)
+      if (dist >= minM && dist <= maxM) candidates.push({ lng: cx, lat: cy })
+    }
+
+    if (candidates.length > 0) return candidates[Math.floor(Math.random() * candidates.length)]
+
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const angle = Math.random() * 2 * Math.PI
+      const dist = minM + Math.random() * (maxM - minM)
+      const dlat = (dist / M_PER_DEG) * Math.cos(angle)
+      const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
+      const clng = lng + dlng
+      const clat = lat + dlat
+      if (this.isInsideBuilding(clng, clat)) {
+        return { lng: clng, lat: clat }
+      }
+    }
+
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const angle = Math.random() * 2 * Math.PI
+      const dist = 100 + Math.random() * 300
+      const dlat = (dist / M_PER_DEG) * Math.cos(angle)
+      const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
+      const clng = lng + dlng
+      const clat = lat + dlat
+      if (this.isInsideBuilding(clng, clat)) {
+        return { lng: clng, lat: clat }
+      }
+    }
+
+    return null
+  }
+
+  assignShelterBuilding(playerLng: number, playerLat: number, minM: number, maxM: number): boolean {
+    if (!this.map) return false
+    const store = useGameStore()
+    const M_PER_DEG = 111320
+    const cosLat = Math.cos(playerLat * Math.PI / 180)
+
+    let building = this.findShelterBuilding(playerLng, playerLat, minM, maxM)
+    if (!building) {
+      const angle = Math.random() * 2 * Math.PI
+      const dist = minM + Math.random() * (maxM - minM)
+      const dlat = (dist / M_PER_DEG) * Math.cos(angle)
+      const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
+      building = { lng: playerLng + dlng, lat: playerLat + dlat }
+    }
+
+    if (store.shelters.length === 0) {
+      store.shelters.push({ id: 'shelter-evacuation', longitude: building.lng, latitude: building.lat })
+    } else {
+      store.shelters[0] = { id: 'shelter-evacuation', longitude: building.lng, latitude: building.lat }
+    }
+
+    const el = document.createElement('img')
+    el.src = import.meta.env.BASE_URL + 'icons/shelter.png'
+    el.style.width = '12px'
+    el.style.height = '12px'
+    el.style.zIndex = '90'
+    el.style.filter = 'drop-shadow(0 0 6px rgba(255,200,0,0.6))'
+
+    const marker = new maplibregl.Marker({ element: el })
+      .setLngLat([building.lng, building.lat])
+      .addTo(this.map!)
+    if (this.shelterIconMarker) this.shelterIconMarker.remove()
+    this.shelterIconMarker = marker
+
+    const zoneId = 'evacuation-zone'
+    if (!this.map.getSource(zoneId)) {
+      const polygon = circle([building.lng, building.lat], 0.05, { steps: 32, units: 'kilometers' })
+      this.map.addSource(zoneId, { type: 'geojson', data: polygon as GeoJSON.Feature })
+      this.map.addLayer({
+        id: 'evacuation-zone-fill',
+        type: 'fill',
+        source: zoneId,
+        paint: { 'fill-color': '#0f0', 'fill-opacity': 0.15 },
+      })
+      this.map.addLayer({
+        id: 'evacuation-zone-outline',
+        type: 'line',
+        source: zoneId,
+        paint: { 'line-color': '#0f0', 'line-opacity': 0.5, 'line-width': 2, 'line-dasharray': [4, 4] },
+      })
+    }
+
+    store.shelterHudVisible = true
+    return true
+  }
+
   setMarkersVisible(visible: boolean) {
     const v = visible ? '' : 'none'
     if (this.playerMarker) this.playerMarker.getElement().style.display = v
+    if (this.shelterIconMarker) this.shelterIconMarker.getElement().style.display = v
     for (const c of this.carMarkers.values()) c.getElement().style.display = v
   }
 
