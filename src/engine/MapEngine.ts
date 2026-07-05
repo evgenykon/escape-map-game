@@ -1276,7 +1276,7 @@ export class MapEngine {
     const tick = () => {
       if (!this.map) return
       const elapsed = performance.now() - start
-      const t = Math.min(elapsed / 1000, 1)
+      const t = Math.min(elapsed / 3000, 1)
       const radiusKm = maxRadiusKm * t
       const poly = circle([epicenterLng, epicenterLat], radiusKm, {
         steps: 64, units: 'kilometers',
