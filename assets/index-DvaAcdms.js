@@ -623,7 +623,7 @@ uniform ${E} ${A} u_${B};
       text-shadow:0 0 4px rgba(0,0,0,0.8);
       pointer-events:none; user-select:none;
       z-index:200;
-    `,this.buildingDamageMarker&&this.buildingDamageMarker.remove();const l=new zr.Marker({element:b}).setLngLat(M).addTo(this.map);this.buildingDamageMarker=l}removeBuildingDamageLabel(){this.buildingDamageMarker&&(this.buildingDamageMarker.remove(),this.buildingDamageMarker=null)}showExplosionInfoMarker(u,g,x){if(!this.map)return;this.explosionInfoMarker&&this.explosionInfoMarker.remove();const M=Ya([u,g],5,-90,{units:"meters"}).geometry.coordinates,b=document.createElement("div");b.textContent=x,b.style.cssText=`
+    `,this.buildingDamageMarker&&this.buildingDamageMarker.remove();const l=new zr.Marker({element:b}).setLngLat(M).addTo(this.map);this.buildingDamageMarker=l}removeBuildingDamageLabel(){this.buildingDamageMarker&&(this.buildingDamageMarker.remove(),this.buildingDamageMarker=null)}showExplosionInfoMarker(u,g,x){if(!this.map)return;this.explosionInfoMarker&&this.explosionInfoMarker.remove();const M=Ya([u,g],12,-90,{units:"meters"}).geometry.coordinates,b=document.createElement("div");b.textContent=x,b.style.cssText=`
       color:#fff; font-family:'Courier New',monospace;
       font-size:0.8rem; font-weight:bold;
       text-shadow:0 0 4px rgba(0,0,0,0.8);
