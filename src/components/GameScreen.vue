@@ -318,8 +318,11 @@ function checkGameResult() {
   clearInterval(explosionTimer!)
   clearInterval(shelterInterval)
   clearInterval(carInfoInterval)
+  hudSms.value = []
+  mapEngine.setThought(null)
   mapEngine.removeBuildingDamageLabel()
   mapEngine.removeExplosionInfoMarker()
+  soundEngine.stopAllLoops()
   if (deathReason.value === 'collapse' || deathReason.value === 'explosion') {
     store.phase = 'gameover'
   } else {
