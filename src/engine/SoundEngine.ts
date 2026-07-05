@@ -16,6 +16,7 @@ type SoundKey =
   | 'nuclearDanger'
   | 'doorOpeningClosing'
   | 'doorClosing'
+  | 'carFillingStation'
 
 const SOUND_PATHS: Record<SoundKey, string> = {
   openingCarDoor: `${import.meta.env.BASE_URL}sounds/opening-car-door.mp3`,
@@ -35,6 +36,7 @@ const SOUND_PATHS: Record<SoundKey, string> = {
   nuclearDanger: `${import.meta.env.BASE_URL}sounds/nuclear-danger.mp3`,
   doorOpeningClosing: `${import.meta.env.BASE_URL}sounds/door-opening-closing.mp3`,
   doorClosing: `${import.meta.env.BASE_URL}sounds/door-closing.mp3`,
+  carFillingStation: `${import.meta.env.BASE_URL}sounds/car-filling-station.mp3`,
 }
 
 const ONE_SHOT_KEYS: SoundKey[] = [
@@ -58,6 +60,7 @@ const LOOP_KEYS: SoundKey[] = [
   'hacking',
   'cityNoise1',
   'cityNoise2',
+  'carFillingStation',
 ]
 
 interface LoopHandle {
@@ -87,6 +90,7 @@ class SoundEngine {
     cityNoise1: 0.4,
     cityNoise2: 0.4,
     nuclearDanger: 0.7,
+    carFillingStation: 0.5,
   }
   private loops: Partial<Record<SoundKey, LoopHandle>> = {}
   private muted = false
@@ -200,6 +204,10 @@ class SoundEngine {
   startCarDrivenLoop(): void { this.startLoop('carDriven') }
   stopCarDrivenLoop(): void { this.stopLoop('carDriven') }
   setCarDrivenVolume(v: number): void { this.setVolume('carDriven', v) }
+  setCarDrivenRate(rate: number) {
+    const handle = this.loops['carDriven']
+    if (handle) handle.source.playbackRate.value = Math.max(0.3, Math.min(2, rate))
+  }
 
   startFootstepsWalkLoop(): void {
     if (this.muted) return
@@ -234,6 +242,9 @@ class SoundEngine {
     this.stopLoop('cityNoise1')
     this.stopLoop('cityNoise2')
   }
+
+  startCarFillingStationLoop(): void { this.startLoop('carFillingStation') }
+  stopCarFillingStationLoop(): void { this.stopLoop('carFillingStation') }
 
   stopAllLoops(): void {
     for (const key of LOOP_KEYS) this.stopLoop(key)

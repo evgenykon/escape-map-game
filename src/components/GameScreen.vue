@@ -362,6 +362,7 @@ function toggleMute() {
       <div>+{{ gameElapsed }}с</div>
       <div>cars: {{ store.cars.length }}</div>
       <div>zoom: {{ debugZoom.toFixed(2) }}</div>
+      <div>map: {{ ['close', 'medium', 'far'][store.mapMode] }}</div>
       <div>scale: {{ debugScale.toFixed(2) }}</div>
     </div>
 

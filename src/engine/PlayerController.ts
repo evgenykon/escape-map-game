@@ -42,13 +42,17 @@ export class PlayerController {
   private wasInsideBuilding = false
   private doorSlowTimer = 0
   private doorDebounceTimer = 0
-  private isMapMode = false
+  private mapMode: 0 | 1 | 2 = 0
   private wasFuelEmpty = false
   private lowFuelThoughtShown = false
   private lastCrashAt = 0
+  private lastBuildingCrashAt = 0
   private lastFrameState: 'idle' | 'walking' | 'running' | 'hacking' | 'swimming' | null = null
   private wasBraking = false
   private trafficMode = false
+  private refuelThoughtShown = false
+  private wasInFuelZone = false
+  private fuelStationScanTimer = 0
 
   constructor(mapEngine: MapEngine) {
     const store = useGameStore()
@@ -79,13 +83,23 @@ export class PlayerController {
     const code = e.code
     const key = code === 'ShiftLeft' || code === 'ShiftRight' ? 'shift' : code.replace('Key', '').toLowerCase()
     if (key === 'm') {
-      this.isMapMode = !this.isMapMode
-      this.mapEngine.setMapZoom(this.isMapMode ? 10 : 20)
-      this.mapEngine.setCarMarkersVisible(!this.isMapMode)
-      this.mapEngine.setMapModeCrosshair(this.isMapMode)
-      if (!this.isMapMode) {
-        const store = useGameStore()
+      const store = useGameStore()
+      const prevMode = this.mapMode
+      this.mapMode = ((this.mapMode + 1) % 3) as 0 | 1 | 2
+      store.mapMode = this.mapMode
+      if (this.mapMode === 0) {
+        this.mapEngine.setMapZoom(20)
+        this.mapEngine.setCarMarkersVisible(true)
+        this.mapEngine.setMapModeCrosshair(false)
         if (store.activeCarId) this.mapEngine.hideCarMarker(store.activeCarId)
+      } else if (this.mapMode === 1) {
+        this.mapEngine.setMapZoom(14)
+        this.mapEngine.setCarMarkersVisible(true)
+        this.mapEngine.setMapModeCrosshair(true)
+      } else {
+        this.mapEngine.setMapZoom(10)
+        this.mapEngine.setCarMarkersVisible(false)
+        this.mapEngine.setMapModeCrosshair(true)
       }
       return
     }
@@ -155,6 +169,7 @@ export class PlayerController {
     soundEngine.playEngineStart()
     soundEngine.startCarDrivenLoop()
     soundEngine.stopFootstepsLoop()
+    this.mapEngine.setFuelZonesVisible(true)
   }
 
   private startHack(car: Car) {
@@ -202,6 +217,7 @@ export class PlayerController {
     soundEngine.playEngineStart()
     soundEngine.startCarDrivenLoop()
     soundEngine.stopFootstepsLoop()
+    this.mapEngine.setFuelZonesVisible(true)
   }
 
   private exitCar() {
@@ -210,6 +226,8 @@ export class PlayerController {
     this.mapEngine.setPlayerMarkerShadow('#0f0')
     this.mapEngine.clearPlayerCarSprite()
     this.mapEngine.setPlayerCarMoving(false)
+    this.mapEngine.setFuelZonesVisible(false)
+    this.lastFrameState = null
 
     const exitPos = destination([this.playerLng, this.playerLat], 8, this.playerAngle * 180 / Math.PI, { units: 'meters' })
     this.playerLng = exitPos.geometry.coordinates[0]
@@ -288,11 +306,17 @@ export class PlayerController {
     if (this.keys.has('a')) rotation -= 1
     if (this.keys.has('d')) rotation += 1
 
+    if (this.mapMode !== 0) return
+
+    this.fuelStationScanTimer += dt
+    if (this.fuelStationScanTimer >= 5) {
+      this.fuelStationScanTimer = 0
+      this.mapEngine.scanAndAddFuelStations()
+    }
+
     this.updateProximityFeedback()
     this.updateHack(dt)
     this.carSpawnCheck(dt)
-
-    if (this.isMapMode) return
 
     const newFrameState: 'idle' | 'walking' | 'running' | 'hacking' | 'swimming' | null = store.isHacking
       ? 'hacking'
@@ -567,6 +591,13 @@ export class PlayerController {
 
     if (this.mapEngine.isInsideBuilding(newLng, newLat)) {
       this.carPhysics.setSpeed(0)
+      this.playerLng -= (newLng - this.playerLng) * 0.3
+      this.playerLat -= (newLat - this.playerLat) * 0.3
+      const now = performance.now()
+      if (now - this.lastBuildingCrashAt > 10000) {
+        this.lastBuildingCrashAt = now
+        soundEngine.playCarCrash()
+      }
     } else if (this.mapEngine.isOnWater(newLng, newLat)) {
       this.sinkPlayerCar()
     } else if (this.checkCarCollision(newLng, newLat, this.activeCarId!)) {
@@ -610,9 +641,27 @@ export class PlayerController {
           this.carPhysics.setSpeed(0)
         }
       }
+      const isStationary = Math.abs(this.carPhysics.getSpeed()) < 0.5
+      const inFuelZone = this.mapEngine.isInFuelZone(this.playerLng, this.playerLat)
+      const isRefueling = inFuelZone && isStationary && currentCar.fuel < 1.0
+      if (isRefueling) {
+        currentCar.fuel = Math.min(currentCar.fuel + 0.01 * dt, 1.0)
+        if (!this.refuelThoughtShown) {
+          this.refuelThoughtShown = true
+          this.mapEngine.setThought('Заправляюсь…')
+          soundEngine.startCarFillingStationLoop()
+        }
+      } else {
+        if (this.refuelThoughtShown) {
+          soundEngine.stopCarFillingStationLoop()
+        }
+        this.refuelThoughtShown = false
+      }
     }
     const finalSpeed = this.carPhysics.getSpeed()
     this.mapEngine.setPlayerCarMoving(finalSpeed > 0.5)
+    const speedRate = 0.6 + (Math.abs(finalSpeed) / 50) * 0.6
+    soundEngine.setCarDrivenRate(speedRate)
   }
 
   getCarSpeed(): number {

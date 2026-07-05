@@ -57,6 +57,7 @@ export const useGameStore = defineStore('game', () => {
   const playerDistFromEpicenter = ref(0)
   const shelterHudVisible = ref(false)
   const isMuted = ref(false)
+  const mapMode = ref(0)
 
   const cacheBustTag = 'bust-2026-07-02-19-45'
 
@@ -88,6 +89,7 @@ export const useGameStore = defineStore('game', () => {
     playerDistFromEpicenter,
     shelterHudVisible,
     isMuted,
+    mapMode,
     surfaceType,
     cacheBustTag,
   }

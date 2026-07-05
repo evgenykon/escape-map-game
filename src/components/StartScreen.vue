@@ -14,6 +14,8 @@ const showSpriteTable = ref(false)
 
 async function startGame() {
   if (!selectedId.value || isStarting.value) return
+  const entry = scenarioRegistry.find(s => s.meta.id === selectedId.value)
+  if (entry?.meta.disabled) return
   isStarting.value = true
   store.selectedScenarioId = selectedId.value
 
@@ -48,13 +50,15 @@ async function startGame() {
         <button
           v-for="entry in scenarioRegistry"
           :key="entry.meta.id"
-          :class="['scenario', { selected: selectedId === entry.meta.id }]"
-          @click="selectedId = entry.meta.id"
+          :class="['scenario', { selected: selectedId === entry.meta.id, disabled: entry.meta.disabled }]"
+          :disabled="entry.meta.disabled"
+          @click="entry.meta.disabled || (selectedId = entry.meta.id)"
         >
           <span v-if="entry.meta.icon" class="icon">{{ entry.meta.icon }}</span>
           <span class="text">
             <span class="scenario-title">{{ entry.meta.title }}</span>
             <span class="scenario-desc">{{ entry.meta.description }}</span>
+            <span v-if="entry.meta.comment" class="scenario-comment">{{ entry.meta.comment }}</span>
           </span>
         </button>
       </div>
@@ -139,6 +143,15 @@ async function startGame() {
   border-color: #f44;
   box-shadow: 0 0 12px rgba(255, 68, 68, 0.4);
 }
+.scenario.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+.scenario.disabled:hover {
+  background: #1a1a1a;
+  border-color: #333;
+}
 .icon {
   font-size: 2rem;
   line-height: 1;
@@ -156,6 +169,12 @@ async function startGame() {
   font-size: 0.8rem;
   opacity: 0.7;
   line-height: 1.3;
+}
+.scenario-comment {
+  font-size: 0.75rem;
+  color: #888;
+  font-style: italic;
+  margin-top: 0.15rem;
 }
 .start-btn {
   padding: 1rem 3rem;

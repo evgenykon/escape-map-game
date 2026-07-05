@@ -71,21 +71,6 @@ export async function loadScenarioData(scenario: Scenario): Promise<void> {
         store.epicenterLongitude = epicenter.longitude
 
         store.cars = []
-        const M_PER_DEG = 111320
-        const cosLat = Math.cos(store.playerLatitude * Math.PI / 180)
-        for (let i = 0; i < 12; i++) {
-          const angle = Math.random() * 2 * Math.PI
-          const dist = 30 + Math.random() * 100
-          const dlat = (dist / M_PER_DEG) * Math.cos(angle)
-          const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
-          store.cars.push({
-            id: `car-${i}`,
-            longitude: store.playerLongitude + dlng,
-            latitude: store.playerLatitude + dlat,
-            angle: Math.random() * 2 * Math.PI,
-            fuel: Math.random() * 0.3,
-          })
-        }
 
         resolve()
       }, step.delay)

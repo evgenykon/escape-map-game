@@ -17,6 +17,17 @@ export const scenarioRegistry: ScenarioEntry[] = [
     },
     loader: () => import('./nuclear').then(m => m.nuclearScenario),
   },
+  {
+    meta: {
+      id: 'military',
+      title: 'Военная зона',
+      description: 'Город оцеплен военными. Вы в тылу врага, нужно пересечь границу зоны, избегая патрулей.',
+      icon: '🔫',
+      disabled: true,
+      comment: 'Скоро…',
+    },
+    loader: () => import('./nuclear').then(m => m.nuclearScenario),
+  },
 ]
 
 export function findScenarioMeta(id: string): ScenarioMeta | undefined {

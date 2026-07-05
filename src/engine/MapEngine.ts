@@ -1,4 +1,4 @@
-import { circle } from '@turf/turf'
+import { circle, distance } from '@turf/turf'
 import maplibregl from 'maplibre-gl'
 import { useGameStore } from '@/stores/game'
 
@@ -23,6 +23,9 @@ export class MapEngine {
   private playerThoughtEl: HTMLElement | null = null
   private thoughtTimer: ReturnType<typeof setTimeout> | null = null
   private shelterIconMarker: maplibregl.Marker | null = null
+  private fuelStations: { lng: number; lat: number }[] = []
+  private static readonly FUEL_ZONE_RADIUS_M = 20
+  private initialCarsPlaced = false
   private static readonly SHEET_W = 276
   private static readonly SHEET_H = 262
   private static readonly PERSON_X = 185
@@ -98,7 +101,6 @@ export class MapEngine {
 
     this.map.on('load', () => {
       try { this.createPlayerMarker() } catch (e) { console.warn('player marker fail', e) }
-      try { this.addCarMarkers() } catch (e) { console.warn('car markers fail', e) }
       this.createCrosshairMarker()
       this.applyAllCarsZoom(this.map!.getZoom())
       this.onReadyCallback?.()
@@ -136,6 +138,7 @@ export class MapEngine {
 
     this.map.on('moveend', () => {
       if (this.map) this.applyAllCarsZoom(this.map.getZoom())
+      this.scanAndAddFuelStations()
     })
 
     this.map.on('styleimagemissing', (e) => {
@@ -376,22 +379,6 @@ export class MapEngine {
 
     for (const car of store.cars) {
       if (this.carMarkers.has(car.id)) continue
-      let lng = car.longitude
-      let lat = car.latitude
-      let attempts = 0
-      while (attempts < 20) {
-        let valid = true
-        try {
-          valid = this.isValidSpawnPoint(lng, lat) && !this.isOnOffroadSurface(lng, lat)
-        } catch {}
-        if (valid) break
-        const jitter = (Math.random() - 0.5) * 0.0006
-        lng = car.longitude + jitter
-        lat = car.latitude + jitter
-        attempts++
-      }
-      car.longitude = lng
-      car.latitude = lat
       const carSprite = MapEngine.CAR_SPRITES[Math.floor(Math.random() * MapEngine.CAR_SPRITES.length)]
       const { outer, inner } = this.createCarImage(car.angle, carSprite)
       inner.dataset.spriteUrl = carSprite.url
@@ -399,7 +386,7 @@ export class MapEngine {
       inner.dataset.spriteH = String(carSprite.h)
       inner.dataset.spriteCount = String(carSprite.count)
       const marker = new maplibregl.Marker({ element: outer, rotationAlignment: 'map' })
-        .setLngLat([lng, lat])
+        .setLngLat([car.longitude, car.latitude])
         .addTo(this.map!)
       this.carMarkers.set(car.id, marker)
       this.carMarkerInners.set(car.id, inner)
@@ -407,33 +394,76 @@ export class MapEngine {
   }
 
   refreshCarMarkers() {
+    if (!this.map) return
     const store = useGameStore()
-    for (const car of store.cars) {
-      let lng = car.longitude
-      let lat = car.latitude
-      let needMove = false
-      try {
-        needMove = !this.isValidSpawnPoint(lng, lat) || this.isOnOffroadSurface(lng, lat)
-      } catch {}
-      if (needMove) {
-        let attempts = 0
-        while (attempts < 20) {
-          let valid = true
-          try {
-            valid = this.isValidSpawnPoint(lng, lat) && !this.isOnOffroadSurface(lng, lat)
-          } catch {}
-          if (valid) break
-          const jitter = (Math.random() - 0.5) * 0.0006
-          lng = car.longitude + jitter
-          lat = car.latitude + jitter
-          attempts++
+    const M_PER_DEG = 111320
+    const cosLat = Math.cos(store.playerLatitude * Math.PI / 180)
+
+    if (!this.initialCarsPlaced) {
+      this.initialCarsPlaced = true
+      for (let i = 0; i < 12; i++) {
+        let placed = false
+        for (let pass = 0; pass < 2 && !placed; pass++) {
+          for (let attempt = 0; attempt < 60; attempt++) {
+            const angle = Math.random() * 2 * Math.PI
+            const dist = 30 + Math.random() * 150
+            const dlat = (dist / M_PER_DEG) * Math.cos(angle)
+            const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
+            const lng = store.playerLongitude + dlng
+            const lat = store.playerLatitude + dlat
+            try {
+              if (this.isInsideBuilding(lng, lat)) continue
+              if (this.isOnOffroadSurface(lng, lat)) continue
+              if (pass === 0 && !this.isOnRoad(lng, lat) && this._hasAnyFeature(lng, lat)) continue
+            } catch { continue }
+            store.cars.push({
+              id: `car-${i}`,
+              longitude: lng,
+              latitude: lat,
+              angle: Math.random() * 2 * Math.PI,
+              fuel: Math.random() * 0.3,
+            })
+            placed = true
+            break
+          }
         }
-        car.longitude = lng
-        car.latitude = lat
-        const marker = this.carMarkers.get(car.id)
-        if (marker) marker.setLngLat([lng, lat])
       }
     }
+
+    for (const car of store.cars) {
+      let needMove = false
+      try {
+        needMove = !this.isValidSpawnPoint(car.longitude, car.latitude) || this.isOnOffroadSurface(car.longitude, car.latitude)
+      } catch {}
+      if (!needMove) continue
+
+      let placed = false
+      const originLng = store.playerLongitude
+      const originLat = store.playerLatitude
+      for (let pass = 0; pass < 2 && !placed; pass++) {
+        for (let attempt = 0; attempt < 60; attempt++) {
+          const angle = Math.random() * 2 * Math.PI
+          const dist = 30 + Math.random() * 200
+          const dlat = (dist / M_PER_DEG) * Math.cos(angle)
+          const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
+          const lng = originLng + dlng
+          const lat = originLat + dlat
+          try {
+            if (this.isInsideBuilding(lng, lat)) continue
+            if (this.isOnOffroadSurface(lng, lat)) continue
+            if (pass === 0 && !this.isOnRoad(lng, lat) && this._hasAnyFeature(lng, lat)) continue
+          } catch { continue }
+          car.longitude = lng
+          car.latitude = lat
+          const marker = this.carMarkers.get(car.id)
+          if (marker) marker.setLngLat([lng, lat])
+          placed = true
+          break
+        }
+      }
+    }
+    this.addCarMarkers()
+    this.findAndPlaceFuelStations()
     this.addCarMarkers()
     if (this.map) this.applyAllCarsZoom(this.map.getZoom())
   }
@@ -720,7 +750,7 @@ export class MapEngine {
     return features.some(f => {
       if (!f.layer) return false
       const id = f.layer.id
-      return id.startsWith('road_') || id.startsWith('tunnel_') || id.startsWith('bridge_') || id.startsWith('highway-') || id.includes('crossing')
+      return id.startsWith('road') || id.startsWith('tunnel') || id.startsWith('bridge') || id.startsWith('highway-') || id.includes('crossing') || id.startsWith('transportation_')
     })
   }
 
@@ -736,6 +766,14 @@ export class MapEngine {
       return id.startsWith('landcover_grass') || cls === 'grass'
           || id.startsWith('landcover_wood') || cls === 'wood'
     })
+  }
+
+  private _hasAnyFeature(lng: number, lat: number): boolean {
+    if (!this.map) return false
+    const pt = this.map.project([lng, lat])
+    const r = 12
+    const features = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
+    return features.length > 0
   }
 
   isOnWater(lng: number, lat: number): boolean {
@@ -934,6 +972,167 @@ export class MapEngine {
     }
 
     store.shelterHudVisible = true
+  }
+
+  private _placeFuelZones() {
+    if (!this.map || this.fuelStations.length === 0) return
+    const zoneId = 'fuel-zone'
+    if (this.map.getLayer('fuel-zone-fill')) this.map.removeLayer('fuel-zone-fill')
+    if (this.map.getLayer('fuel-zone-outline')) this.map.removeLayer('fuel-zone-outline')
+    if (this.map.getSource(zoneId)) this.map.removeSource(zoneId)
+
+    const polygons: GeoJSON.Polygon[] = []
+    for (const s of this.fuelStations) {
+      const polygon = circle([s.lng, s.lat], MapEngine.FUEL_ZONE_RADIUS_M / 1000, { steps: 24, units: 'kilometers' })
+      polygons.push(polygon.geometry as GeoJSON.Polygon)
+    }
+
+    this.map.addSource(zoneId, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: polygons.map(p => ({ type: 'Feature', geometry: p, properties: {} })) },
+    })
+    this.map.addLayer({
+      id: 'fuel-zone-fill',
+      type: 'fill',
+      source: zoneId,
+      paint: { 'fill-color': '#9b59b6', 'fill-opacity': 0.2 },
+    })
+    this.map.addLayer({
+      id: 'fuel-zone-outline',
+      type: 'line',
+      source: zoneId,
+      paint: { 'line-color': '#9b59b6', 'line-opacity': 0.5, 'line-width': 2, 'line-dasharray': [4, 4] },
+    })
+  }
+
+  private _scanFuelStations(): { lng: number; lat: number }[] {
+    if (!this.map) return []
+    const found: { lng: number; lat: number }[] = []
+    const store = useGameStore()
+    const pt = this.map.project([store.playerLongitude, store.playerLatitude])
+    const r = 500
+    const features = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]]) as any[]
+    for (const f of features) {
+      if (f.properties?.class === 'fuel' && f.geometry?.type === 'Point') {
+        const coords = (f.geometry as GeoJSON.Point).coordinates
+        const existing = found.find(s => Math.abs(s.lng - coords[0]) < 0.0001 && Math.abs(s.lat - coords[1]) < 0.0001)
+        if (!existing) found.push({ lng: coords[0], lat: coords[1] })
+      }
+    }
+    return found
+  }
+
+  private _updateFuelZonesSource() {
+    if (!this.map) return
+    const zoneId = 'fuel-zone'
+    const polygons: GeoJSON.Polygon[] = []
+    for (const s of this.fuelStations) {
+      const polygon = circle([s.lng, s.lat], MapEngine.FUEL_ZONE_RADIUS_M / 1000, { steps: 24, units: 'kilometers' })
+      polygons.push(polygon.geometry as GeoJSON.Polygon)
+    }
+    const src = this.map.getSource(zoneId) as any
+    if (src) {
+      src.setData({ type: 'FeatureCollection', features: polygons.map(p => ({ type: 'Feature', geometry: p, properties: {} })) })
+    }
+  }
+
+  private _spawnFuelStationCars(station: { lng: number; lat: number }, store: ReturnType<typeof useGameStore>) {
+    for (let i = 0; i < 4; i++) {
+      const angle = Math.random() * 2 * Math.PI
+      const dist = 3 + Math.random() * 10
+      const M_PER_DEG = 111320
+      const cosLat = Math.cos(station.lat * Math.PI / 180)
+      const dlat = (dist / M_PER_DEG) * Math.cos(angle)
+      const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
+      const carLng = station.lng + dlng
+      const carLat = station.lat + dlat
+      if (this.isInsideBuilding(carLng, carLat)) continue
+      const id = `fuel-${station.lng}-${station.lat}-${i}`
+      const existing = store.cars.find(c => c.id === id)
+      if (!existing) {
+        store.cars.push({
+          id,
+          longitude: carLng,
+          latitude: carLat,
+          angle: Math.random() * 2 * Math.PI,
+          fuel: 0,
+        })
+      }
+    }
+  }
+
+  scanAndAddFuelStations() {
+    const newStations = this._scanFuelStations()
+    const reallyNew: { lng: number; lat: number }[] = []
+    for (const s of newStations) {
+      const existing = this.fuelStations.find(e => Math.abs(e.lng - s.lng) < 0.0001 && Math.abs(e.lat - s.lat) < 0.0001)
+      if (!existing) {
+        this.fuelStations.push(s)
+        reallyNew.push(s)
+      }
+    }
+    if (reallyNew.length === 0) return
+    const store = useGameStore()
+    for (const s of reallyNew) {
+      this._spawnFuelStationCars(s, store)
+    }
+    const zoneId = 'fuel-zone'
+    if (this.map && this.map.getSource(zoneId)) {
+      this._updateFuelZonesSource()
+    } else {
+      this._placeFuelZones()
+    }
+  }
+
+  findAndPlaceFuelStations() {
+    if (!this.map) return
+    const store = useGameStore()
+    this.fuelStations = this._scanFuelStations()
+    if (this.fuelStations.length === 0) {
+      const style = this.map.getStyle()
+      const layerDef = style.layers?.find(l => l.id === 'poi_r1') as any
+      if (layerDef?.source && layerDef?.['source-layer']) {
+        const features = this.map.querySourceFeatures(layerDef.source, { sourceLayer: layerDef['source-layer'] }) as any[]
+        for (const f of features) {
+          if (f.properties?.class === 'fuel' && f.geometry?.type === 'Point') {
+            const coords = (f.geometry as GeoJSON.Point).coordinates
+            const existing = this.fuelStations.find(s => Math.abs(s.lng - coords[0]) < 0.0001 && Math.abs(s.lat - coords[1]) < 0.0001)
+            if (!existing) this.fuelStations.push({ lng: coords[0], lat: coords[1] })
+          }
+        }
+      }
+    }
+    this.fuelStations = this.fuelStations.filter((s, i, arr) => i === arr.findIndex(e => Math.abs(e.lng - s.lng) < 0.0001 && Math.abs(e.lat - s.lat) < 0.0001))
+    if (this.fuelStations.length === 0) return
+    this._placeFuelZones()
+    for (const station of this.fuelStations) {
+      this._spawnFuelStationCars(station, store)
+    }
+  }
+
+  isInFuelZone(lng: number, lat: number): boolean {
+    for (const s of this.fuelStations) {
+      const d = distance([lng, lat], [s.lng, s.lat], { units: 'meters' })
+      if (d < MapEngine.FUEL_ZONE_RADIUS_M) return true
+    }
+    return false
+  }
+
+  setFuelZonesVisible(visible: boolean) {
+    if (!this.map) return
+    const opacity = visible ? 0.2 : 0
+    const lineOpacity = visible ? 0.5 : 0
+    if (this.map.getLayer('fuel-zone-fill')) this.map.setPaintProperty('fuel-zone-fill', 'fill-opacity', opacity)
+    if (this.map.getLayer('fuel-zone-outline')) this.map.setPaintProperty('fuel-zone-outline', 'line-opacity', lineOpacity)
+  }
+
+  clearFuelZones() {
+    this.fuelStations = []
+    if (!this.map) return
+    const zoneId = 'fuel-zone'
+    if (this.map.getLayer('fuel-zone-fill')) this.map.removeLayer('fuel-zone-fill')
+    if (this.map.getLayer('fuel-zone-outline')) this.map.removeLayer('fuel-zone-outline')
+    if (this.map.getSource(zoneId)) this.map.removeSource(zoneId)
   }
 
   setMarkersVisible(visible: boolean) {

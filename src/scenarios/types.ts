@@ -5,6 +5,8 @@ export interface ScenarioConfig {
   title: string
   description: string
   icon?: string
+  disabled?: boolean
+  comment?: string
 }
 
 export interface EpicenterSpec {
