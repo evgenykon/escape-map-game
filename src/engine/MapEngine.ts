@@ -1202,7 +1202,7 @@ export class MapEngine {
   showExplosionInfoMarker(lng: number, lat: number, text: string) {
     if (!this.map) return
     if (this.explosionInfoMarker) this.explosionInfoMarker.remove()
-    const dest = destination([lng, lat], 12, -90, { units: 'meters' })
+    const dest = destination([lng, lat], 12, 0, { units: 'meters' })
     const pos = dest.geometry.coordinates as [number, number]
     const el = document.createElement('div')
     el.textContent = text
