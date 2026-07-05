@@ -240,6 +240,8 @@ let explosionTimer: ReturnType<typeof setInterval> | null = null
 function triggerExplosion() {
   if (store.phase !== 'playing') return
   mapEngine.setMarkersVisible(false)
+  store.cars.forEach(c => mapEngine.removeCarMarker(c.id))
+  store.cars = []
   playerController.stop()
   soundEngine.stopAllLoops()
 
