@@ -1015,8 +1015,8 @@ export class MapEngine {
     for (const f of features) {
       if (f.properties?.class === 'fuel' && f.geometry?.type === 'Point') {
         const coords = (f.geometry as GeoJSON.Point).coordinates
-        const existing = found.find(s => Math.abs(s.lng - coords[0]) < 0.0001 && Math.abs(s.lat - coords[1]) < 0.0001)
-        if (!existing) found.push({ lng: coords[0], lat: coords[1] })
+        const tooClose = found.some(s => distance([s.lng, s.lat], coords, { units: 'meters' }) < MapEngine.FUEL_ZONE_RADIUS_M * 2)
+        if (!tooClose) found.push({ lng: coords[0], lat: coords[1] })
       }
     }
     return found
@@ -1038,25 +1038,30 @@ export class MapEngine {
 
   private _spawnFuelStationCars(station: { lng: number; lat: number }, store: ReturnType<typeof useGameStore>) {
     for (let i = 0; i < 4; i++) {
-      const angle = Math.random() * 2 * Math.PI
-      const dist = 3 + Math.random() * 10
-      const M_PER_DEG = 111320
-      const cosLat = Math.cos(station.lat * Math.PI / 180)
-      const dlat = (dist / M_PER_DEG) * Math.cos(angle)
-      const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
-      const carLng = station.lng + dlng
-      const carLat = station.lat + dlat
       const id = `fuel-${station.lng}-${station.lat}-${i}`
       const existingCar = store.cars.find(c => c.id === id)
       if (existingCar) continue
-      store.cars.push({
-        id,
-        longitude: carLng,
-        latitude: carLat,
-        angle: Math.random() * 2 * Math.PI,
-        fuel: 0,
-      })
-      this.addCarMarker(id, carLng, carLat, Math.random() * 2 * Math.PI)
+      let placed = false
+      for (let attempt = 0; attempt < 10 && !placed; attempt++) {
+        const angle = Math.random() * 2 * Math.PI
+        const dist = 5 + Math.random() * 15
+        const M_PER_DEG = 111320
+        const cosLat = Math.cos(station.lat * Math.PI / 180)
+        const dlat = (dist / M_PER_DEG) * Math.cos(angle)
+        const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
+        const carLng = station.lng + dlng
+        const carLat = station.lat + dlat
+        if (this.isInsideBuilding(carLng, carLat)) continue
+        store.cars.push({
+          id,
+          longitude: carLng,
+          latitude: carLat,
+          angle: Math.random() * 2 * Math.PI,
+          fuel: 0,
+        })
+        this.addCarMarker(id, carLng, carLat, Math.random() * 2 * Math.PI)
+        placed = true
+      }
     }
   }
 
@@ -1064,7 +1069,7 @@ export class MapEngine {
     const newStations = this._scanFuelStations(playerLng, playerLat)
     const reallyNew: { lng: number; lat: number }[] = []
     for (const s of newStations) {
-      const existing = this.fuelStations.find(e => Math.abs(e.lng - s.lng) < 0.0001 && Math.abs(e.lat - s.lat) < 0.0001)
+      const existing = this.fuelStations.find(e => distance([e.lng, e.lat], [s.lng, s.lat], { units: 'meters' }) < MapEngine.FUEL_ZONE_RADIUS_M * 2)
       if (!existing) {
         this.fuelStations.push(s)
         reallyNew.push(s)

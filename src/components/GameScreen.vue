@@ -166,7 +166,8 @@ function fireEvent(entry: TimelineEvent) {
     mapEngine.setThought(entry.texts[Math.floor(Math.random() * entry.texts.length)])
   } else if (entry.type === 'shelter') {
     store.shelterHudVisible = true
-    mapEngine.assignShelterBuilding(store.playerLongitude, store.playerLatitude, entry.minM, entry.maxM)
+    const pos = playerController.getPosition()
+    mapEngine.assignShelterBuilding(pos.lng, pos.lat, entry.minM, entry.maxM)
   } else if (entry.type === 'traffic') {
     playerController.enableTrafficMode()
   }

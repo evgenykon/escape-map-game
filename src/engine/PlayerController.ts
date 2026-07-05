@@ -249,8 +249,10 @@ export class PlayerController {
     }
     store.isInCar = false
     soundEngine.stopCarDrivenLoop()
+    soundEngine.stopCarFillingStationLoop()
     soundEngine.playOpeningCarDoor()
     this.lowFuelThoughtShown = false
+    this.refuelThoughtShown = false
   }
 
   private findNearbyCar(): Car | null {
