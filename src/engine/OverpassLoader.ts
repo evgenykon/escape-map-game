@@ -36,6 +36,11 @@ async function preloadSprites(): Promise<void> {
     preloadSprite(`${baseUrl}sprites/player-idle.png`),
     preloadSprite(`${baseUrl}sprites/player-walking.png`),
     preloadSprite(`${baseUrl}sprites/player-hacking.png`),
+    preloadSprite(`${baseUrl}sprites/player_swimming.png`),
+    preloadSprite(`${baseUrl}sprites/dead.png`),
+    preloadSprite(`${baseUrl}sprites/car-red.png`),
+    preloadSprite(`${baseUrl}sprites/car-blue.png`),
+    preloadSprite(`${baseUrl}sprites/car-green.png`),
   ])
 }
 
@@ -70,7 +75,7 @@ export async function loadScenarioData(scenario: Scenario): Promise<void> {
         const cosLat = Math.cos(store.playerLatitude * Math.PI / 180)
         for (let i = 0; i < 12; i++) {
           const angle = Math.random() * 2 * Math.PI
-          const dist = 15 + Math.random() * 65
+          const dist = 30 + Math.random() * 100
           const dlat = (dist / M_PER_DEG) * Math.cos(angle)
           const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
           store.cars.push({
@@ -78,7 +83,7 @@ export async function loadScenarioData(scenario: Scenario): Promise<void> {
             longitude: store.playerLongitude + dlng,
             latitude: store.playerLatitude + dlat,
             angle: Math.random() * 2 * Math.PI,
-            fuel: 0.1 + Math.random() * 0.2,
+            fuel: Math.random() * 0.3,
           })
         }
 

@@ -15,6 +15,8 @@ export class MapEngine {
   private playerBaseW = 22
   private playerBaseH = 28
   private playerIsCar = false
+  private playerCarSpriteData: { url: string; w: number; h: number; count: number; duration: number } | null = null
+  private playerCarFrameH = 0
   private onReadyCallback?: () => void
   private targetZoom: number | null = null
   private crosshairMarker: maplibregl.Marker | null = null
@@ -49,6 +51,10 @@ export class MapEngine {
   private static readonly PLAYER_HACK = { url: 'sprites/player-hacking.png', w: 48, h: 48, count: 4, duration: 1 }
   private static readonly PLAYER_DEAD = { url: 'sprites/dead.png', w: 32, h: 32, count: 1, duration: 0 }
   private static readonly PLAYER_SWIM = { url: 'sprites/player_swimming.png', w: 48, h: 48, count: 7, duration: 0.8 }
+  private static readonly CAR_RED = { url: 'sprites/car-red.png', w: 120, h: 180, count: 11, duration: 0.8 }
+  private static readonly CAR_BLUE = { url: 'sprites/car-blue.png', w: 120, h: 180, count: 11, duration: 0.8 }
+  private static readonly CAR_GREEN = { url: 'sprites/car-green.png', w: 120, h: 180, count: 11, duration: 0.8 }
+  private static readonly CAR_SPRITES = [MapEngine.CAR_RED, MapEngine.CAR_BLUE, MapEngine.CAR_GREEN]
 
   private playerAnimState: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' | 'swimming' = 'idle'
 
@@ -91,8 +97,8 @@ export class MapEngine {
     this.map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: false }), 'top-right')
 
     this.map.on('load', () => {
-      try { this.addCarMarkers() } catch (e) { console.warn('car markers fail', e) }
       try { this.createPlayerMarker() } catch (e) { console.warn('player marker fail', e) }
+      try { this.addCarMarkers() } catch (e) { console.warn('car markers fail', e) }
       this.createCrosshairMarker()
       this.applyAllCarsZoom(this.map!.getZoom())
       this.onReadyCallback?.()
@@ -196,7 +202,7 @@ export class MapEngine {
       margin:0 12px 10px 0;
       background:rgba(255,255,255,0.95); color:#111;
       padding:6px 12px;
-      border-radius:16px 16px 4px 16px;
+      border-radius:6px;
       font-family:'Courier New',monospace; font-size:11px; line-height:1.3;
       min-width:200px; max-width:280px;
       pointer-events:none; user-select:none;
@@ -205,11 +211,14 @@ export class MapEngine {
     `
     const tail = document.createElement('div')
     tail.style.cssText = `
-      position:absolute; bottom:-5px; right:10px;
-      width:10px; height:10px;
+      position:absolute; top:-4px; left:50%;
+      margin-left:-4px;
+      width:8px; height:8px;
       background:rgba(255,255,255,0.95);
+      border-left:1px solid rgba(200,200,200,0.8);
+      border-top:1px solid rgba(200,200,200,0.8);
       transform:rotate(45deg);
-      border-radius:2px;
+      border-radius:1px;
     `
     thoughtEl.appendChild(tail)
     el.appendChild(thoughtEl)
@@ -284,17 +293,39 @@ export class MapEngine {
     }, 4000)
   }
 
-  private createCarImage(angle?: number): HTMLElement {
-    const el = document.createElement('div')
-    el.style.width = '26px'
-    el.style.height = '38px'
-    el.style.overflow = 'hidden'
-    el.style.filter = 'drop-shadow(0 0 6px #48f)'
+  private createCarImage(angle?: number, carSprite?: { url: string; w: number; h: number; count: number; duration: number }): { outer: HTMLElement; inner: HTMLElement } {
+    const frame = carSprite ?? MapEngine.CAR_RED
+    const outer = document.createElement('div')
+    outer.style.width = '36px'
+    outer.style.height = '53px'
+
+    const inner = document.createElement('div')
+    inner.style.width = '100%'
+    inner.style.height = '100%'
+    inner.style.overflow = 'hidden'
+    inner.style.filter = 'drop-shadow(0 0 6px #48f)'
     if (angle !== undefined) {
-      el.style.transform = `rotate(${angle}rad)`
+      inner.style.transform = `rotate(${angle}rad)`
     }
-    this.applyCarCellBackground(el, 26, 38)
-    return el
+
+    const frameWrap = document.createElement('div')
+    frameWrap.style.width = '100%'
+    frameWrap.style.overflow = 'hidden'
+    frameWrap.style.position = 'relative'
+
+    const sprite = document.createElement('div')
+    sprite.style.width = '100%'
+    sprite.style.backgroundImage = `url(${import.meta.env.BASE_URL}${frame.url})`
+    sprite.style.backgroundRepeat = 'no-repeat'
+    sprite.style.backgroundPosition = '0 0'
+    sprite.style.position = 'absolute'
+    sprite.style.top = '0'
+    sprite.style.left = '0'
+
+    frameWrap.appendChild(sprite)
+    inner.appendChild(frameWrap)
+    outer.appendChild(inner)
+    return { outer, inner }
   }
 
   private applyCarCellBackground(el: HTMLElement, boxW: number, boxH: number) {
@@ -309,13 +340,34 @@ export class MapEngine {
   private applyAllCarsZoom(zoom: number) {
     const natural = MapEngine.getScale(zoom)
     const scale = Math.max(0.5, natural - 0.2)
-    const w = Math.round(26 * scale)
-    const h = Math.round(38 * scale)
+    const boxW = Math.round(36 * scale)
+    const boxH = Math.round(53 * scale)
+
     for (const marker of this.carMarkers.values()) {
-      const el = marker.getElement()
-      el.style.width = w + 'px'
-      el.style.height = h + 'px'
-      this.applyCarCellBackground(el, w, h)
+      marker.getElement().style.width = boxW + 'px'
+      marker.getElement().style.height = boxH + 'px'
+    }
+    for (const inner of this.carMarkerInners.values()) {
+      const sW = inner.dataset.spriteW ? Number(inner.dataset.spriteW) : 120
+      const sH = inner.dataset.spriteH ? Number(inner.dataset.spriteH) : 180
+      const sCount = inner.dataset.spriteCount ? Number(inner.dataset.spriteCount) : 11
+      const sUrl = inner.dataset.spriteUrl ?? MapEngine.CAR_RED.url
+
+      inner.style.width = boxW + 'px'
+      inner.style.height = boxH + 'px'
+      const frameWrap = inner.firstElementChild as HTMLElement | null
+      if (frameWrap) {
+        const s = Math.min(boxW / sW, boxH / sH)
+        const frameH = sH * s
+        frameWrap.style.height = `${(frameH - 2).toFixed(2)}px`
+        const sprite = frameWrap.firstElementChild as HTMLElement | null
+        if (sprite) {
+          sprite.style.backgroundImage = `url(${import.meta.env.BASE_URL}${sUrl})`
+          sprite.style.backgroundSize = `${(sW * s).toFixed(2)}px ${(sH * sCount * s).toFixed(2)}px`
+          sprite.style.width = `${(sW * s).toFixed(2)}px`
+          sprite.style.height = `${(sH * sCount * s).toFixed(2)}px`
+        }
+      }
     }
   }
 
@@ -324,17 +376,66 @@ export class MapEngine {
 
     for (const car of store.cars) {
       if (this.carMarkers.has(car.id)) continue
-      const el = this.createCarImage(car.angle)
-      const marker = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
-        .setLngLat([car.longitude, car.latitude])
+      let lng = car.longitude
+      let lat = car.latitude
+      let attempts = 0
+      while (attempts < 20) {
+        let valid = true
+        try {
+          valid = this.isValidSpawnPoint(lng, lat) && !this.isOnOffroadSurface(lng, lat)
+        } catch {}
+        if (valid) break
+        const jitter = (Math.random() - 0.5) * 0.0006
+        lng = car.longitude + jitter
+        lat = car.latitude + jitter
+        attempts++
+      }
+      car.longitude = lng
+      car.latitude = lat
+      const carSprite = MapEngine.CAR_SPRITES[Math.floor(Math.random() * MapEngine.CAR_SPRITES.length)]
+      const { outer, inner } = this.createCarImage(car.angle, carSprite)
+      inner.dataset.spriteUrl = carSprite.url
+      inner.dataset.spriteW = String(carSprite.w)
+      inner.dataset.spriteH = String(carSprite.h)
+      inner.dataset.spriteCount = String(carSprite.count)
+      const marker = new maplibregl.Marker({ element: outer, rotationAlignment: 'map' })
+        .setLngLat([lng, lat])
         .addTo(this.map!)
       this.carMarkers.set(car.id, marker)
-      this.carMarkerInners.set(car.id, el)
+      this.carMarkerInners.set(car.id, inner)
     }
   }
 
   refreshCarMarkers() {
+    const store = useGameStore()
+    for (const car of store.cars) {
+      let lng = car.longitude
+      let lat = car.latitude
+      let needMove = false
+      try {
+        needMove = !this.isValidSpawnPoint(lng, lat) || this.isOnOffroadSurface(lng, lat)
+      } catch {}
+      if (needMove) {
+        let attempts = 0
+        while (attempts < 20) {
+          let valid = true
+          try {
+            valid = this.isValidSpawnPoint(lng, lat) && !this.isOnOffroadSurface(lng, lat)
+          } catch {}
+          if (valid) break
+          const jitter = (Math.random() - 0.5) * 0.0006
+          lng = car.longitude + jitter
+          lat = car.latitude + jitter
+          attempts++
+        }
+        car.longitude = lng
+        car.latitude = lat
+        const marker = this.carMarkers.get(car.id)
+        if (marker) marker.setLngLat([lng, lat])
+      }
+    }
     this.addCarMarkers()
+    if (this.map) this.applyAllCarsZoom(this.map.getZoom())
   }
 
   moveCarMarker(id: string, lng: number, lat: number) {
@@ -356,18 +457,24 @@ export class MapEngine {
   }
 
   setCarMarkerAngle(id: string, angle: number) {
-    const marker = this.carMarkers.get(id)
-    if (marker) marker.getElement().style.transform = `rotate(${angle}rad)`
+    const inner = this.carMarkerInners.get(id)
+    if (inner) inner.style.transform = `rotate(${angle}rad)`
   }
 
   addCarMarker(id: string, lng: number, lat: number, angle?: number) {
     if (this.carMarkers.has(id)) return
-    const el = this.createCarImage(angle)
-    const marker = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
+    const carSprite = MapEngine.CAR_SPRITES[Math.floor(Math.random() * MapEngine.CAR_SPRITES.length)]
+    const { outer, inner } = this.createCarImage(angle, carSprite)
+    inner.dataset.spriteUrl = carSprite.url
+    inner.dataset.spriteW = String(carSprite.w)
+    inner.dataset.spriteH = String(carSprite.h)
+    inner.dataset.spriteCount = String(carSprite.count)
+    const marker = new maplibregl.Marker({ element: outer, rotationAlignment: 'map' })
       .setLngLat([lng, lat])
       .addTo(this.map!)
     this.carMarkers.set(id, marker)
-    this.carMarkerInners.set(id, el)
+    this.carMarkerInners.set(id, inner)
+    if (this.map) this.applyAllCarsZoom(this.map.getZoom())
   }
 
   removeCarMarker(id: string) {
@@ -465,19 +572,21 @@ export class MapEngine {
   private applyPlayerBackground(scale: number, boxW: number, boxH: number) {
     if (!this.playerMarkerImg) return
     if (this.playerIsCar) {
-      const [cx, cy, cw, ch] = MapEngine.CAR_CELL
-      const s = Math.min(boxW / cw, boxH / ch)
-      const sheetW = MapEngine.SHEET_W * s
-      const sheetH = MapEngine.SHEET_H * s
-      this.playerMarkerImg.style.backgroundImage = `url(${import.meta.env.BASE_URL}sprites.png)`
+      const frame = this.playerCarSpriteData ?? MapEngine.CAR_RED
+      const s = Math.min(boxW / frame.w, boxH / frame.h)
+      const sheetW = frame.w * s
+      const sheetH = frame.h * frame.count * s
+      const frameH = frame.h * s
+      this.playerCarFrameH = frameH
+      this.playerMarkerImg.style.backgroundImage = `url(${import.meta.env.BASE_URL}${frame.url})`
       this.playerMarkerImg.style.backgroundRepeat = 'no-repeat'
       this.playerMarkerImg.style.backgroundSize = `${sheetW.toFixed(2)}px ${sheetH.toFixed(2)}px`
-      this.playerMarkerImg.style.backgroundPosition = `-${(cx * s).toFixed(2)}px -${(cy * s).toFixed(2)}px`
+      this.playerMarkerImg.style.backgroundPosition = '0 0'
       this.playerMarkerImg.style.width = `${sheetW.toFixed(2)}px`
       this.playerMarkerImg.style.height = `${sheetH.toFixed(2)}px`
       if (this.playerMarkerFrameWrap) {
-        this.playerMarkerFrameWrap.style.height = `${(ch * s).toFixed(2)}px`
-        this.playerMarkerFrameWrap.style.top = `${((boxH - ch * s) / 2).toFixed(2)}px`
+        this.playerMarkerFrameWrap.style.height = `${frameH.toFixed(2)}px`
+        this.playerMarkerFrameWrap.style.top = `${((boxH - frameH) / 2).toFixed(2)}px`
       }
       return
     }
@@ -491,7 +600,7 @@ export class MapEngine {
     const sheetH = frame.h * frame.count * s
     const frameH = frame.h * s
     if (this.playerMarkerFrameWrap) {
-      this.playerMarkerFrameWrap.style.height = `${(frameH - 2).toFixed(2)}px`
+      this.playerMarkerFrameWrap.style.height = `${frameH.toFixed(2)}px`
       this.playerMarkerFrameWrap.style.top = `${((boxH - frameH) / 2).toFixed(2)}px`
     }
     this.playerMarkerImg.style.backgroundImage = `url(${import.meta.env.BASE_URL}${frame.url})`
@@ -530,8 +639,8 @@ export class MapEngine {
 
   setPlayerMarkerShape(isCar: boolean) {
     if (!this.playerMarkerImg) return
-    this.playerBaseW = isCar ? 26 : 22
-    this.playerBaseH = isCar ? 38 : 28
+    this.playerBaseW = isCar ? 36 : 22
+    this.playerBaseH = isCar ? 53 : 28
     this.playerIsCar = isCar
     if (this.playerMarkerFlip) {
       this.playerMarkerFlip.style.transform = ''
@@ -543,6 +652,36 @@ export class MapEngine {
     }
     this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'swimming', 'dead')
     this.applyPlayerZoom(this.map?.getZoom() ?? 18)
+  }
+
+  setPlayerCarSprite(sprite: { url: string; w: number; h: number; count: number; duration: number }) {
+    this.playerCarSpriteData = sprite
+  }
+
+  clearPlayerCarSprite() {
+    this.setPlayerCarMoving(false)
+    this.playerCarSpriteData = null
+  }
+
+  setPlayerCarMoving(moving: boolean) {
+    if (!this.playerMarkerImg || !this.playerIsCar) return
+    if (moving) {
+      this.playerMarkerImg.classList.add('car-moving')
+    } else {
+      this.playerMarkerImg.classList.remove('car-moving')
+    }
+  }
+
+  getCarMarkerSprite(carId: string): { url: string; w: number; h: number; count: number; duration: number } | null {
+    const inner = this.carMarkerInners.get(carId)
+    if (!inner) return null
+    const url = inner.dataset.spriteUrl
+    const w = Number(inner.dataset.spriteW)
+    const h = Number(inner.dataset.spriteH)
+    const count = Number(inner.dataset.spriteCount)
+    if (!url || !w || !h || !count) return null
+    const duration = MapEngine.CAR_RED.duration
+    return { url, w, h, count, duration }
   }
 
   isInsideBuilding(lng: number, lat: number): boolean {
@@ -602,11 +741,13 @@ export class MapEngine {
   isOnWater(lng: number, lat: number): boolean {
     if (!this.map) return false
     const pt = this.map.project([lng, lat])
-    const features = this.map.queryRenderedFeatures(pt)
+    const r = 12
+    const features = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
     return features.some(f => {
       if (!f.layer) return false
       const id = f.layer.id
-      return id === 'water' || id === 'waterway' || id.startsWith('water_')
+      const cls = f.properties?.class
+      return id === 'water' || id === 'waterway' || id.startsWith('water_') || cls === 'water'
     })
   }
 

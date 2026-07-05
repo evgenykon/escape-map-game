@@ -134,7 +134,7 @@ onMounted(() => {
     setTimeout(() => {
       mapEngine.refreshCarMarkers()
       gameReady.value = true
-    }, 1000)
+    }, 3000)
   })
 
   playerController = new PlayerController(mapEngine)
@@ -360,6 +360,7 @@ function toggleMute() {
       <div>{{ store.phase === 'explosion' ? '-' : '' }}{{ formatTime(hudTimeLeft) }}</div>
       <div>{{ hudTimeLeft.toFixed(0) }} сек</div>
       <div>+{{ gameElapsed }}с</div>
+      <div>cars: {{ store.cars.length }}</div>
       <div>zoom: {{ debugZoom.toFixed(2) }}</div>
       <div>scale: {{ debugScale.toFixed(2) }}</div>
     </div>
@@ -805,5 +806,12 @@ function toggleMute() {
 }
 .swimming {
   animation: player-swim-anim 0.8s steps(7) infinite;
+}
+@keyframes car-move-anim {
+  from { transform: translateY(-9.090909%); }
+  to   { transform: translateY(-100%); }
+}
+.car-moving {
+  animation: car-move-anim 0.8s steps(10) infinite;
 }
 </style>

@@ -143,6 +143,8 @@ export class PlayerController {
     store.activeCarId = car.id
     this.activeCarId = car.id
     this.wasFuelEmpty = false
+    const sprite = this.mapEngine.getCarMarkerSprite(car.id)
+    if (sprite) this.mapEngine.setPlayerCarSprite(sprite)
     this.mapEngine.setPlayerMarkerShape(true)
     this.mapEngine.setPlayerMarkerShadow('#48f')
     this.mapEngine.hideCarMarker(car.id)
@@ -188,6 +190,8 @@ export class PlayerController {
     store.activeCarId = carId
     this.activeCarId = carId
     this.wasFuelEmpty = false
+    const sprite = this.mapEngine.getCarMarkerSprite(carId)
+    if (sprite) this.mapEngine.setPlayerCarSprite(sprite)
     this.mapEngine.setPlayerMarkerShape(true)
     this.mapEngine.setPlayerMarkerShadow('#48f')
     this.mapEngine.hideCarMarker(carId)
@@ -204,6 +208,9 @@ export class PlayerController {
     const store = useGameStore()
     this.mapEngine.setPlayerMarkerShape(false)
     this.mapEngine.setPlayerMarkerShadow('#0f0')
+    this.mapEngine.clearPlayerCarSprite()
+    this.mapEngine.setPlayerCarMoving(false)
+
     const exitPos = destination([this.playerLng, this.playerLat], 8, this.playerAngle * 180 / Math.PI, { units: 'meters' })
     this.playerLng = exitPos.geometry.coordinates[0]
     this.playerLat = exitPos.geometry.coordinates[1]
@@ -358,8 +365,8 @@ export class PlayerController {
       }
     }
 
-    const nearbyRadius = this.trafficMode ? 400 : 600
-    const targetCount = this.trafficMode ? 10 : 4
+    const nearbyRadius = this.trafficMode ? 300 : 300
+    const targetCount = this.trafficMode ? 6 : 2
     let totalNearby = 0
     for (const car of store.cars) {
       const d = distance([this.playerLng, this.playerLat], [car.longitude, car.latitude], { units: 'meters' })
@@ -368,36 +375,41 @@ export class PlayerController {
     if (totalNearby >= targetCount) return
 
     const needed = targetCount - totalNearby
-    const spawnDistMin = this.trafficMode ? 80 : 200
-    const spawnDistMax = this.trafficMode ? 350 : 400
+    const spawnDistMin = this.trafficMode ? 50 : 80
+    const spawnDistMax = this.trafficMode ? 250 : 250
     const minCarDist = this.trafficMode ? 4 : 30
     for (let i = 0; i < needed; i++) {
-      for (let attempt = 0; attempt < 100; attempt++) {
-        const angle = Math.random() * 2 * Math.PI
-        const dist = spawnDistMin + Math.random() * (spawnDistMax - spawnDistMin)
-        const dlat = (dist / 111320) * Math.cos(angle)
-        const dlng = (dist / (111320 * Math.cos(this.playerLat * Math.PI / 180))) * Math.sin(angle)
-        const lng = this.playerLng + dlng
-        const lat = this.playerLat + dlat
+      let placed = false
+      for (let pass = 0; pass < 2 && !placed; pass++) {
+        for (let attempt = 0; attempt < 60; attempt++) {
+          const angle = Math.random() * 2 * Math.PI
+          const dist = spawnDistMin + Math.random() * (spawnDistMax - spawnDistMin)
+          const dlat = (dist / 111320) * Math.cos(angle)
+          const dlng = (dist / (111320 * Math.cos(this.playerLat * Math.PI / 180))) * Math.sin(angle)
+          const lng = this.playerLng + dlng
+          const lat = this.playerLat + dlat
 
-        if (this.mapEngine.isInsideBuilding(lng, lat)) continue
-        if (!this.mapEngine.isOnRoad(lng, lat)) continue
+          if (this.mapEngine.isInsideBuilding(lng, lat)) continue
+          if (this.mapEngine.isOnOffroadSurface(lng, lat)) continue
+          if (pass === 0 && !this.mapEngine.isOnRoad(lng, lat)) continue
 
-        let tooClose = false
-        for (const car of store.cars) {
-          const cd = distance([lng, lat], [car.longitude, car.latitude], { units: 'meters' })
-          if (cd < minCarDist) {
-            tooClose = true
-            break
+          let tooClose = false
+          for (const car of store.cars) {
+            const cd = distance([lng, lat], [car.longitude, car.latitude], { units: 'meters' })
+            if (cd < minCarDist) {
+              tooClose = true
+              break
+            }
           }
-        }
-        if (tooClose) continue
+          if (tooClose) continue
 
-        const id = `car-${this.nextCarId++}`
-        const carAngle = Math.random() * 2 * Math.PI
-        store.cars.push({ id, longitude: lng, latitude: lat, angle: carAngle, fuel: 0.1 + Math.random() * 0.2 })
-        this.mapEngine.addCarMarker(id, lng, lat, carAngle)
-        break
+          const id = `car-${this.nextCarId++}`
+          const carAngle = Math.random() * 2 * Math.PI
+          store.cars.push({ id, longitude: lng, latitude: lat, angle: carAngle, fuel: Math.random() * 0.3 })
+          this.mapEngine.addCarMarker(id, lng, lat, carAngle)
+          placed = true
+          break
+        }
       }
     }
   }
@@ -452,6 +464,8 @@ export class PlayerController {
       this.mapEngine.removeCarMarker(this.activeCarId)
       this.mapEngine.setPlayerMarkerShape(false)
       this.mapEngine.setPlayerMarkerShadow('#0f0')
+      this.mapEngine.clearPlayerCarSprite()
+      this.mapEngine.setPlayerCarMoving(false)
       const idx = store.cars.findIndex(c => c.id === this.activeCarId)
       if (idx !== -1) store.cars.splice(idx, 1)
       store.activeCarId = null
@@ -597,6 +611,8 @@ export class PlayerController {
         }
       }
     }
+    const finalSpeed = this.carPhysics.getSpeed()
+    this.mapEngine.setPlayerCarMoving(finalSpeed > 0.5)
   }
 
   getCarSpeed(): number {
