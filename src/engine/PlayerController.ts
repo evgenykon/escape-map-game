@@ -121,6 +121,10 @@ export class PlayerController {
     const store = useGameStore()
 
     if (store.isInCar) {
+      if (Math.abs(this.carPhysics.getSpeed()) > 0.5) {
+        this.mapEngine.setThought('Слишком быстро!')
+        return
+      }
       this.exitCar()
       return
     }
