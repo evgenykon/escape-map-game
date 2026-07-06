@@ -1,151 +1,155 @@
 # Escape Map Game
 
-Браузерная игра с открытой картой (MapLibre + OpenStreetMap), в которой игрок должен добраться до убежища до того, как произойдёт взрыв в случайном эпицентре. Реальные дороги и здания подгружаются через Overpass API вокруг геопозиции игрока.
+[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://evgenykon.github.io/escape-map-game/)
 
-> Все команды выполняются **только через `make`**. Прямой запуск `npm` / `vite` / `bun` запрещён — окружение обязано быть изолированным в Docker.
+A browser-based open-map game (MapLibre + OpenStreetMap) where the player must reach a shelter before a explosion occurs at a random epicenter. Real roads and buildings are loaded via the Overpass API around the player's location.
 
-## Стек
+![screenshot](public/screens.png)
 
-| Слой | Технология |
+> All commands must be run **only via `make`**. Direct execution of `npm` / `vite` / `bun` is forbidden — the environment must be isolated in Docker.
+
+## Stack
+
+| Layer | Technology |
 |---|---|
-| Язык | TypeScript |
-| Сборка | Vite 5 |
+| Language | TypeScript |
+| Bundler | Vite 5 |
 | UI | Vue 3 (Composition API) |
-| Состояние | Pinia |
-| Карта | MapLibre GL JS |
-| Гео-анализ | Turf.js |
-| Данные карты | OpenStreetMap (Overpass API) |
-| Контейнеризация | Docker + docker compose |
+| State | Pinia |
+| Map | MapLibre GL JS |
+| Geo analysis | Turf.js |
+| Map data | OpenStreetMap (Overpass API) |
+| Containerization | Docker + docker compose |
 
-## Требования
+## Requirements
 
 - Docker 24+
 - Docker Compose v2 (`docker compose ...`)
 - Make
-- Свободный порт `3001` (dev) и/или `80` (production)
+- Free port `3001` (dev) and/or `80` (production)
 
-## Структура
+## Structure
 
 ```
 .
-├── AGENTS.md              # правила проекта (приоритетнее README)
-├── Makefile               # все сценарии запуска
-├── docker-compose.yml     # dev- и production-сервисы
-├── Dockerfile             # production-сборка (multi-stage → nginx)
-├── Dockerfile.dev         # dev-образ (node:24-alpine + Vite HMR)
+├── AGENTS.md              # project rules (takes precedence over README)
+├── Makefile               # all run scenarios
+├── docker-compose.yml     # dev and production services
+├── Dockerfile             # production build (multi-stage → nginx)
+├── Dockerfile.dev         # dev image (node:24-alpine + Vite HMR)
 ├── nginx.conf             # SPA fallback
-├── vite.config.ts         # алиас @ → src, base для GH_PAGES
+├── vite.config.ts         # @ alias → src, base for GH_PAGES
 ├── index.html
-├── public/                # статические ассеты
+├── public/                # static assets
 └── src/
-    ├── main.ts            # bootstrap Vue + Pinia
+    ├── main.ts            # Vue + Pinia bootstrap
     ├── App.vue
     ├── components/        # StartScreen, LoadingScreen, GameScreen
-    ├── stores/game.ts     # Pinia-store состояния игры
+    ├── stores/game.ts     # Pinia game state store
     └── engine/
-        ├── MapEngine.ts        # инициализация MapLibre, слои
-        ├── OverpassLoader.ts   # запрос дорог и зданий
-        ├── PlayerController.ts # пешее движение
-        └── CarPhysics.ts       # физика машины + снэп к графу
+        ├── MapEngine.ts        # MapLibre init, layers
+        ├── OverpassLoader.ts   # roads and buildings fetch
+        ├── PlayerController.ts # on-foot movement
+        └── CarPhysics.ts       # car physics + road graph snap
 ```
 
-## Быстрый старт
+## Quick Start
 
-### 1. Dev-режим (hot-reload)
+### 1. Dev mode (hot-reload)
 
 ```bash
 make dev
 ```
 
-Поднимет контейнер `frontend-dev`:
-- внутри: Vite dev-server на `5173`
-- наружу: `http://localhost:3001`
-- исходники монтируются томом (`./:/app`), правки применяются без перезапуска
-- зависимости (`node_modules`) хранятся в именованном anonymous-томе и не перетираются хостом
+Starts the `frontend-dev` container:
+- inside: Vite dev-server on `5173`
+- exposed: `http://localhost:3001`
+- sources are mounted as a volume (`./:/app`), changes apply without restart
+- dependencies (`node_modules`) live in a named anonymous volume and are not overwritten by the host
 
-Остановить: `Ctrl+C`, затем `docker compose down` (или `docker compose down -v` чтобы сбросить `node_modules`-том).
+Stop: `Ctrl+C`, then `docker compose down` (or `docker compose down -v` to reset the `node_modules` volume).
 
-### 2. Production-сборка и запуск
+### 2. Production build and run
 
 ```bash
-make build     # docker build образа frontend (профиль production)
-make run       # запуск nginx-контейнера в фоне на порту 80
+make build     # docker build of the frontend image (production profile)
+make run       # start nginx container in the background on port 80
 ```
 
-После `make run` игра доступна на `http://localhost/`.
+After `make run` the game is available at `http://localhost/`.
 
-Остановить:
+Stop:
 
 ```bash
 docker compose --profile production down
 ```
 
-### 3. Проверка типов
+### 3. Type checking
 
 ```bash
 make typecheck
 ```
 
-Запускает `vue-tsc --noEmit` внутри dev-контейнера. Проверяет TypeScript и Vue-шаблоны без сборки артефактов.
+Runs `vue-tsc --noEmit` inside the dev container. Checks TypeScript and Vue templates without building artifacts.
 
-### 4. Деплой на GitHub Pages
+### 4. Deploy to GitHub Pages
 
 ```bash
 make deploy-gh-pages
 ```
 
-Соберёт `dist/` (с `base: '/escape-map-game/'`), переключится на ветку `gh-pages`, зальёт артефакт и вернётся на `main`. Требует чистого рабочего дерева и прав на `push` в `origin`.
+Builds `dist/` (with `base: '/escape-map-game/'`), switches to the `gh-pages` branch, pushes the artifact, and returns to `main`. Requires a clean working tree and push access to `origin`.
 
-## Сценарии Makefile
+## Makefile Commands
 
-| Команда | Что делает |
+| Command | Description |
 |---|---|
-| `make dev` | Поднимает dev-контейнер с HMR на `:3001` |
-| `make typecheck` | Прогоняет `vue-tsc --noEmit` в dev-контейнере |
-| `make build` | Собирает production-образ `frontend` (multi-stage) |
-| `make run` | Запускает production-контейнер `frontend` в фоне на `:80` |
-| `make deploy-gh-pages` | Сборка + деплой `dist/` в ветку `gh-pages` |
+| `make dev` | Starts the dev container with HMR on `:3001` |
+| `make typecheck` | Runs `vue-tsc --noEmit` in the dev container |
+| `make build` | Builds the production `frontend` image (multi-stage) |
+| `make run` | Starts the production `frontend` container in the background on `:80` |
+| `make deploy-gh-pages` | Build + deploy `dist/` to the `gh-pages` branch |
 
-## Как играть
+## How to Play
 
-1. На стартовом экране выбрать сложность (влияет на таймер и мощность взрыва) и нажать **«Старт»**.
-2. Браузер запросит геолокацию — нужно подтвердить.
-3. Игра запросит у Overpass API дороги и здания в радиусе ~15 км, построит граф дорог, выберет 15–20 убежищ в кольце 5–10 км от эпицентра.
-4. Управление:
-   - **W / A / S / D** — движение
-   - мышь — вращение камеры
-   - **E** — сесть в машину / выйти
-5. На экране HUD: обратный отсчёт, SMS-оповещения правительства, отметки убежищ.
-6. В момент взрыва: если игрок **внутри** убежища — победа, иначе — поражение.
+1. On the start screen, choose a difficulty (affects timer and blast strength) and click **"Start"**.
+2. The browser will request geolocation — you must allow it.
+3. The game fetches roads and buildings from the Overpass API within ~15 km radius, builds a road graph, and selects 15–20 shelters within a 5–10 km ring from the epicenter.
+4. Controls:
+   - **W / A / S / D** — movement
+   - mouse — camera rotation
+   - **E** — get in / out of the car
+5. HUD: countdown timer, government SMS notifications, shelter markers.
+6. At the moment of the explosion: if the player is **inside** a shelter — win, otherwise — lose.
 
-Карта и положение машины синхронизируются с реальной геометрией OSM (машина «прилипает» к ближайшему сегменту графа дорог).
+The map and car position are synchronized with real OSM geometry (the car "snaps" to the nearest road graph segment).
 
-## Переменные окружения
+## Environment Variables
 
-| Переменная | Где | Назначение | Значение по умолчанию |
+| Variable | Where | Purpose | Default |
 |---|---|---|---|
-| `GH_PAGES` | build-аргумент `frontend` | Включает `base: '/escape-map-game/'` в Vite | `1` |
-| `NODE_ENV` | `frontend-dev` | Режим Node | `development` |
+| `GH_PAGES` | `frontend` build arg | Enables `base: '/escape-map-game/'` in Vite | `1` |
+| `NODE_ENV` | `frontend-dev` | Node environment | `development` |
 
-Передать своё значение: `GH_PAGES=0 make build`.
+Override: `GH_PAGES=0 make build`.
 
-## Полезные команды
+## Useful Commands
 
 ```bash
-# логи dev-контейнера
+# dev container logs
 docker compose logs -f frontend-dev
 
-# зайти в shell dev-контейнера
+# shell into the dev container
 docker compose run --rm --entrypoint sh frontend-dev
 
-# пересобрать dev-образ с нуля
+# rebuild the dev image from scratch
 docker compose build --no-cache frontend-dev
 ```
 
-## Правила и ограничения
+## Rules and Limitations
 
-- Запуск `npm run dev`, `npx vite` и подобных команд **напрямую** запрещён — только через `make`-цели.
-- Любые правки `src/` подхватываются HMR в dev-режиме без перезапуска контейнера.
-- Перед PR обязательно прогнать `make typecheck`.
+- Running `npm run dev`, `npx vite`, or similar commands **directly** is forbidden — only through `make` targets.
+- Any changes to `src/` are picked up by HMR in dev mode without restarting the container.
+- Always run `make typecheck` before submitting a PR.
 
-Подробности — в [AGENTS.md](./AGENTS.md).
+Details in [AGENTS.md](./AGENTS.md).
