@@ -44,7 +44,7 @@ A browser-based escape game (MapLibre + Vue 3) where the player must reach a she
 └── src/
     ├── main.ts            # Vue + Pinia bootstrap
     ├── App.vue
-    ├── components/        # StartScreen, LoadingScreen, GameScreen, SpriteTable
+    ├── components/        # StartScreen, LoadingScreen, GameScreen
     ├── stores/game.ts     # Pinia game state store
     ├── scenarios/         # scenario definitions (nuclear, types, registry)
     └── engine/
