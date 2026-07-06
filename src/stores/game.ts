@@ -60,7 +60,7 @@ export const useGameStore = defineStore('game', () => {
   const mapMode = ref(0)
   const fuelStationsDisabled = ref(false)
 
-  const cacheBustTag = 'bust-2026-07-02-19-45'
+  const cacheBustTag = 'bust-2026-07-06-12-00'
 
   return {
     phase,
