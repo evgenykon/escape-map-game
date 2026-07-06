@@ -179,7 +179,10 @@ function debugAdvanceTimer() {
   store.timeLeft = Math.max(0, totalTime.value - gameElapsed.value)
   hudTimeLeft.value = store.timeLeft
   for (let i = 0; i < timeline.value.length; i++) {
-    if (timeline.value[i].timeSec <= gameElapsed.value) processedEvents.add(i)
+    if (timeline.value[i].timeSec <= gameElapsed.value && !processedEvents.has(i)) {
+      processedEvents.add(i)
+      fireEvent(timeline.value[i])
+    }
   }
   if (store.timeLeft <= 0) {
     if (timerInterval) clearInterval(timerInterval)
@@ -670,8 +673,7 @@ function toggleMute() {
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-top: 7px solid #fa0;
-  margin-bottom: -1px;
+  border-bottom: 7px solid #fa0;
 }
 .shelter-dist {
   color: #ff0;
