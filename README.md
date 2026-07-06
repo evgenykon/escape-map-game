@@ -2,7 +2,7 @@
 
 [![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://evgenykon.github.io/escape-map-game/)
 
-A browser-based open-map game (MapLibre + OpenStreetMap) where the player must reach a shelter before a explosion occurs at a random epicenter. Real roads and buildings are loaded via the Overpass API around the player's location.
+A browser-based escape game (MapLibre + Vue 3) where the player must reach a shelter before an explosion. The map is rendered using OpenFreeMap tiles with real buildings, roads, and terrain.
 
 ![screenshot](public/screens.png)
 
@@ -18,7 +18,7 @@ A browser-based open-map game (MapLibre + OpenStreetMap) where the player must r
 | State | Pinia |
 | Map | MapLibre GL JS |
 | Geo analysis | Turf.js |
-| Map data | OpenStreetMap (Overpass API) |
+| Map tiles | OpenFreeMap (Liberty style) |
 | Containerization | Docker + docker compose |
 
 ## Requirements
@@ -40,17 +40,19 @@ A browser-based open-map game (MapLibre + OpenStreetMap) where the player must r
 ├── nginx.conf             # SPA fallback
 ├── vite.config.ts         # @ alias → src, base for GH_PAGES
 ├── index.html
-├── public/                # static assets
+├── public/                # static assets (sprites, sounds, icons)
 └── src/
     ├── main.ts            # Vue + Pinia bootstrap
     ├── App.vue
-    ├── components/        # StartScreen, LoadingScreen, GameScreen
+    ├── components/        # StartScreen, LoadingScreen, GameScreen, SpriteTable
     ├── stores/game.ts     # Pinia game state store
+    ├── scenarios/         # scenario definitions (nuclear, types, registry)
     └── engine/
-        ├── MapEngine.ts        # MapLibre init, layers
-        ├── OverpassLoader.ts   # roads and buildings fetch
-        ├── PlayerController.ts # on-foot movement
-        └── CarPhysics.ts       # car physics + road graph snap
+        ├── MapEngine.ts        # MapLibre init, layers, markers
+        ├── OverpassLoader.ts   # loading orchestration, preload sprites
+        ├── PlayerController.ts # player & car movement, interactions
+        ├── CarPhysics.ts       # acceleration, braking, drift, fuel
+        └── SoundEngine.ts      # sound effects management
 ```
 
 ## Quick Start
@@ -90,7 +92,7 @@ docker compose --profile production down
 make typecheck
 ```
 
-Runs `vue-tsc --noEmit` inside the dev container. Checks TypeScript and Vue templates without building artifacts.
+Runs `vue-tsc --noEmit` in a dedicated container. Checks TypeScript and Vue templates without building artifacts.
 
 ### 4. Deploy to GitHub Pages
 
@@ -105,24 +107,27 @@ Builds `dist/` (with `base: '/escape-map-game/'`), switches to the `gh-pages` br
 | Command | Description |
 |---|---|
 | `make dev` | Starts the dev container with HMR on `:3001` |
-| `make typecheck` | Runs `vue-tsc --noEmit` in the dev container |
+| `make typecheck` | Runs `vue-tsc --noEmit` |
 | `make build` | Builds the production `frontend` image (multi-stage) |
 | `make run` | Starts the production `frontend` container in the background on `:80` |
 | `make deploy-gh-pages` | Build + deploy `dist/` to the `gh-pages` branch |
 
 ## How to Play
 
-1. On the start screen, choose a difficulty (affects timer and blast strength) and click **"Start"**.
-2. The browser will request geolocation — you must allow it.
-3. The game fetches roads and buildings from the Overpass API within ~15 km radius, builds a road graph, and selects 15–20 shelters within a 5–10 km ring from the epicenter.
-4. Controls:
+1. On the start screen, pick a **scenario** (e.g. nuclear strike) and choose a **location** — either allow browser geolocation or pick a city from the list. Click **"Старт"**.
+2. The game loads the map and preloads sprites and sounds. The **epicenter** is placed 1 km from your position in a random direction.
+3. A single **shelter** is selected among buildings within a 1.5–2 km ring from the epicenter. An evacuation zone is marked on the map.
+4. Cars are placed nearby — some may be driven (press **E** to interact), locked cars can be **hacked** (hold **E** near them).
+5. Controls:
    - **W / A / S / D** — movement
+   - **Shift** — run
+   - **E** — interact (enter/exit car, start/cancel hack)
+   - **M** — cycle map modes (follow, overview, tactical)
    - mouse — camera rotation
-   - **E** — get in / out of the car
-5. HUD: countdown timer, government SMS notifications, shelter markers.
-6. At the moment of the explosion: if the player is **inside** a shelter — win, otherwise — lose.
+6. HUD: countdown timer, scenario‑specific SMS and thoughts, shelter compass, fuel gauge, surface type indicator.
+7. At the moment of the explosion: if the player is **inside** the shelter — win, otherwise — lose.
 
-The map and car position are synchronized with real OSM geometry (the car "snaps" to the nearest road graph segment).
+Vehicles have fuel and physics (drift, off-road penalty). You can refuel at fuel stations.
 
 ## Environment Variables
 
