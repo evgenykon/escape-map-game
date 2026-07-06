@@ -262,7 +262,9 @@ function triggerExplosion() {
   let survived: boolean
   deathReason.value = null
 
-  if (store.isInShelter) {
+  const nearShelter = store.shelters.some(s => haversine(pos.lat, pos.lng, s.latitude, s.longitude) < 50)
+
+  if (store.isInShelter || nearShelter) {
     buildingDamagePercent.value = 0
     survived = true
   } else if (mapEngine.isInsideBuilding(pos.lng, pos.lat)) {
@@ -358,6 +360,7 @@ function restartGame() {
   store.cars = []
   store.smsMessages = []
   store.shelterHudVisible = false
+  store.isInShelter = false
   store.timeLeft = 0
   hudTimeLeft.value = 0
   hudSms.value = []

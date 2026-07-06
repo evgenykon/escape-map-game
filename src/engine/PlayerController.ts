@@ -152,7 +152,6 @@ export class PlayerController {
     const shelter = this.findNearbyShelter()
     if (shelter) {
       store.isInShelter = true
-      store.phase = 'victory'
     }
   }
 
