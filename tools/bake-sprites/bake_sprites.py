@@ -40,6 +40,7 @@ DARK = mat("dark", (0.035, 0.035, 0.04), 0.5)
 LIGHT_M = mat("light", (0.9, 0.9, 0.86), 0.06, 0.1, emit=(1.0, 0.97, 0.9))
 TAIL_M = mat("tail", (0.7, 0.02, 0.02), 0.1, 0.1, emit=(1.0, 0.04, 0.02))
 PLATE = mat("plate", (0.85, 0.85, 0.82), 0.45)
+PAINT2 = mat("paint_panel", (0.26, 0.030, 0.026), 0.38, 0.08, coat=0.25)
 
 
 def box(name, m_, loc, scale, bevel=0.0, rot=(0, 0, 0), segs=3, subs=0):
@@ -105,6 +106,8 @@ def build_car():
     body.data.materials.append(PAINT)
     for poly in body.data.polygons:
         poly.material_index = 0
+    outline = box("outline", DARK, (0, 0, 0.44), (0.930, 2.310, 0.040), bevel=0.24, segs=4)
+    objs.append(outline)
     objs.append(body)
 
     # cabin
@@ -135,9 +138,9 @@ def build_car():
     bpy.ops.object.shade_smooth()
     objs.append(cab)
 
-    objs.append(box("roof", PAINT, (0, -0.22, 1.415), (0.545, 0.545, 0.020), bevel=0.05, segs=3, subs=1))
+    objs.append(box("roof", PAINT, (0, -0.30, 1.452), (0.600, 0.500, 0.018), bevel=0.05, segs=3, subs=1))
     for sx in (-1, 1):
-        objs.append(box(f"rail{sx}", CHROME, (0.520 * sx, -0.22, 1.435), (0.016, 0.50, 0.010), bevel=0.004, segs=2))
+        objs.append(box(f"rail{sx}", CHROME, (0.575 * sx, -0.30, 1.468), (0.014, 0.46, 0.009), bevel=0.004, segs=2))
         objs.append(box(f"marm{sx}", DARK, (0.80 * sx, 0.62, 0.99), (0.06, 0.015, 0.015)))
         objs.append(box(f"mirror{sx}", PAINT, (0.895 * sx, 0.60, 1.00), (0.042, 0.068, 0.026), bevel=0.014, segs=3, subs=1))
         objs.append(box(f"handle{sx}", CHROME, (0.900 * sx, -0.02, 0.86), (0.010, 0.072, 0.015), bevel=0.005, segs=2))
@@ -145,6 +148,8 @@ def build_car():
         objs.append(box(f"head{sx}", LIGHT_M, (0.52 * sx, 2.243, 0.86), (0.155, 0.018, 0.052), bevel=0.02, segs=3, subs=1))
         objs.append(box(f"tail{sx}", TAIL_M, (0.55 * sx, -2.243, 0.88), (0.165, 0.016, 0.048), bevel=0.018, segs=3, subs=1))
 
+    for sy, ln in ((1, 0.80), (-1, 0.60)):
+        objs.append(box(f"seamHood{sy}", DARK, (0, 1.12 * sy, 0.948), (0.760, 0.012, 0.006)))
     objs.append(box("grille", DARK, (0, 2.245, 0.80), (0.40, 0.012, 0.072), bevel=0.01, segs=2))
     for i in range(5):
         objs.append(box(f"gbar{i}", CHROME, (0, 2.251, 0.774 + i * 0.027), (0.383, 0.005, 0.005)))
@@ -155,8 +160,8 @@ def build_car():
 
     for sx in (-1, 1):
         for sy in (-1, 1):
-            x, y = 0.865 * sx, 1.42 * sy
-            bpy.ops.mesh.primitive_cylinder_add(location=(x, y, 0.355), radius=0.355, depth=0.235,
+            x, y = 0.888 * sx, 1.42 * sy
+            bpy.ops.mesh.primitive_cylinder_add(location=(x, y, 0.355), radius=0.352, depth=0.310,
                                                 rotation=(0, math.pi / 2, 0), vertices=48)
             tire = bpy.context.active_object
             tire.name = f"tire{sx}{sy}"
@@ -197,7 +202,7 @@ def build_car():
 # ======================= CHARACTER =======================
 def load_character():
     before = set(scene.objects)
-    bpy.ops.import_scene.gltf(filepath=os.path.join(DL, "chars", "Casual.glb"))
+    bpy.ops.import_scene.gltf(filepath=os.path.join(D, "assets", "character-casual.glb"))
     new = [o for o in scene.objects if o not in before]
     arm = next(o for o in new if o.type == 'ARMATURE')
     for pb in arm.pose.bones:
@@ -232,12 +237,19 @@ cc = cam.constraints.new('TRACK_TO')
 cc.target = tgt
 cc.track_axis = 'TRACK_NEGATIVE_Z'
 cc.up_axis = 'UP_Y'
-EL = math.radians(46)
+EL = math.radians(float(os.environ.get("ELEV", "90")))
 
 
 def place_cam(cz, ortho):
-    cam.location = (0, -16 * math.cos(EL), 16 * math.sin(EL) + cz)
-    tgt.location = (0, 0, cz)
+    if EL >= math.radians(89.5):
+        # строго сверху: камера смотрит вдоль -Z, верх кадра = +Y (север)
+        cc.mute = True
+        cam.rotation_euler = (0, 0, 0)
+        cam.location = (0, 0, 16 + cz)
+    else:
+        cc.mute = False
+        cam.location = (0, -16 * math.cos(EL), 16 * math.sin(EL) + cz)
+        tgt.location = (0, 0, cz)
     cd.ortho_scale = ortho
 
 
@@ -297,7 +309,7 @@ for o in car_objs:
 car_root.hide_render = True
 
 pl_root, arm, pl_objs = load_character()
-place_cam(0.92, 1.95)
+place_cam(0.92, 1.80)
 
 LEGS = ("UpperLeg.L", "UpperLeg.R", "LowerLeg.L", "LowerLeg.R")
 ARMS = ("UpperArm.L", "UpperArm.R")
@@ -310,7 +322,7 @@ for i in range(PDIRS):
         for bn, sgn in (("UpperArm.L", 1), ("UpperArm.R", -1)):
             pb = arm.pose.bones[bn]
             rest = pb.bone.matrix_local.to_3x3()
-            r_down = Matrix.Rotation(sgn * math.radians(72), 3, Vector((0, 0, 1)))
+            r_down = Matrix.Rotation(sgn * math.radians(86), 3, Vector((0, 0, 1)))
             r_sw = Matrix.Rotation(sw * sgn * math.radians(18), 3, Vector((1, 0, 0)))
             l_down = rest.inverted() @ r_down @ rest
             l_sw = rest.inverted() @ r_sw @ rest

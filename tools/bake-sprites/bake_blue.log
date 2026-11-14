@@ -1,0 +1,35 @@
+00:05.687  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_00.png'
+00:06.344  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_01.png'
+00:07.015  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_02.png'
+00:07.828  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_03.png'
+00:08.656  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_04.png'
+00:09.515  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_05.png'
+00:10.328  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_06.png'
+00:11.140  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_07.png'
+00:11.969  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_08.png'
+00:12.797  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_09.png'
+00:13.625  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_10.png'
+00:14.453  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_11.png'
+00:15.265  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_12.png'
+00:16.109  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_13.png'
+00:16.937  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_14.png'
+00:17.797  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue\car_15.png'
+Reloading external rigs...
+Reloading external metarigs...
+CARS DONE 16
+23:19:35 | INFO: Data are loaded, start creating Blender stuff
+INFO:glTFImporter:Data are loaded, start creating Blender stuff
+23:19:35 | INFO: Blender create Mesh node Casual_Body
+INFO:glTFImporter:Blender create Mesh node Casual_Body
+23:19:35 | INFO: Blender create Mesh node Casual_Feet
+INFO:glTFImporter:Blender create Mesh node Casual_Feet
+23:19:35 | INFO: Blender create Mesh node Casual_Head
+INFO:glTFImporter:Blender create Mesh node Casual_Head
+23:19:35 | INFO: Blender create Mesh node Casual_Legs
+INFO:glTFImporter:Blender create Mesh node Casual_Legs
+23:19:35 | INFO: glTF import finished in 0.09s
+INFO:glTFImporter:glTF import finished in 0.09s
+DONE F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_blue
+Blender 5.1.2 (hash ec6e62d40fa9 built 2026-05-19 01:37:34)
+
+Blender quit

@@ -1,0 +1,90 @@
+Reloading external rigs...
+Reloading external metarigs...
+23:19:58 | INFO: Data are loaded, start creating Blender stuff
+INFO:glTFImporter:Data are loaded, start creating Blender stuff
+23:19:58 | INFO: Blender create Mesh node Casual_Body
+INFO:glTFImporter:Blender create Mesh node Casual_Body
+23:19:58 | INFO: Blender create Mesh node Casual_Feet
+INFO:glTFImporter:Blender create Mesh node Casual_Feet
+23:19:58 | INFO: Blender create Mesh node Casual_Head
+INFO:glTFImporter:Blender create Mesh node Casual_Head
+23:19:58 | INFO: Blender create Mesh node Casual_Legs
+INFO:glTFImporter:Blender create Mesh node Casual_Legs
+23:19:58 | INFO: glTF import finished in 0.10s
+INFO:glTFImporter:glTF import finished in 0.10s
+00:06.062  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_00_00.png'
+00:06.609  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_00_01.png'
+00:07.296  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_00_02.png'
+00:07.984  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_00_03.png'
+00:08.687  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_00_04.png'
+00:09.375  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_00_05.png'
+00:10.046  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_00_06.png'
+00:10.734  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_00_07.png'
+PLAYER DIR 0
+00:11.437  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_01_00.png'
+00:12.125  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_01_01.png'
+00:12.828  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_01_02.png'
+00:13.515  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_01_03.png'
+00:14.203  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_01_04.png'
+00:14.875  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_01_05.png'
+00:15.562  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_01_06.png'
+00:16.234  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_01_07.png'
+PLAYER DIR 1
+00:16.890  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_02_00.png'
+00:17.546  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_02_01.png'
+00:18.218  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_02_02.png'
+00:18.890  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_02_03.png'
+00:19.578  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_02_04.png'
+00:20.265  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_02_05.png'
+00:20.953  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_02_06.png'
+00:21.625  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_02_07.png'
+PLAYER DIR 2
+00:22.296  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_03_00.png'
+00:22.984  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_03_01.png'
+00:23.656  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_03_02.png'
+00:24.343  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_03_03.png'
+00:25.015  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_03_04.png'
+00:25.687  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_03_05.png'
+00:26.375  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_03_06.png'
+00:27.046  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_03_07.png'
+PLAYER DIR 3
+00:27.687  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_04_00.png'
+00:28.390  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_04_01.png'
+00:29.078  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_04_02.png'
+00:29.765  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_04_03.png'
+00:30.468  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_04_04.png'
+00:31.171  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_04_05.png'
+00:31.859  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_04_06.png'
+00:32.562  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_04_07.png'
+PLAYER DIR 4
+00:33.234  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_05_00.png'
+00:33.921  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_05_01.png'
+00:34.609  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_05_02.png'
+00:35.312  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_05_03.png'
+00:36.000  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_05_04.png'
+00:36.718  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_05_05.png'
+00:37.421  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_05_06.png'
+00:38.109  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_05_07.png'
+PLAYER DIR 5
+00:38.781  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_06_00.png'
+00:39.453  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_06_01.png'
+00:40.156  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_06_02.png'
+00:40.859  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_06_03.png'
+00:41.546  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_06_04.png'
+00:42.250  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_06_05.png'
+00:42.906  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_06_06.png'
+00:43.609  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_06_07.png'
+PLAYER DIR 6
+00:44.312  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_07_00.png'
+00:45.000  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_07_01.png'
+00:45.687  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_07_02.png'
+00:46.390  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_07_03.png'
+00:47.078  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_07_04.png'
+00:47.765  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_07_05.png'
+00:48.468  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_07_06.png'
+00:49.156  render           | Saved: 'F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red\pl_07_07.png'
+PLAYER DIR 7
+DONE F:\GameTools\escape-map-game\tools\bake-sprites\frames_v5_red
+Blender 5.1.2 (hash ec6e62d40fa9 built 2026-05-19 01:37:34)
+
+Blender quit
