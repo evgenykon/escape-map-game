@@ -11,7 +11,8 @@ import StatsBars from '@/components/StatsBars.vue'
 import BaseDialog from '@/components/BaseDialog.vue'
 import { fetchBuildingPolygon, fetchRealRooms, isInsidePolygon, polygonAreaM2, roomsToFeatureCollection, splitBuildingIntoRooms } from '@/engine/IndoorLoader'
 import LootDialog from '@/components/LootDialog.vue'
-import { generateLoot, lootIcons, lootKey as makeLootKey, LOOT_TTL_MS, RESOURCE_META, resourcesForPois, searchSeconds, type ResourceKey } from '@/engine/LootEngine'
+import BackpackDialog from '@/components/BackpackDialog.vue'
+import { CARRY_CAPACITY, generateLoot, lootIcons, lootKey as makeLootKey, LOOT_TTL_MS, resourcesForPois, searchSeconds } from '@/engine/LootEngine'
 
 const store = useGameStore()
 const baseUrl = import.meta.env.BASE_URL
@@ -36,6 +37,7 @@ const canOpenBase = ref(false)
 const canSearchLoot = ref(false)
 const canMoveBase = ref(false)
 const lootDialogOpen = ref(false)
+const backpackOpen = ref(false)
 const activeLootKey = ref('')
 const currentLootKey = ref('')
 const searchActive = ref(false)
@@ -48,6 +50,9 @@ const moveBaseMode = ref(false)
 const nearBase = ref(false)
 const roomsPreview = ref(1)
 const areaPreview = ref<number | null>(null)
+const carriedTotal = computed(() =>
+  Object.values(store.carried).reduce((sum, v) => sum + (v ?? 0), 0),
+)
 const CLEAN_SEC_PER_ROOM = 15
 const cleaningTimeText = computed(() => {
   const total = roomsPreview.value * CLEAN_SEC_PER_ROOM
@@ -59,7 +64,7 @@ const cleaningTimeText = computed(() => {
 const cleaningUi = ref({ active: false, progress: 0, rooms: 0 })
 
 // блокировка движения, пока открыта любая модалка или идёт расчистка
-const anyModalOpen = computed(() => showAftermathNotice.value || showBaseConfirm.value || cleaningUi.value.active || baseDialogOpen.value || lootDialogOpen.value)
+const anyModalOpen = computed(() => showAftermathNotice.value || showBaseConfirm.value || cleaningUi.value.active || baseDialogOpen.value || lootDialogOpen.value || backpackOpen.value)
 watch(anyModalOpen, (open) => { playerController?.setInputBlocked(open) }, { flush: 'post' })
 let statsInterval: ReturnType<typeof setInterval> | null = null
 let buildingInterval: ReturnType<typeof setInterval> | null = null
@@ -780,6 +785,7 @@ function restartGame() {
   lootDialogOpen.value = false
   searchActive.value = false
   canSearchLoot.value = false
+  backpackOpen.value = false
   if (searchTimer) { clearInterval(searchTimer); searchTimer = null }
   mapEngine?.clearLootMarkers()
   store.deathReasonText = null
@@ -879,7 +885,12 @@ function toggleMute() {
 
     <div v-if="store.isAftermath" class="stats-hud">
       <StatsBars />
+      <button class="backpack-btn" @click="backpackOpen = true">
+        🎒 {{ carriedTotal }} / {{ CARRY_CAPACITY }}
+      </button>
     </div>
+
+    <BackpackDialog v-if="backpackOpen" @close="backpackOpen = false" />
 
     <button v-if="canMakeBase" class="make-base-btn" @click="openBaseConfirm">
       ★ Сделать базой
@@ -1297,6 +1308,24 @@ function toggleMute() {
   cursor: pointer;
 }
 .debug-dev-btn:hover { background: rgba(255, 213, 74, 0.25); }
+
+.backpack-btn {
+  margin-top: 6px;
+  width: 100%;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  letter-spacing: 1px;
+  padding: 7px 10px;
+  background: rgba(10, 14, 19, 0.82);
+  color: #ffd54a;
+  border: 1px solid #ffd54a;
+  border-radius: 6px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.backpack-btn:hover {
+  background: rgba(34, 30, 12, 0.9);
+}
 
 .stats-hud {
   position: absolute;
