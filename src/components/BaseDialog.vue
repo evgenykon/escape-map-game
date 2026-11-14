@@ -1,11 +1,25 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import maplibregl from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
 import { useGameStore } from '@/stores/game'
+import { polygonToFeature } from '@/engine/IndoorLoader'
 
 const store = useGameStore()
 const emit = defineEmits<{ (e: 'close'): void }>()
 
-const rooms = computed(() => Array.from({ length: store.base?.rooms ?? 0 }, (_, i) => i + 1))
+const mapEl = ref<HTMLDivElement>()
+let miniMap: maplibregl.Map | null = null
+let ready = false
+
+const roomsList = computed(() => {
+  const fc = store.base?.roomsGeo
+  if (!fc) return []
+  return fc.features.map((f, i) => ({
+    id: Number((f.properties as Record<string, unknown>)?.id ?? i + 1),
+    name: String((f.properties as Record<string, unknown>)?.name ?? `Помещение ${i + 1}`),
+  }))
+})
 
 const resources = computed(() => {
   const r = store.base?.resources
@@ -17,10 +31,125 @@ const resources = computed(() => {
     { key: 'fuel', icon: '⛽', label: 'Топливо', value: r.fuel },
     { key: 'medicine', icon: '💊', label: 'Медицина', value: r.medicine },
     { key: 'energy', icon: '⚡', label: 'Энергия', value: r.energy },
+    { key: 'clothes', icon: '👕', label: 'Одежда', value: r.clothes },
+    { key: 'tech', icon: '🔌', label: 'Техника', value: r.tech },
+    { key: 'weapons', icon: '🔪', label: 'Оружие', value: r.weapons },
+    { key: 'tools', icon: '🔧', label: 'Инструменты', value: r.tools },
   ]
 })
 
 const stats = computed(() => store.stats)
+
+function draw() {
+  if (!miniMap || !ready) return
+  const roomsGeo = store.base?.roomsGeo
+  const polygon = store.base?.polygon
+  if (!roomsGeo && !polygon) return
+
+  const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
+
+  if (!miniMap.getSource('rooms')) {
+    miniMap.addSource('rooms', { type: 'geojson', data: roomsGeo ?? empty })
+    miniMap.addLayer({
+      id: 'rooms-fill',
+      type: 'fill',
+      source: 'rooms',
+      paint: {
+        'fill-color': ['interpolate', ['linear'], ['get', 'id'], 1, '#1f4f6b', 10, '#2a7a8c'],
+        'fill-opacity': 0.75,
+      },
+    })
+    miniMap.addLayer({
+      id: 'rooms-line',
+      type: 'line',
+      source: 'rooms',
+      paint: { 'line-color': '#7fd7ff', 'line-width': 1.2 },
+    })
+    miniMap.addLayer({
+      id: 'rooms-label',
+      type: 'symbol',
+      source: 'rooms',
+      layout: {
+        'text-field': ['to-string', ['get', 'id']],
+        'text-size': 12,
+        'text-font': ['Noto Sans Regular'],
+        'text-allow-overlap': true,
+      },
+      paint: { 'text-color': '#eaf6ff', 'text-halo-color': '#08131c', 'text-halo-width': 1.4 },
+    })
+  } else {
+    ;(miniMap.getSource('rooms') as maplibregl.GeoJSONSource).setData(roomsGeo ?? empty)
+  }
+
+  if (polygon) {
+    const fc = polygonToFeature(polygon)
+    if (!miniMap.getSource('building')) {
+      miniMap.addSource('building', { type: 'geojson', data: fc })
+      miniMap.addLayer({
+        id: 'building-line',
+        type: 'line',
+        source: 'building',
+        paint: { 'line-color': '#ffd54a', 'line-width': 2 },
+      })
+    } else {
+      ;(miniMap.getSource('building') as maplibregl.GeoJSONSource).setData(fc)
+    }
+  }
+}
+
+function fitToBuilding() {
+  if (!miniMap || !store.base?.polygon) return
+  let minX = 180
+  let minY = 90
+  let maxX = -180
+  let maxY = -90
+  for (const [x, y] of store.base.polygon.coordinates[0]) {
+    minX = Math.min(minX, x)
+    minY = Math.min(minY, y)
+    maxX = Math.max(maxX, x)
+    maxY = Math.max(maxY, y)
+  }
+  miniMap.fitBounds(
+    [
+      [minX, minY],
+      [maxX, maxY],
+    ],
+    { padding: 30, duration: 0 },
+  )
+}
+
+onMounted(() => {
+  if (!mapEl.value) return
+  miniMap = new maplibregl.Map({
+    container: mapEl.value,
+    style: {
+      version: 8,
+      glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+      sources: {},
+      layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#0d1218' } }] as never,
+    },
+    interactive: true,
+    attributionControl: false,
+  })
+  miniMap.on('load', () => {
+    ready = true
+    draw()
+    fitToBuilding()
+  })
+})
+
+watch(
+  () => store.base?.roomsGeo,
+  () => {
+    draw()
+    fitToBuilding()
+  },
+)
+
+onUnmounted(() => {
+  miniMap?.remove()
+  miniMap = null
+})
 
 function eat() {
   const r = store.base?.resources
@@ -54,26 +183,21 @@ function heal() {
     <div class="base-dialog">
       <header>
         <h2>ОПОРНАЯ ТОЧКА</h2>
-        <span class="rooms-count">{{ store.base?.rooms }} комн.</span>
+        <span class="rooms-count">
+          {{ store.base?.rooms }} комн.
+          <em v-if="store.base?.roomsReal">· планировка из OSM</em>
+          <em v-else>· схема по площади</em>
+        </span>
         <button class="close" @click="emit('close')">✕</button>
       </header>
 
       <div class="body">
         <section class="plan">
-          <h3>Схема помещений</h3>
-          <div class="rooms" :class="{ wide: rooms.length > 6 }">
-            <div v-for="n in rooms" :key="n" class="room">
-              <span class="room-num">{{ n }}</span>
-              <span class="room-state">расчищено</span>
-            </div>
+          <h3>Помещения</h3>
+          <div ref="mapEl" class="plan-map"></div>
+          <div class="room-list">
+            <span v-for="room in roomsList" :key="room.id" class="room-chip">{{ room.id }}</span>
           </div>
-          <h3 class="objects-title">Установленные объекты</h3>
-          <div v-if="!store.base?.objects.length" class="empty">
-            Пока пусто. Здесь появятся койка, верстак, фильтр воды и прочее.
-          </div>
-          <ul v-else class="objects">
-            <li v-for="(obj, i) in store.base?.objects" :key="i">{{ obj }}</li>
-          </ul>
         </section>
 
         <aside class="side">
@@ -118,8 +242,8 @@ function heal() {
   font-family: 'Courier New', monospace;
 }
 .base-dialog {
-  width: min(880px, 94vw);
-  max-height: 88vh;
+  width: min(920px, 94vw);
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   background: #12161c;
@@ -144,6 +268,10 @@ header h2 {
   font-size: 12px;
   color: #8b98a5;
 }
+.rooms-count em {
+  font-style: normal;
+  color: #5f6c79;
+}
 .close {
   margin-left: auto;
   background: none;
@@ -152,7 +280,9 @@ header h2 {
   font-size: 18px;
   cursor: pointer;
 }
-.close:hover { color: #fff; }
+.close:hover {
+  color: #fff;
+}
 .body {
   display: grid;
   grid-template-columns: 1fr 280px;
@@ -167,33 +297,25 @@ h3 {
   margin: 0 0 10px;
   text-transform: uppercase;
 }
-.rooms {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+.plan-map {
+  width: 100%;
+  height: 340px;
+  border: 1px solid #2a3542;
+  background: #0d1218;
 }
-.rooms.wide { grid-template-columns: repeat(4, 1fr); }
-.room {
-  aspect-ratio: 4 / 3;
-  border: 1px solid #3f4c5a;
-  background: linear-gradient(180deg, #1b232c, #151b22);
+.room-list {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
 }
-.room-num { font-size: 18px; color: #cfd8e3; }
-.room-state { font-size: 9px; color: #5e6b78; letter-spacing: 1px; }
-.objects-title { margin-top: 18px; }
-.empty {
+.room-chip {
   font-size: 11px;
-  color: #6b7885;
-  line-height: 1.5;
-  border: 1px dashed #333e49;
-  padding: 12px;
+  padding: 2px 8px;
+  border: 1px solid #2f4a5e;
+  color: #7fd7ff;
+  background: rgba(31, 79, 107, 0.35);
 }
-.objects { margin: 0; padding-left: 16px; font-size: 12px; }
 .res {
   list-style: none;
   margin: 0 0 18px;
@@ -207,9 +329,18 @@ h3 {
   padding: 5px 0;
   border-bottom: 1px solid #1e262e;
 }
-.res-ico { width: 16px; text-align: center; }
-.res-label { color: #98a5b2; }
-.res-val { margin-left: auto; color: #fff; font-weight: bold; }
+.res-ico {
+  width: 16px;
+  text-align: center;
+}
+.res-label {
+  color: #98a5b2;
+}
+.res-val {
+  margin-left: auto;
+  color: #fff;
+  font-weight: bold;
+}
 .mini-row {
   display: flex;
   justify-content: space-between;
@@ -217,7 +348,9 @@ h3 {
   color: #98a5b2;
   padding: 3px 0;
 }
-.mini-row b { color: #e6edf3; }
+.mini-row b {
+  color: #e6edf3;
+}
 footer {
   display: flex;
   gap: 10px;
@@ -234,6 +367,11 @@ footer button {
   border: 1px solid #3a4654;
   cursor: pointer;
 }
-footer button:hover:not(:disabled) { background: #26333f; }
-footer button:disabled { opacity: 0.4; cursor: default; }
+footer button:hover:not(:disabled) {
+  background: #26333f;
+}
+footer button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 </style>

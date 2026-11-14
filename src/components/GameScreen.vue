@@ -9,6 +9,9 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import StatsBars from '@/components/StatsBars.vue'
 import BaseDialog from '@/components/BaseDialog.vue'
+import { fetchRealRooms, roomsToFeatureCollection, splitBuildingIntoRooms } from '@/engine/IndoorLoader'
+import LootDialog from '@/components/LootDialog.vue'
+import { generateLoot, lootIcons, lootKey as makeLootKey, LOOT_TTL_MS, RESOURCE_META, resourcesForPois, searchSeconds, type ResourceKey } from '@/engine/LootEngine'
 
 const store = useGameStore()
 const baseUrl = import.meta.env.BASE_URL
@@ -30,6 +33,15 @@ const showBaseConfirm = ref(false)
 const baseDialogOpen = ref(false)
 const canMakeBase = ref(false)
 const canOpenBase = ref(false)
+const canSearchLoot = ref(false)
+const lootDialogOpen = ref(false)
+const activeLootKey = ref('')
+const currentLootKey = ref('')
+const searchActive = ref(false)
+const searchProgress = ref(0)
+let searchTimer: ReturnType<typeof setInterval> | null = null
+let lootCleanup: ReturnType<typeof setInterval> | null = null
+let poiCache: Array<{ class?: string; subclass?: string; name?: string }> = []
 const nearBase = ref(false)
 const roomsPreview = ref(1)
 const areaPreview = ref(0)
@@ -44,7 +56,7 @@ const cleaningTimeText = computed(() => {
 const cleaningUi = ref({ active: false, progress: 0, rooms: 0 })
 
 // блокировка движения, пока открыта любая модалка или идёт расчистка
-const anyModalOpen = computed(() => showAftermathNotice.value || showBaseConfirm.value || cleaningUi.value.active || baseDialogOpen.value)
+const anyModalOpen = computed(() => showAftermathNotice.value || showBaseConfirm.value || cleaningUi.value.active || baseDialogOpen.value || lootDialogOpen.value)
 watch(anyModalOpen, (open) => { playerController?.setInputBlocked(open) }, { flush: 'post' })
 let statsInterval: ReturnType<typeof setInterval> | null = null
 let buildingInterval: ReturnType<typeof setInterval> | null = null
@@ -192,6 +204,8 @@ onUnmounted(() => {
   clearInterval(carInfoInterval)
   if (statsInterval) clearInterval(statsInterval)
   if (buildingInterval) clearInterval(buildingInterval)
+  if (searchTimer) clearInterval(searchTimer)
+  if (lootCleanup) clearInterval(lootCleanup)
   spawnValidationTimeouts.forEach(clearTimeout)
   mapEngine?.destroy()
 })
@@ -407,6 +421,8 @@ function startSurvival(showNotice = true) {
   statsInterval = setInterval(tickSurvival, 1000)
   if (buildingInterval) clearInterval(buildingInterval)
   buildingInterval = setInterval(updateBasePrompt, 600)
+  if (lootCleanup) clearInterval(lootCleanup)
+  lootCleanup = setInterval(cleanupLoot, 5000)
 }
 
 function tickSurvival() {
@@ -448,6 +464,82 @@ function updateBasePrompt() {
   canMakeBase.value = !store.base && !store.isInCar && insideBuilding
   // кнопка базы видна только пока игрок внутри здания базы
   canOpenBase.value = !!store.base && insideBuilding && atBase && !cleaningUi.value.active
+
+  // поиск ресурсов в магазинах
+  if (insideBuilding && !store.isInCar) {
+    poiCache = mapEngine.getPoisNear(pos.lng, pos.lat, 70)
+    canSearchLoot.value = resourcesForPois(poiCache).length > 0 && !baseDialogOpen.value && !lootDialogOpen.value
+    currentLootKey.value = makeLootKey(pos.lat, pos.lng)
+  } else {
+    poiCache = []
+    canSearchLoot.value = false
+  }
+}
+
+function openLoot() {
+  if (!mapEngine || !playerController) return
+  const pos = playerController.getPosition()
+  const key = makeLootKey(pos.lat, pos.lng)
+  const existing = store.lootBuildings[key]
+  if (existing && existing.expiresAt > Date.now()) {
+    activeLootKey.value = key
+    lootDialogOpen.value = true
+    return
+  }
+
+  const areaM2 = mapEngine.getBuildingAreaAt(pos.lng, pos.lat) ?? 250
+  const keys = resourcesForPois(poiCache)
+  if (!keys.length) return
+  const shops = new Set(poiCache.map((p) => p.subclass ?? p.class ?? '')).size
+  const seconds = searchSeconds(areaM2, keys.length)
+
+  activeLootKey.value = key
+  searchActive.value = true
+  searchProgress.value = 0
+  lootDialogOpen.value = true
+  const started = Date.now()
+  if (searchTimer) clearInterval(searchTimer)
+  searchTimer = setInterval(() => {
+    const p = Math.min(1, (Date.now() - started) / (seconds * 1000))
+    searchProgress.value = p
+    if (p >= 1) {
+      if (searchTimer) { clearInterval(searchTimer); searchTimer = null }
+      const items = generateLoot(keys, areaM2, shops)
+      store.lootBuildings[key] = {
+        key,
+        lat: pos.lat,
+        lng: pos.lng,
+        items,
+        expiresAt: Date.now() + LOOT_TTL_MS,
+        icons: lootIcons(items),
+      }
+      mapEngine?.setLootMarker(key, pos.lng, pos.lat, lootIcons(items))
+      searchActive.value = false
+    }
+  }, 120)
+}
+
+function depositCarried() {
+  if (!store.base) return
+  const carried = store.carried as Record<string, number>
+  let moved = 0
+  for (const [k, amount] of Object.entries(carried)) {
+    if (!amount) continue
+    const target = store.base.resources as unknown as Record<string, number>
+    target[k] = (target[k] ?? 0) + amount
+    moved += amount
+  }
+  if (moved) store.carried = {}
+}
+
+function cleanupLoot() {
+  const now = Date.now()
+  for (const [key, loot] of Object.entries(store.lootBuildings)) {
+    if (loot.expiresAt <= now) {
+      delete store.lootBuildings[key]
+      mapEngine?.removeLootMarker(key)
+    }
+  }
 }
 
 function openBaseConfirm() {
@@ -479,6 +571,7 @@ function confirmMakeBase() {
 }
 
 function createBase(lat: number, lng: number, rooms: number) {
+  const polygon = mapEngine?.getBuildingPolygonAt(lng, lat) ?? null
   store.base = {
     latitude: lat,
     longitude: lng,
@@ -490,9 +583,39 @@ function createBase(lat: number, lng: number, rooms: number) {
       fuel: 1,
       medicine: Math.max(1, Math.floor(rooms / 2)),
       energy: 10,
+      clothes: 0,
+      tech: 0,
+      weapons: 0,
+      tools: 0,
     },
     objects: [],
+    polygon,
+    roomsGeo: null,
+    roomsReal: false,
   }
+
+  // помещения: сначала пробуем настоящие из OSM, иначе режем контур здания
+  if (polygon) {
+    void (async () => {
+      let roomsGeo: GeoJSON.FeatureCollection | null = null
+      let real = false
+      try {
+        const realRooms = await fetchRealRooms(polygon)
+        if (realRooms.length) {
+          roomsGeo = roomsToFeatureCollection(realRooms)
+          real = true
+        }
+      } catch (e) {
+        console.warn('indoor rooms fail', e)
+      }
+      if (!roomsGeo) roomsGeo = roomsToFeatureCollection(splitBuildingIntoRooms(polygon, rooms))
+      if (store.base) {
+        store.base.roomsGeo = roomsGeo
+        store.base.roomsReal = real
+      }
+    })()
+  }
+
   mapEngine?.setBaseMarker(lng, lat)
   canMakeBase.value = false
   baseDismissed = true
@@ -551,6 +674,14 @@ function restartGame() {
   explosionStarted = false
   store.isAftermath = false
   store.base = null
+  store.carried = {}
+  store.lootBuildings = {}
+  activeLootKey.value = ''
+  lootDialogOpen.value = false
+  searchActive.value = false
+  canSearchLoot.value = false
+  if (searchTimer) { clearInterval(searchTimer); searchTimer = null }
+  mapEngine?.clearLootMarkers()
   store.deathReasonText = null
   showAftermathNotice.value = false
   showBaseConfirm.value = false
@@ -655,6 +786,22 @@ function toggleMute() {
     <button v-if="canOpenBase && !baseDialogOpen" class="open-base-btn" @click="baseDialogOpen = true">
       ★ Открыть окно базы
     </button>
+
+    <button
+      v-if="canSearchLoot && !canMakeBase && !canOpenBase"
+      class="loot-btn"
+      @click="openLoot"
+    >
+      🔎 {{ store.lootBuildings[currentLootKey] && store.lootBuildings[currentLootKey].expiresAt > Date.now() ? 'Открыть найденное' : 'Поиск ресурсов' }}
+    </button>
+
+    <LootDialog
+      v-if="lootDialogOpen && activeLootKey"
+      :loot-key="activeLootKey"
+      :searching="searchActive"
+      :progress="searchProgress"
+      @close="lootDialogOpen = false"
+    />
 
     <div v-if="showAftermathNotice" class="aftermath-overlay">
       <div class="aftermath-card">
@@ -1084,6 +1231,23 @@ function toggleMute() {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
 }
 .open-base-btn:hover { background: rgba(44, 54, 32, 0.95); }
+
+.loot-btn {
+  position: absolute;
+  right: 18px;
+  bottom: 76px;
+  z-index: 160;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  letter-spacing: 1px;
+  padding: 12px 18px;
+  background: rgba(20, 26, 34, 0.94);
+  color: #7fd7ff;
+  border: 1px solid #7fd7ff;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+.loot-btn:hover { background: rgba(30, 42, 54, 0.96); }
 
 .aftermath-overlay {
   position: absolute;

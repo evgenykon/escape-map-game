@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, shallowRef } from 'vue'
 import type { Scenario } from '@/scenarios/types'
+import type { BuildingLoot, ResourceKey } from '@/engine/LootEngine'
 
 export type GamePhase = 'start' | 'loading' | 'playing' | 'explosion' | 'aftermath' | 'gameover' | 'victory'
 
@@ -32,6 +33,10 @@ export interface BaseResources {
   fuel: number
   medicine: number
   energy: number
+  clothes: number
+  tech: number
+  weapons: number
+  tools: number
 }
 
 export interface PlayerBase {
@@ -40,6 +45,9 @@ export interface PlayerBase {
   rooms: number
   resources: BaseResources
   objects: string[]
+  polygon: GeoJSON.Polygon | null
+  roomsGeo: GeoJSON.FeatureCollection | null
+  roomsReal: boolean
 }
 
 export interface SMS {
@@ -91,6 +99,8 @@ export const useGameStore = defineStore('game', () => {
   const cleaning = ref<{ active: boolean; progress: number; rooms: number }>({ active: false, progress: 0, rooms: 0 })
   const deathReasonText = ref<string | null>(null)
   const devAftermath = ref(false)
+  const carried = ref<Partial<Record<ResourceKey, number>>>({})
+  const lootBuildings = ref<Record<string, BuildingLoot>>({})
 
   const cacheBustTag = 'bust-2026-07-06-12-00'
 
@@ -131,6 +141,8 @@ export const useGameStore = defineStore('game', () => {
     cleaning,
     deathReasonText,
     devAftermath,
+    carried,
+    lootBuildings,
     cacheBustTag,
   }
 })

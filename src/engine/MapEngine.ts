@@ -26,6 +26,7 @@ export class MapEngine {
   private thoughtTimer: ReturnType<typeof setTimeout> | null = null
   private shelterIconMarker: maplibregl.Marker | null = null
   private baseMarker: maplibregl.Marker | null = null
+  private lootMarkers: Map<string, maplibregl.Marker> = new Map()
   private buildingDamageMarker: maplibregl.Marker | null = null
   private explosionInfoMarker: maplibregl.Marker | null = null
   private fuelStations: { lng: number; lat: number }[] = []
@@ -759,6 +760,66 @@ export class MapEngine {
       }
     }
     return true
+  }
+
+  /** POI (магазины и т.п.) в радиусе вокруг точки. */
+  getPoisNear(lng: number, lat: number, radiusPx = 60): Array<{ class?: string; subclass?: string; name?: string }> {
+    if (!this.map) return []
+    const pt = this.map.project([lng, lat])
+    const r = radiusPx
+    const feats = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
+    const out: Array<{ class?: string; subclass?: string; name?: string }> = []
+    for (const f of feats) {
+      const id = f.layer?.id ?? ''
+      if (!id.startsWith('poi')) continue
+      const p = f.properties as Record<string, unknown> | null
+      if (!p) continue
+      out.push({
+        class: (p.class as string) ?? undefined,
+        subclass: (p.subclass as string) ?? undefined,
+        name: (p.name as string) ?? undefined,
+      })
+    }
+    return out
+  }
+
+  /** Иконки осмотренного здания. */
+  setLootMarker(key: string, lng: number, lat: number, icons: string) {
+    const existing = this.lootMarkers.get(key)
+    if (existing) existing.remove()
+    const el = document.createElement('div')
+    el.textContent = icons
+    el.style.cssText =
+      'font-size:15px;line-height:1;pointer-events:none;text-shadow:0 1px 3px rgba(0,0,0,.9);' +
+      'background:rgba(12,16,20,.72);border:1px solid rgba(255,255,255,.25);border-radius:6px;padding:2px 4px'
+    const marker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(this.map!)
+    this.lootMarkers.set(key, marker)
+  }
+
+  removeLootMarker(key: string) {
+    const m = this.lootMarkers.get(key)
+    if (m) {
+      m.remove()
+      this.lootMarkers.delete(key)
+    }
+  }
+
+  clearLootMarkers() {
+    for (const m of this.lootMarkers.values()) m.remove()
+    this.lootMarkers.clear()
+  }
+
+  /** Полигон здания под точкой (для схемы помещений). */
+  getBuildingPolygonAt(lng: number, lat: number): GeoJSON.Polygon | null {
+    if (!this.map) return null
+    const pt = this.map.project([lng, lat])
+    const feats = this.map.queryRenderedFeatures([[pt.x - 3, pt.y - 3], [pt.x + 3, pt.y + 3]])
+    const b = feats.find(f => f.layer && (f.layer.id === 'building' || f.layer.id === 'building-3d'))
+    if (!b || !b.geometry) return null
+    const g = b.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon
+    if (g.type === 'Polygon') return g
+    if (g.type === 'MultiPolygon' && g.coordinates[0]) return { type: 'Polygon', coordinates: g.coordinates[0] }
+    return null
   }
 
   /** Площадь здания (м²) под точкой, либо null если точки нет в здании. */
