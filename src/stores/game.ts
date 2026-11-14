@@ -43,6 +43,8 @@ export interface PlayerBase {
   latitude: number
   longitude: number
   rooms: number
+  /** измеренная площадь здания, м² */
+  areaM2: number
   resources: BaseResources
   objects: string[]
   polygon: GeoJSON.Polygon | null

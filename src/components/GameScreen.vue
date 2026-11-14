@@ -389,13 +389,21 @@ function roomsForArea(areaM2: number): number {
   return Math.max(1, Math.min(10, Math.round(areaM2 / ROOM_AREA_M2)))
 }
 
+/**
+ * Радиус «я в базе»: половина габарита здания (по измеренной площади),
+ * но не меньше 12 и не больше 40 м — соседний дом через улицу уже не считается.
+ */
+function baseRadiusM(): number {
+  const area = store.base?.areaM2 ?? 0
+  const side = Math.sqrt(Math.max(area, 1))
+  return Math.min(40, Math.max(12, side * 0.6))
+}
+
 function isAtBase(): boolean {
   const b = store.base
   if (!b || !playerController) return false
   const pos = playerController.getPosition()
-  // сначала по контуру здания базы, затем — на всякий случай по близости (10 м)
-  if (isInsidePolygon(pos.lat, pos.lng, b.polygon ?? null)) return true
-  return haversine(pos.lat, pos.lng, b.latitude, b.longitude) < 10
+  return haversine(pos.lat, pos.lng, b.latitude, b.longitude) <= baseRadiusM()
 }
 
 function enterDevAftermath() {
@@ -469,10 +477,10 @@ function tickSurvival() {
 function updateBasePrompt() {
   if (store.phase !== 'aftermath' || !playerController || !mapEngine) return
   const pos = playerController.getPosition()
-  const atBase = isAtBase()
+  const insideBuilding = mapEngine.isInsideBuildingStrict(pos.lng, pos.lat)
+  const atBase = insideBuilding && isAtBase()
   if (nearBase.value && !atBase) baseDismissed = false
   nearBase.value = atBase
-  const insideBuilding = mapEngine.isInsideBuildingStrict(pos.lng, pos.lat)
   const inBaseBuilding = !!store.base && atBase
   canMakeBase.value = !store.base && !store.isInCar && insideBuilding
   canOpenBase.value = inBaseBuilding && insideBuilding && !cleaningUi.value.active
@@ -550,6 +558,7 @@ function relocateBase(lat: number, lng: number, rooms: number) {
     latitude: lat,
     longitude: lng,
     rooms,
+    areaM2: areaPreview.value ?? store.base.areaM2,
     polygon: pendingPolygon,
     roomsGeo: null,
     roomsReal: false,
@@ -712,6 +721,7 @@ function createBase(lat: number, lng: number, rooms: number) {
     latitude: lat,
     longitude: lng,
     rooms,
+    areaM2: areaPreview.value ?? 250,
     resources: {
       food: 2 + rooms,
       water: 2 + rooms,
