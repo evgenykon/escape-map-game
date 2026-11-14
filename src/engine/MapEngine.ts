@@ -53,13 +53,13 @@ export class MapEngine {
 
   private static readonly CAR_DIRS = 16
   private static readonly CAR_BOX = 44
-  private static readonly PLAYER_BOX = 32
+  private static readonly PLAYER_BOX = 38
 
   private static readonly PLAYER_IDLE = { url: 'sprites/player-idle.png', w: 48, h: 48, count: 10, duration: 3 }
   private static readonly PLAYER_HACK = { url: 'sprites/player-hacking.png', w: 48, h: 48, count: 4, duration: 1 }
   private static readonly PLAYER_DEAD = { url: 'sprites/dead.png', w: 32, h: 32, count: 1, duration: 0 }
   private static readonly PLAYER_SWIM = { url: 'sprites/player_swimming.png', w: 48, h: 48, count: 7, duration: 0.8 }
-  private static readonly PLAYER_WALK = { url: 'sprites/player/walk-4.png', w: 128, h: 128, count: 8, duration: 0.72 }
+  private static readonly PLAYER_WALK = { url: 'sprites/player/walk-0.png', w: 128, h: 128, count: 8, duration: 0.72 }
   private static readonly PLAYER_WALK_DIRS = [
     'sprites/player/walk-0.png',
     'sprites/player/walk-1.png',
