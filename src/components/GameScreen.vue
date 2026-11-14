@@ -312,6 +312,7 @@ function triggerExplosion() {
   playerController.stop()
   soundEngine.stopAllLoops()
   soundEngine.stopAftermathAmbience()
+  soundEngine.setAftermathMode(false)
 
   hudTimeLeft.value = 0
   if (explosionTimer) clearInterval(explosionTimer)
@@ -430,6 +431,7 @@ function enterDevAftermath() {
 function startSurvival(showNotice = true) {
   store.isAftermath = true
   store.phase = 'aftermath'
+  soundEngine.setAftermathMode(true)
   soundEngine.startAftermathAmbience()
   store.stats = { health: 100, energy: 65, satiety: 70, water: 60 }
   showAftermathNotice.value = showNotice
@@ -888,6 +890,7 @@ function checkGameResult() {
   mapEngine.removeExplosionInfoMarker()
   soundEngine.stopAllLoops()
   soundEngine.stopAftermathAmbience()
+  soundEngine.setAftermathMode(false)
   if (deathReason.value === 'collapse' || deathReason.value === 'explosion') {
     store.phase = 'gameover'
   } else {

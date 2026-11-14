@@ -101,6 +101,13 @@ class SoundEngine {
     lonely: 0.3,
   }
   private loops: Partial<Record<SoundKey, LoopHandle>> = {}
+  /** эмбиент посмертного мира играет по очереди, а не двумя треками сразу */
+  private ambienceOrder: SoundKey[] = ['deadForest', 'lonely']
+  private ambienceIndex = 0
+  private ambienceRunning = false
+  /** после взрыва звуки «живого города» и техники должны молчать */
+  private aftermathMode = false
+  private ambienceHandle: LoopHandle | null = null
   private muted = false
 
   private ensureCtx(): AudioContext {
@@ -127,6 +134,7 @@ class SoundEngine {
     this.muted = b
     if (b) {
       for (const key of LOOP_KEYS) this.stopLoop(key)
+      this.stopAftermathAmbience()
     }
   }
 
@@ -162,8 +170,36 @@ class SoundEngine {
     return this.oneShotTemplates[key]!
   }
 
+  /** Звуки, которые допустимы в посмертном мире (действия игрока и входы в здания). */
+  private static readonly AFTERMATH_ALLOWED: SoundKey[] = [
+    'explosion',
+    'footstepsWalk',
+    'footstepsRun',
+    'swimming',
+    'hacking',
+    'doorOpeningClosing',
+    'doorClosing',
+  ]
+
+  setAftermathMode(on: boolean): void {
+    this.aftermathMode = on
+    if (!on) return
+    // глушим всё, что осталось от «живого» мира
+    this.stopLoop('carDriven')
+    this.stopLoop('cityNoise1')
+    this.stopLoop('cityNoise2')
+    this.stopLoop('nuclearDanger')
+    this.stopLoop('carFillingStation')
+  }
+
+  private allowedNow(key: SoundKey): boolean {
+    if (!this.aftermathMode) return true
+    return SoundEngine.AFTERMATH_ALLOWED.includes(key)
+  }
+
   private playOneShot(key: SoundKey): void {
     if (this.muted) return
+    if (!this.allowedNow(key)) return
     const template = this.getOneShotTemplate(key)
     const node = template.cloneNode(true) as HTMLAudioElement
     node.volume = this.volumes[key]
@@ -172,6 +208,7 @@ class SoundEngine {
 
   private startLoop(key: SoundKey): void {
     if (this.muted) return
+    if (!this.allowedNow(key)) return
     if (this.loops[key]) return
     const ctx = this.ensureCtx()
     this.loadBuffer(key).then((buf) => {
@@ -251,15 +288,54 @@ class SoundEngine {
     this.stopLoop('cityNoise2')
   }
 
-  /** Фоновые звуки посмертного мира: мёртвый лес + одиночество. */
+  /** Фоновые треки посмертного мира: играют по очереди, один за другим. */
   startAftermathAmbience(): void {
-    if (this.muted) return
-    if (!this.loops['deadForest']) this.startLoop('deadForest')
-    if (!this.loops['lonely']) this.startLoop('lonely')
+    if (this.muted || this.ambienceRunning) return
+    this.ambienceRunning = true
+    void this.playAmbienceTrack()
   }
+
   stopAftermathAmbience(): void {
-    this.stopLoop('deadForest')
-    this.stopLoop('lonely')
+    this.ambienceRunning = false
+    const handle = this.ambienceHandle
+    this.ambienceHandle = null
+    if (!handle) return
+    try { handle.source.stop() } catch {}
+    handle.source.disconnect()
+    handle.gain.disconnect()
+  }
+
+  private async playAmbienceTrack(): Promise<void> {
+    if (!this.ambienceRunning || this.muted) return
+    const key = this.ambienceOrder[this.ambienceIndex % this.ambienceOrder.length]
+    let buf: AudioBuffer
+    try {
+      buf = await this.loadBuffer(key)
+    } catch {
+      return
+    }
+    if (!this.ambienceRunning || this.muted) return
+
+    const ctx = this.ensureCtx()
+    const source = ctx.createBufferSource()
+    source.buffer = buf
+    source.loop = false
+
+    const gain = ctx.createGain()
+    const target = this.volumes[key]
+    gain.gain.value = 0
+    gain.gain.linearRampToValueAtTime(target, ctx.currentTime + 2.5)
+
+    source.connect(gain).connect(ctx.destination)
+
+    source.onended = () => {
+      if (!this.ambienceRunning || this.muted) return
+      this.ambienceIndex += 1
+      window.setTimeout(() => { void this.playAmbienceTrack() }, 2000)
+    }
+
+    source.start()
+    this.ambienceHandle = { source, gain }
   }
 
   startCarFillingStationLoop(): void { this.startLoop('carFillingStation') }
