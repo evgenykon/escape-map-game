@@ -864,14 +864,15 @@ export class MapEngine {
   }
 
   /** Иконки осмотренного здания. */
-  setLootMarker(key: string, lng: number, lat: number, icons: string) {
+  setLootMarker(key: string, lng: number, lat: number, icons: string, emptied = false) {
     const existing = this.lootMarkers.get(key)
     if (existing) existing.remove()
     const el = document.createElement('div')
-    el.textContent = icons
+    el.textContent = emptied ? `${icons}` : icons
     el.style.cssText =
       'font-size:15px;line-height:1;pointer-events:none;text-shadow:0 1px 3px rgba(0,0,0,.9);' +
-      'background:rgba(12,16,20,.72);border:1px solid rgba(255,255,255,.25);border-radius:6px;padding:2px 4px'
+      `background:rgba(12,16,20,${emptied ? 0.45 : 0.72});border:1px solid rgba(255,255,255,${emptied ? 0.12 : 0.25});` +
+      `border-radius:6px;padding:2px 4px;${emptied ? 'text-decoration:line-through;text-decoration-thickness:2px;text-decoration-color:#ff5c5c;opacity:.6;' : ''}`
     const marker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(this.map!)
     this.lootMarkers.set(key, marker)
   }

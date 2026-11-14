@@ -608,6 +608,15 @@ function cleanupLoot() {
     if (loot.expiresAt <= now) {
       delete store.lootBuildings[key]
       mapEngine?.removeLootMarker(key)
+      continue
+    }
+    const empty = loot.items.every((i) => i.amount <= 0)
+    if (empty && !loot.emptied) {
+      loot.emptied = true
+      mapEngine?.setLootMarker(key, loot.lng, loot.lat, loot.icons, true)
+    } else if (!empty && loot.emptied) {
+      loot.emptied = false
+      mapEngine?.setLootMarker(key, loot.lng, loot.lat, loot.icons, false)
     }
   }
 }
@@ -897,7 +906,7 @@ function toggleMute() {
       :loot-key="activeLootKey"
       :searching="searchActive"
       :progress="searchProgress"
-      @close="lootDialogOpen = false"
+      @close="lootDialogOpen = false; cleanupLoot()"
     />
 
     <div v-if="showAftermathNotice" class="aftermath-overlay">

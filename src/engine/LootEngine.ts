@@ -23,6 +23,8 @@ export interface BuildingLoot {
   expiresAt: number
   /** иконки для маркера на карте */
   icons: string
+  /** всё вынесли — маркер перечёркивается */
+  emptied?: boolean
 }
 
 export const RESOURCE_META: Record<ResourceKey, { icon: string; label: string }> = {
