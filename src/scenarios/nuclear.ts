@@ -27,7 +27,7 @@ export const nuclearScenario: Scenario = {
   init() {
     this.explosionRadius = Math.round(randomInRange(2500, 3500))
     const explosion = this.timeline.find(e => e.type === 'explosion')
-    if (explosion) explosion.timeSec = Math.round(randomInRange(420, 600))
+    if (explosion) explosion.timeSec = 500  // фиксированный таймер сценария
   },
 
   computeEpicenter(ctx): EpicenterSpec {
@@ -49,11 +49,11 @@ export const nuclearScenario: Scenario = {
     { timeSec: 160, type: 'thought', texts: ['Ага, сохраняю. Еще будут советы?', 'Спасибо, очень полезно...', 'Легко сказать "сохраняйте спокойствие".'] },
     { timeSec: 240, type: 'sms', text: '(Оповещение): Работает ПВО и спасательные службы! Избегайте паники и мест скопления людей и машин. Ждите дальнейших инструкций.' },
     { timeSec: 245, type: 'traffic' },
-    { timeSec: 360, type: 'shelter', minM: 1500, maxM: 2000 },
-    { timeSec: 360, type: 'sms', text: '(Оповещение): Внимание! Угроза применения ЯО! Найдите ближайшее убежище! Следуйте указателям на карте.' },
-    { timeSec: 370, type: 'thought', texts: ['Убежище? Или двигаться дальше?', 'Где безопаснее?', 'Не знаю, кажется это не поможет, если весь город разнесёт...'] },
-    { timeSec: 400, type: 'sms', text: '(Оповещение): Внимание! Опасайтесь оставаться на улицах! Немедленно найдите укрытие!' },
-    { timeSec: 480, type: 'explosion' },
+    { timeSec: 300, type: 'shelter', minM: 1500, maxM: 2000 },
+    { timeSec: 300, type: 'sms', text: '(Оповещение): Внимание! Угроза применения ЯО! Найдите ближайшее убежище! Следуйте указателям на карте.' },
+    { timeSec: 320, type: 'thought', texts: ['Убежище? Или двигаться дальше?', 'Где безопаснее?', 'Не знаю, кажется это не поможет, если весь город разнесёт...'] },
+    { timeSec: 420, type: 'sms', text: '(Оповещение): Внимание! Опасайтесь оставаться на улицах! Немедленно найдите укрытие!' },
+    { timeSec: 500, type: 'explosion' },
   ],
 
   resultTexts: {
