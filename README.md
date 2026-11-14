@@ -41,6 +41,7 @@ A browser-based escape game (MapLibre + Vue 3) where the player must reach a she
 ├── vite.config.ts         # @ alias → src, base for GH_PAGES
 ├── index.html
 ├── public/                # static assets (sprites, sounds, icons)
+├── tools/bake-sprites/    # Blender-скрипт запекания спрайтов из 3D (см. README внутри)
 └── src/
     ├── main.ts            # Vue + Pinia bootstrap
     ├── App.vue
