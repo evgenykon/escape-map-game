@@ -9,6 +9,7 @@ EEVEE с raytracing, прозрачный фон. На выходе — верт
 |---|---|---|---|
 | Машина (каждый цвет) | `public/sprites/cars/car-<color>.png` | 128×2048 | 16 направлений, по 1 кадру |
 | Персонаж, ходьба | `public/sprites/player/walk-<dir>.png` | 128×1024 | 8 направлений × 8 кадров |
+| Персонаж, взлом | `public/sprites/player/hack-<dir>.png` | 128×768 | 8 направлений × 6 кадров |
 
 Кадр машины выбирается в рантайме по углу (`MapEngine.carFrameIndex`), а не прокручивается
 по времени. У персонажа лист на направление, внутри — 8 кадров цикла ходьбы.
@@ -25,6 +26,9 @@ CARCOLOR=green CARS=16 PDIRS=0 blender -b -P bake_sprites.py
 
 # персонаж: 8 направлений × 8 кадров ходьбы
 CARS=0 PDIRS=8 PFRAMES=8 blender -b -P bake_sprites.py
+
+# персонаж: анимация взлома (8 направлений × 6 кадров)
+CARS=0 PDIRS=8 PFRAMES=6 MODE=hack blender -b -P bake_sprites.py
 ```
 
 Кадры складываются в `frames_v5_<color>/` (машины) и `frames_v5/` (персонаж) рядом со скриптом.
@@ -39,8 +43,9 @@ ffmpeg -y -start_number 0 -i frames_v5/pl_03_%02d.png -vf "scale=128:128:flags=l
 
 ## Модели
 
-- **Машина** — процедурная, строится прямо в скрипте (`build_car`): subsurf-кузов,
-  булевы вырезы арок, стекло, хром, диски со спицами. Правки формы и цвета — там же.
+- **Машина** — процедурная, строится прямо в скрипте (`build_car`): кузов и остекление —
+  лофт по сечениям (superellipse), сужение к носу и корме, булевы вырезы арок, стекло,
+  хром, диски со спицами. Форма правится в таблицах сечений `loft(...)`.
 - **Персонаж** — `assets/character-casual.glb`, Quaternius «Ultimate Modular Men» (CC0).
   Скелет: `Hips / UpperLeg.L/R / LowerLeg.L/R / UpperArm.L/R`. Поза и цикл ходьбы
   задаются процедурно (`world_rot`), анимации в модели нет.

@@ -33,7 +33,7 @@ def mat(name, color, rough=0.4, metal=0.0, coat=0.0, emit=None):
 
 PAINT = mat("paint", COLORS[CARCOLOR], 0.30, 0.10, coat=0.35)
 GLASS = mat("glass", (0.055, 0.075, 0.10), 0.06, 0.65, coat=0.6)
-TIRE = mat("tire", (0.045, 0.045, 0.05), 0.88)
+TIRE = mat("tire", (0.018, 0.018, 0.022), 0.92)
 RIM = mat("rim", (0.66, 0.67, 0.69), 0.22, 1.0)
 CHROME = mat("chrome", (0.86, 0.87, 0.9), 0.1, 1.0)
 DARK = mat("dark", (0.035, 0.035, 0.04), 0.5)
@@ -65,25 +65,70 @@ def box(name, m_, loc, scale, bevel=0.0, rot=(0, 0, 0), segs=3, subs=0):
     return o
 
 
+
+def superellipse(w, zc, h, n=20, p=4.5):
+    """Сечение кузова: скруглённый прямоугольник (superellipse) в плоскости XZ."""
+    pts = []
+    for i in range(n):
+        t = 2 * math.pi * i / n
+        ct, st = math.cos(t), math.sin(t)
+        x = w * math.copysign(abs(ct) ** (2.0 / p), ct)
+        z = zc + h * math.copysign(abs(st) ** (2.0 / p), st)
+        pts.append((x, z))
+    return pts
+
+
+def loft(name, sections, n=20, p=4.5):
+    """Лофт по сечениям вдоль Y. sections: [(y, half_width, z_top, z_bottom), ...]"""
+    verts, faces = [], []
+    for (y, w, zt, zb) in sections:
+        zc, h = (zt + zb) / 2.0, (zt - zb) / 2.0
+        for (x, z) in superellipse(w, zc, h, n=n, p=p):
+            verts.append((x, y, z))
+    for si in range(len(sections) - 1):
+        a, b = si * n, (si + 1) * n
+        for i in range(n):
+            j = (i + 1) % n
+            faces.append((a + i, a + j, b + j, b + i))
+    faces.append(tuple(range(n - 1, -1, -1)))
+    base = (len(sections) - 1) * n
+    faces.append(tuple(range(base, base + n)))
+
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    bpy.context.view_layer.objects.active = obj
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(mesh)
+    bm.free()
+    sm = obj.modifiers.new("subs", 'SUBSURF')
+    sm.levels = 2
+    sm.render_levels = 2
+    bpy.ops.object.modifier_apply(modifier="subs")
+    obj.data.materials.append(PAINT)
+    bpy.ops.object.shade_smooth()
+    return obj
+
+
 # ======================= CAR =======================
 def build_car():
     objs = []
-    bpy.ops.mesh.primitive_cube_add(location=(0, 0, 0.72))
-    body = bpy.context.active_object
-    body.name = "body"
-    body.scale = (0.90, 2.25, 0.27)
-    bpy.ops.object.transform_apply(scale=True)
-    bev = body.modifiers.new("bev", 'BEVEL')
-    bev.width = 0.17
-    bev.segments = 2
-    bev.limit_method = 'NONE'
-    sub = body.modifiers.new("subs", 'SUBSURF')
-    sub.levels = 2
-    sub.render_levels = 2
-    bpy.context.view_layer.objects.active = body
-    bpy.ops.object.modifier_apply(modifier="bev")
-    bpy.ops.object.modifier_apply(modifier="subs")
-    bpy.ops.object.shade_smooth()
+    # кузов: лофт по 9 сечениям — сужение к носу/корме, скруглённые борта
+    body = loft("body", [
+        (-2.25, 0.56, 0.80, 0.46),
+        (-2.10, 0.74, 0.90, 0.42),
+        (-1.70, 0.86, 0.94, 0.40),
+        (-0.85, 0.90, 0.955, 0.395),
+        (0.0, 0.905, 0.96, 0.395),
+        (0.85, 0.90, 0.955, 0.395),
+        (1.70, 0.86, 0.94, 0.40),
+        (2.10, 0.73, 0.885, 0.42),
+        (2.25, 0.55, 0.775, 0.46),
+    ], p=4.0)
 
     cutters = []
     for sx in (-1, 1):
@@ -106,36 +151,19 @@ def build_car():
     body.data.materials.append(PAINT)
     for poly in body.data.polygons:
         poly.material_index = 0
-    outline = box("outline", DARK, (0, 0, 0.44), (0.930, 2.310, 0.040), bevel=0.24, segs=4)
-    objs.append(outline)
     objs.append(body)
 
-    # cabin
-    bpy.ops.mesh.primitive_cube_add(location=(0, -0.14, 1.14))
-    cab = bpy.context.active_object
-    cab.name = "cabin"
-    cab.scale = (0.78, 0.96, 0.30)
-    bpy.ops.object.transform_apply(scale=True)
-    bm = bmesh.new()
-    bm.from_mesh(cab.data)
-    for v in bm.verts:
-        if v.co.z > 0:
-            v.co.x *= 0.88
-            v.co.y *= 0.78
-    bm.to_mesh(cab.data)
-    bm.free()
-    b = cab.modifiers.new("bev", 'BEVEL')
-    b.width = 0.09
-    b.segments = 2
-    b.limit_method = 'NONE'
-    s2 = cab.modifiers.new("subs", 'SUBSURF')
-    s2.levels = 2
-    s2.render_levels = 2
-    bpy.context.view_layer.objects.active = cab
-    bpy.ops.object.modifier_apply(modifier="bev")
-    bpy.ops.object.modifier_apply(modifier="subs")
+    # остекление: лофт с наклонной передней и задней частью
+    cab = loft("cabin", [
+        (-1.12, 0.45, 1.24, 0.93),
+        (-0.95, 0.58, 1.42, 0.93),
+        (-0.55, 0.68, 1.45, 0.93),
+        (0.05, 0.70, 1.45, 0.93),
+        (0.55, 0.66, 1.40, 0.93),
+        (0.92, 0.56, 1.24, 0.93),
+    ], p=3.4)
+    cab.data.materials.clear()
     cab.data.materials.append(GLASS)
-    bpy.ops.object.shade_smooth()
     objs.append(cab)
 
     objs.append(box("roof", PAINT, (0, -0.30, 1.452), (0.600, 0.500, 0.018), bevel=0.05, segs=3, subs=1))
@@ -145,18 +173,18 @@ def build_car():
         objs.append(box(f"mirror{sx}", PAINT, (0.895 * sx, 0.60, 1.00), (0.042, 0.068, 0.026), bevel=0.014, segs=3, subs=1))
         objs.append(box(f"handle{sx}", CHROME, (0.900 * sx, -0.02, 0.86), (0.010, 0.072, 0.015), bevel=0.005, segs=2))
         objs.append(box(f"sill{sx}", DARK, (0.895 * sx, -0.05, 0.50), (0.013, 1.25, 0.042), bevel=0.01, segs=2))
-        objs.append(box(f"head{sx}", LIGHT_M, (0.52 * sx, 2.243, 0.86), (0.155, 0.018, 0.052), bevel=0.02, segs=3, subs=1))
-        objs.append(box(f"tail{sx}", TAIL_M, (0.55 * sx, -2.243, 0.88), (0.165, 0.016, 0.048), bevel=0.018, segs=3, subs=1))
+        objs.append(box(f"head{sx}", LIGHT_M, (0.365 * sx, 2.185, 0.775), (0.135, 0.020, 0.062), bevel=0.02, segs=3, subs=1))
+        objs.append(box(f"tail{sx}", TAIL_M, (0.385 * sx, -2.185, 0.795), (0.140, 0.018, 0.055), bevel=0.018, segs=3, subs=1))
 
     for sy, ln in ((1, 0.80), (-1, 0.60)):
-        objs.append(box(f"seamHood{sy}", DARK, (0, 1.12 * sy, 0.948), (0.760, 0.012, 0.006)))
-    objs.append(box("grille", DARK, (0, 2.245, 0.80), (0.40, 0.012, 0.072), bevel=0.01, segs=2))
+        objs.append(box(f"seamHood{sy}", DARK, (0, 1.14 * sy, 0.950), (0.700, 0.012, 0.006)))
+    objs.append(box("grille", DARK, (0, 2.200, 0.735), (0.335, 0.012, 0.062), bevel=0.01, segs=2))
     for i in range(5):
         objs.append(box(f"gbar{i}", CHROME, (0, 2.251, 0.774 + i * 0.027), (0.383, 0.005, 0.005)))
-    objs.append(box("plateF", PLATE, (0, 2.248, 0.60), (0.103, 0.006, 0.031)))
-    objs.append(box("plateR", PLATE, (0, -2.248, 0.60), (0.103, 0.006, 0.031)))
-    objs.append(box("bumperF", PAINT, (0, 2.22, 0.52), (0.855, 0.055, 0.11), bevel=0.05, segs=3, subs=1))
-    objs.append(box("bumperR", PAINT, (0, -2.22, 0.52), (0.855, 0.055, 0.11), bevel=0.05, segs=3, subs=1))
+    objs.append(box("plateF", PLATE, (0, 2.215, 0.585), (0.100, 0.006, 0.030)))
+    objs.append(box("plateR", PLATE, (0, -2.215, 0.590), (0.100, 0.006, 0.030)))
+    objs.append(box("bumperF", PAINT, (0, 2.185, 0.535), (0.760, 0.055, 0.115), bevel=0.05, segs=3, subs=1))
+    objs.append(box("bumperR", PAINT, (0, -2.185, 0.535), (0.760, 0.055, 0.115), bevel=0.05, segs=3, subs=1))
 
     for sx in (-1, 1):
         for sy in (-1, 1):
@@ -314,10 +342,43 @@ place_cam(0.92, 1.80)
 LEGS = ("UpperLeg.L", "UpperLeg.R", "LowerLeg.L", "LowerLeg.R")
 ARMS = ("UpperArm.L", "UpperArm.R")
 
+MODE = os.environ.get("MODE", "walk")
+
 for i in range(PDIRS):
     for f in range(PFRAMES):
         ph = 2 * math.pi * f / PFRAMES
         sw = math.sin(ph)
+        if MODE == "hack":
+            # присед, наклон к устройству, руки вперёд, «печать» по клавишам
+            for bn, deg in (("Hips", -10), ("Abdomen", -12), ("Torso", -10), ("Chest", -6)):
+                world_rot(arm.pose.bones[bn], (1, 0, 0), math.radians(deg))
+            world_rot(arm.pose.bones["Neck"], (1, 0, 0), math.radians(-16))
+            world_rot(arm.pose.bones["Head"], (1, 0, 0), math.radians(-10))
+            for bn, sgn in (("UpperArm.L", 1), ("UpperArm.R", -1)):
+                pb = arm.pose.bones[bn]
+                rest = pb.bone.matrix_local.to_3x3()
+                r_down = Matrix.Rotation(sgn * math.radians(78), 3, Vector((0, 0, 1)))
+                r_fwd = Matrix.Rotation(math.radians(-52), 3, Vector((1, 0, 0)))
+                l_down = rest.inverted() @ r_down @ rest
+                l_fwd = rest.inverted() @ r_fwd @ rest
+                pb.rotation_quaternion = (l_fwd @ l_down).to_quaternion()
+            for bn, sgn in (("LowerArm.L", 1), ("LowerArm.R", -1)):
+                world_rot(arm.pose.bones[bn], (1, 0, 0), math.radians(-46))
+            # печать: кисти дёргаются в противофазе
+            for k, (bn, sgn) in enumerate((("Hand.L", 1), ("Hand.R", -1))):
+                ph2 = ph + (0 if sgn > 0 else math.pi)
+                world_rot(arm.pose.bones[bn], (0, 0, 1), sgn * math.radians(6) + math.sin(ph2) * math.radians(18))
+            # колени чуть согнуты, корпус опущен
+            for bn in ("UpperLeg.L", "UpperLeg.R"):
+                world_rot(arm.pose.bones[bn], (1, 0, 0), math.radians(22))
+            for bn in ("LowerLeg.L", "LowerLeg.R"):
+                world_rot(arm.pose.bones[bn], (1, 0, 0), math.radians(-30))
+            pl_root.location.z = -0.16 + math.sin(ph * 2) * 0.004
+            pl_root.rotation_euler = (0, 0, 2 * math.pi * i / PDIRS)
+            bpy.context.view_layer.update()
+            r.filepath = os.path.join(FR, f"hack_{i:02d}_{f:02d}.png")
+            bpy.ops.render.render(write_still=True)
+            continue
         # arms down along body, then swing
         for bn, sgn in (("UpperArm.L", 1), ("UpperArm.R", -1)):
             pb = arm.pose.bones[bn]
