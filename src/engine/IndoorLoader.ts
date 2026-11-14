@@ -172,6 +172,15 @@ export function roomsToFeatureCollection(rooms: RoomShape[]): GeoJSON.FeatureCol
   }
 }
 
+export function isInsidePolygon(lat: number, lng: number, poly: Poly | null): boolean {
+  if (!poly) return false
+  try {
+    return booleanPointInPolygon(point([lng, lat]), poly as never)
+  } catch {
+    return false
+  }
+}
+
 export function polygonToFeature(poly: Poly): GeoJSON.FeatureCollection {
   return {
     type: 'FeatureCollection',

@@ -9,7 +9,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import StatsBars from '@/components/StatsBars.vue'
 import BaseDialog from '@/components/BaseDialog.vue'
-import { fetchBuildingPolygon, fetchRealRooms, polygonAreaM2, roomsToFeatureCollection, splitBuildingIntoRooms } from '@/engine/IndoorLoader'
+import { fetchBuildingPolygon, fetchRealRooms, isInsidePolygon, polygonAreaM2, roomsToFeatureCollection, splitBuildingIntoRooms } from '@/engine/IndoorLoader'
 import LootDialog from '@/components/LootDialog.vue'
 import { generateLoot, lootIcons, lootKey as makeLootKey, LOOT_TTL_MS, RESOURCE_META, resourcesForPois, searchSeconds, type ResourceKey } from '@/engine/LootEngine'
 
@@ -34,6 +34,7 @@ const baseDialogOpen = ref(false)
 const canMakeBase = ref(false)
 const canOpenBase = ref(false)
 const canSearchLoot = ref(false)
+const canMoveBase = ref(false)
 const lootDialogOpen = ref(false)
 const activeLootKey = ref('')
 const currentLootKey = ref('')
@@ -43,6 +44,7 @@ let searchTimer: ReturnType<typeof setInterval> | null = null
 let lootCleanup: ReturnType<typeof setInterval> | null = null
 let poiCache: Array<{ class?: string; subclass?: string; name?: string }> = []
 let pendingPolygon: GeoJSON.Polygon | null = null
+const moveBaseMode = ref(false)
 const nearBase = ref(false)
 const roomsPreview = ref(1)
 const areaPreview = ref<number | null>(null)
@@ -378,7 +380,9 @@ function isAtBase(): boolean {
   const b = store.base
   if (!b || !playerController) return false
   const pos = playerController.getPosition()
-  return haversine(pos.lat, pos.lng, b.latitude, b.longitude) < 30
+  // сначала по контуру здания базы, затем — на всякий случай по близости (10 м)
+  if (isInsidePolygon(pos.lat, pos.lng, b.polygon ?? null)) return true
+  return haversine(pos.lat, pos.lng, b.latitude, b.longitude) < 10
 }
 
 function enterDevAftermath() {
@@ -456,14 +460,15 @@ function updateBasePrompt() {
   if (nearBase.value && !atBase) baseDismissed = false
   nearBase.value = atBase
   const insideBuilding = mapEngine.isInsideBuildingStrict(pos.lng, pos.lat)
+  const inBaseBuilding = !!store.base && atBase
   canMakeBase.value = !store.base && !store.isInCar && insideBuilding
-  // кнопка базы видна только пока игрок внутри здания базы
-  canOpenBase.value = !!store.base && insideBuilding && atBase && !cleaningUi.value.active
+  canOpenBase.value = inBaseBuilding && insideBuilding && !cleaningUi.value.active
+  canMoveBase.value = !!store.base && insideBuilding && !inBaseBuilding && !store.isInCar && !cleaningUi.value.active
 
   // поиск ресурсов в магазинах
   if (insideBuilding && !store.isInCar) {
     poiCache = mapEngine.getPoisNear(pos.lng, pos.lat, 70)
-    canSearchLoot.value = resourcesForPois(poiCache).length > 0 && !baseDialogOpen.value && !lootDialogOpen.value
+    canSearchLoot.value = resourcesForPois(poiCache).length > 0 && !baseDialogOpen.value && !lootDialogOpen.value && !inBaseBuilding
     currentLootKey.value = makeLootKey(pos.lat, pos.lng)
   } else {
     poiCache = []
@@ -471,7 +476,71 @@ function updateBasePrompt() {
   }
 }
 
-async function openLoot() {
+async function openMoveBase() {
+  if (!mapEngine || !playerController) return
+  const pos = playerController.getPosition()
+  const local = mapEngine.measureBuildingAt(pos.lng, pos.lat)
+  const area = local ? local.areaM2 : 250
+  pendingPolygon = local ? mapEngine.rectPolygonAround(pos.lng, pos.lat, local.widthM, local.depthM) : null
+  moveBaseMode.value = true
+  areaPreview.value = Math.round(area)
+  roomsPreview.value = roomsForArea(area)
+  showBaseConfirm.value = true
+}
+
+function confirmMoveBase() {
+  showBaseConfirm.value = false
+  if (!store.base) return
+  const pos = playerController!.getPosition()
+  const rooms = Math.max(1, Math.min(10, roomsPreview.value))
+  const totalMs = rooms * CLEAN_SEC_PER_ROOM * 1000
+  const started = Date.now()
+  cleaningUi.value = { active: true, progress: 0, rooms }
+  const timer = setInterval(() => {
+    const p = Math.min(1, (Date.now() - started) / totalMs)
+    cleaningUi.value = { active: p < 1, progress: p, rooms }
+    if (p >= 1) {
+      clearInterval(timer)
+      relocateBase(pos.lat, pos.lng, rooms)
+    }
+  }, 120)
+}
+
+function relocateBase(lat: number, lng: number, rooms: number) {
+  if (!store.base) return
+  store.base = {
+    ...store.base,
+    latitude: lat,
+    longitude: lng,
+    rooms,
+    polygon: pendingPolygon,
+    roomsGeo: null,
+    roomsReal: false,
+  }
+  mapEngine?.setBaseMarker(lng, lat)
+  const polygon = pendingPolygon
+  if (polygon) {
+    void (async () => {
+      let roomsGeo: GeoJSON.FeatureCollection | null = null
+      let real = false
+      try {
+        const realRooms = await fetchRealRooms(polygon)
+        if (realRooms.length) {
+          roomsGeo = roomsToFeatureCollection(realRooms)
+          real = true
+        }
+      } catch { /* офлайн — нарезка ниже */ }
+      if (!roomsGeo) roomsGeo = roomsToFeatureCollection(splitBuildingIntoRooms(polygon, rooms))
+      if (store.base) {
+        store.base.roomsGeo = roomsGeo
+        store.base.roomsReal = real
+      }
+    })()
+  }
+  canMoveBase.value = false
+}
+
+function openLoot() {
   if (!mapEngine || !playerController) return
   const pos = playerController.getPosition()
   const key = makeLootKey(pos.lat, pos.lng)
@@ -570,6 +639,7 @@ async function openBaseConfirm() {
 
 function confirmMakeBase() {
   showBaseConfirm.value = false
+  moveBaseMode.value = false
   if (!mapEngine || !playerController) return
   const pos = playerController.getPosition()
   const rooms = Math.max(1, Math.min(10, roomsPreview.value))
@@ -704,6 +774,8 @@ function restartGame() {
   baseDialogOpen.value = false
   canMakeBase.value = false
   canOpenBase.value = false
+  canMoveBase.value = false
+  moveBaseMode.value = false
   cleaningUi.value = { active: false, progress: 0, rooms: 0 }
   baseDismissed = false
   if (statsInterval) { clearInterval(statsInterval); statsInterval = null }
@@ -803,6 +875,10 @@ function toggleMute() {
       ★ Открыть окно базы
     </button>
 
+    <button v-if="canMoveBase" class="move-base-btn" @click="openMoveBase">
+      📦 Перенести базу сюда
+    </button>
+
     <button
       v-if="canSearchLoot && !canMakeBase && !canOpenBase"
       class="loot-btn"
@@ -831,7 +907,7 @@ function toggleMute() {
 
     <div v-if="showBaseConfirm" class="aftermath-overlay">
       <div class="aftermath-card narrow">
-        <h2>Сделать здание вашей базой?</h2>
+        <h2>{{ moveBaseMode ? 'Перенести базу сюда?' : 'Сделать здание вашей базой?' }}</h2>
         <p class="aftermath-sub">
           Площадь здания: <b>{{ areaPreview === null ? 'измеряем…' : areaPreview + ' м²' }}</b>
           → помещений: <b>{{ roomsPreview }}</b>.
@@ -840,8 +916,8 @@ function toggleMute() {
           отдыхать и лечиться.
         </p>
         <div class="aftermath-actions">
-          <button @click="showBaseConfirm = false">Отмена</button>
-          <button class="primary" @click="confirmMakeBase">Подтвердить</button>
+          <button @click="showBaseConfirm = false; moveBaseMode = false">Отмена</button>
+          <button class="primary" @click="moveBaseMode ? confirmMoveBase() : confirmMakeBase()">Подтвердить</button>
         </div>
       </div>
     </div>
@@ -1249,10 +1325,27 @@ function toggleMute() {
 }
 .open-base-btn:hover { background: rgba(44, 54, 32, 0.95); }
 
-.loot-btn {
+.move-base-btn {
   position: absolute;
   right: 18px;
   bottom: 76px;
+  z-index: 160;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  letter-spacing: 1px;
+  padding: 12px 18px;
+  background: rgba(34, 26, 46, 0.94);
+  color: #c9a6ff;
+  border: 1px solid #c9a6ff;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+.move-base-btn:hover { background: rgba(46, 36, 60, 0.96); }
+
+.loot-btn {
+  position: absolute;
+  right: 18px;
+  bottom: 132px;
   z-index: 160;
   font-family: 'Courier New', monospace;
   font-size: 13px;
