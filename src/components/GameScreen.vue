@@ -311,6 +311,7 @@ function triggerExplosion() {
   store.cars = []
   playerController.stop()
   soundEngine.stopAllLoops()
+  soundEngine.stopAftermathAmbience()
 
   hudTimeLeft.value = 0
   if (explosionTimer) clearInterval(explosionTimer)
@@ -429,6 +430,7 @@ function enterDevAftermath() {
 function startSurvival(showNotice = true) {
   store.isAftermath = true
   store.phase = 'aftermath'
+  soundEngine.startAftermathAmbience()
   store.stats = { health: 100, energy: 65, satiety: 70, water: 60 }
   showAftermathNotice.value = showNotice
   mapEngine?.clearWorldObjects()
@@ -535,6 +537,7 @@ function tickSurvival() {
     store.deathReasonText = s.water <= 0 ? 'Вы погибли от обезвоживания.' : 'Вы погибли от истощения.'
     deathReason.value = 'survival'
     store.phase = 'gameover'
+    soundEngine.stopAftermathAmbience()
     if (statsInterval) { clearInterval(statsInterval); statsInterval = null }
     if (buildingInterval) { clearInterval(buildingInterval); buildingInterval = null }
   }
@@ -884,6 +887,7 @@ function checkGameResult() {
   mapEngine.removeBuildingDamageLabel()
   mapEngine.removeExplosionInfoMarker()
   soundEngine.stopAllLoops()
+  soundEngine.stopAftermathAmbience()
   if (deathReason.value === 'collapse' || deathReason.value === 'explosion') {
     store.phase = 'gameover'
   } else {
@@ -952,6 +956,8 @@ const resultTexts = computed(() => store.scenario?.resultTexts)
 function toggleMute() {
   store.isMuted = !store.isMuted
   soundEngine.setMuted(store.isMuted)
+  // включаем эмбиент обратно, если мы уже в посмертном мире
+  if (!store.isMuted && store.phase === 'aftermath') soundEngine.startAftermathAmbience()
 }
 </script>
 

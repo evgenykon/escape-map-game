@@ -17,6 +17,8 @@ type SoundKey =
   | 'doorOpeningClosing'
   | 'doorClosing'
   | 'carFillingStation'
+  | 'deadForest'
+  | 'lonely'
 
 const SOUND_PATHS: Record<SoundKey, string> = {
   openingCarDoor: `${import.meta.env.BASE_URL}sounds/opening-car-door.mp3`,
@@ -37,6 +39,8 @@ const SOUND_PATHS: Record<SoundKey, string> = {
   doorOpeningClosing: `${import.meta.env.BASE_URL}sounds/door-opening-closing.mp3`,
   doorClosing: `${import.meta.env.BASE_URL}sounds/door-closing.mp3`,
   carFillingStation: `${import.meta.env.BASE_URL}sounds/car-filling-station.mp3`,
+  deadForest: `${import.meta.env.BASE_URL}sounds/myortvyy-les.mp3`,
+  lonely: `${import.meta.env.BASE_URL}sounds/odinokiy.mp3`,
 }
 
 const ONE_SHOT_KEYS: SoundKey[] = [
@@ -61,6 +65,8 @@ const LOOP_KEYS: SoundKey[] = [
   'cityNoise1',
   'cityNoise2',
   'carFillingStation',
+  'deadForest',
+  'lonely',
 ]
 
 interface LoopHandle {
@@ -91,6 +97,8 @@ class SoundEngine {
     cityNoise2: 0.4,
     nuclearDanger: 0.7,
     carFillingStation: 0.5,
+    deadForest: 0.35,
+    lonely: 0.3,
   }
   private loops: Partial<Record<SoundKey, LoopHandle>> = {}
   private muted = false
@@ -241,6 +249,17 @@ class SoundEngine {
   stopCityNoiseLoop(): void {
     this.stopLoop('cityNoise1')
     this.stopLoop('cityNoise2')
+  }
+
+  /** Фоновые звуки посмертного мира: мёртвый лес + одиночество. */
+  startAftermathAmbience(): void {
+    if (this.muted) return
+    if (!this.loops['deadForest']) this.startLoop('deadForest')
+    if (!this.loops['lonely']) this.startLoop('lonely')
+  }
+  stopAftermathAmbience(): void {
+    this.stopLoop('deadForest')
+    this.stopLoop('lonely')
   }
 
   startCarFillingStationLoop(): void { this.startLoop('carFillingStation') }
