@@ -167,21 +167,15 @@ onMounted(() => {
   mapEngine = new MapEngine()
   mapEngine.init(mapContainer.value!)
   mapEngine.onReady(() => {
-    ;(window as any).__trace = ['onReady']
     validateSpawn()
-    ;(window as any).__trace.push('validated')
     spawnValidationTimeouts.push(setTimeout(validateSpawn, 800))
     spawnValidationTimeouts.push(setTimeout(validateSpawn, 2500))
     soundEngine.startCityNoiseLoop()
     startTimer()
-    ;(window as any).__trace.push('timers-scheduled')
     setTimeout(() => {
-      ;(window as any).__trace.push('timeout-fired')
       mapEngine.refreshCarMarkers()
-      ;(window as any).__trace.push('cars-refreshed')
       gameReady.value = true
       if (store.devAftermath) enterDevAftermath()
-      ;(window as any).__trace.push('dev-check-done')
     }, 3000)
   })
 
