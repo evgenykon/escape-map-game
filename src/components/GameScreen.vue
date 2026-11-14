@@ -808,7 +808,7 @@ function toggleMute() {
   animation: player-walk-anim 0.44s steps(8) infinite;
 }
 .hacking {
-  animation: player-hack-anim 1s steps(4) infinite;
+  animation: player-hack-anim 0.9s steps(6) infinite;
 }
 @keyframes player-swim-anim {
   from { transform: translateY(0); }
