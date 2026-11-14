@@ -33,6 +33,20 @@ export const ROOM_TYPES: RoomType[] = [
   { key: 'armory', name: 'Оружейная', icon: '🔫', perks: 'хранилище оружия и боеприпасов' },
 ]
 
+/** Вместимость хранилища: зависит от площади здания + склад даёт прибавку. */
+export const STORAGE_PER_ROOM = 60
+
+export function storageCapacity(areaM2: number, roomTypes: Record<number, RoomTypeKey> = {}): number {
+  const fromArea = Math.round((areaM2 || 250) / 12)
+  const stores = Object.values(roomTypes).filter((k) => k === 'storage').length
+  return Math.max(60, Math.min(600, fromArea)) + stores * STORAGE_PER_ROOM
+}
+
+export function countRooms(roomTypes: Record<number, RoomTypeKey> | undefined, key: RoomTypeKey): number {
+  if (!roomTypes) return 0
+  return Object.values(roomTypes).filter((k) => k === key).length
+}
+
 export function roomTypeOf(key: RoomTypeKey | undefined): RoomType | null {
   if (!key) return null
   return ROOM_TYPES.find((t) => t.key === key) ?? null

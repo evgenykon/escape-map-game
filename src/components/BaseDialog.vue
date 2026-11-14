@@ -4,7 +4,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useGameStore } from '@/stores/game'
 import { polygonToFeature } from '@/engine/IndoorLoader'
-import { ROOM_BUILD_COST, ROOM_REFUND, ROOM_TYPES, roomTypeOf, type RoomTypeKey } from '@/engine/BaseRooms'
+import { ROOM_BUILD_COST, ROOM_REFUND, ROOM_TYPES, countRooms, roomTypeOf, storageCapacity, type RoomTypeKey } from '@/engine/BaseRooms'
 
 const store = useGameStore()
 const emit = defineEmits<{ (e: 'close'): void }>()
@@ -43,6 +43,16 @@ const stats = computed(() => store.stats)
 
 const selectedRoom = ref<number | null>(null)
 const buildMessage = ref('')
+
+const capacity = computed(() => storageCapacity(store.base?.areaM2 ?? 250, store.base?.roomTypes ?? {}))
+const usedUnits = computed(() => {
+  const r = store.base?.resources
+  if (!r) return 0
+  return Object.values(r as unknown as Record<string, number>).reduce((sum, v) => sum + v, 0)
+})
+const fillPct = computed(() => Math.min(100, Math.round((usedUnits.value / Math.max(1, capacity.value)) * 100)))
+const hasKitchen = computed(() => countRooms(store.base?.roomTypes, 'kitchen') > 0)
+const hasBedroom = computed(() => countRooms(store.base?.roomTypes, 'bedroom') > 0)
 
 function roomType(id: number) {
   return roomTypeOf(store.base?.roomTypes?.[id])
@@ -193,7 +203,7 @@ function eat() {
   const r = store.base?.resources
   if (!r || r.food <= 0) return
   r.food -= 1
-  store.stats.satiety = Math.min(100, store.stats.satiety + 50)
+  store.stats.satiety = Math.min(100, store.stats.satiety + (hasKitchen.value ? 65 : 50))
 }
 
 function drink() {
@@ -204,8 +214,8 @@ function drink() {
 }
 
 function rest() {
-  store.stats.energy = Math.min(100, store.stats.energy + 60)
-  store.stats.health = Math.min(100, store.stats.health + 10)
+  store.stats.energy = Math.min(100, store.stats.energy + (hasBedroom.value ? 85 : 60))
+  store.stats.health = Math.min(100, store.stats.health + (hasBedroom.value ? 15 : 10))
 }
 
 function heal() {
@@ -247,6 +257,13 @@ function heal() {
               <span class="res-val">{{ res.value }}</span>
             </li>
           </ul>
+
+          <h3>Хранилище</h3>
+          <div class="cap-row">
+            <b>{{ usedUnits }}</b> / {{ capacity }} ед.
+            <span class="cap-hint">{{ store.base?.areaM2 ? Math.round(store.base.areaM2) + ' м²' : '' }}</span>
+          </div>
+          <div class="cap-bar"><i :style="{ width: fillPct + '%' }" :class="{ full: fillPct >= 100 }"></i></div>
 
           <h3>Состояние</h3>
           <div class="mini">
@@ -433,6 +450,32 @@ h3 {
   color: #fff;
   font-weight: bold;
 }
+.cap-row {
+  font-size: 12px;
+  color: #98a5b2;
+  margin-bottom: 6px;
+}
+.cap-row b { color: #fff; }
+.cap-hint {
+  margin-left: 6px;
+  font-size: 10px;
+  color: #5f6c79;
+}
+.cap-bar {
+  height: 8px;
+  background: #1a222b;
+  border: 1px solid #2a3542;
+  margin-bottom: 14px;
+}
+.cap-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #3c7d54, #7ee2a8);
+}
+.cap-bar i.full {
+  background: linear-gradient(90deg, #7d3c3c, #ff8a8a);
+}
+
 .mini-row {
   display: flex;
   justify-content: space-between;

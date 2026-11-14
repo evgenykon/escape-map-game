@@ -9,7 +9,8 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import StatsBars from '@/components/StatsBars.vue'
 import BaseDialog from '@/components/BaseDialog.vue'
-import { fetchBuildingPolygon, fetchRealRooms, isInsidePolygon, polygonAreaM2, roomsToFeatureCollection, splitBuildingIntoRooms } from '@/engine/IndoorLoader'
+import { fetchBuildingPolygon, fetchRealRooms, polygonAreaM2, roomsToFeatureCollection, splitBuildingIntoRooms } from '@/engine/IndoorLoader'
+import { countRooms, storageCapacity } from '@/engine/BaseRooms'
 import LootDialog from '@/components/LootDialog.vue'
 import BackpackDialog from '@/components/BackpackDialog.vue'
 import { CARRY_CAPACITY, generateLoot, lootIcons, lootKey as makeLootKey, LOOT_TTL_MS, RESOURCE_META, resourcesForPois, searchSeconds, type ResourceKey } from '@/engine/LootEngine'
@@ -445,6 +446,44 @@ function startSurvival(showNotice = true) {
   lootCleanup = setInterval(cleanupLoot, 5000)
 }
 
+let greenhouseAcc = 0
+let workshopAcc = 0
+
+/** Пассивное производство обустроенных комнат (раз в секунду). */
+function tickRooms() {
+  const base = store.base
+  if (!base) return
+  const types = base.roomTypes
+
+  if (countRooms(types, 'greenhouse') > 0) {
+    greenhouseAcc += 1
+    if (greenhouseAcc >= 60) {
+      greenhouseAcc = 0
+      const cap = storageCapacity(base.areaM2 ?? 250, types)
+      if (storageUsed() < cap) {
+        base.resources.food += countRooms(types, 'greenhouse')
+        showToast('🌱 Теплица: +1 еда')
+      }
+    }
+  } else {
+    greenhouseAcc = 0
+  }
+
+  if (countRooms(types, 'workshop') > 0) {
+    workshopAcc += 1
+    if (workshopAcc >= 120) {
+      workshopAcc = 0
+      if (base.resources.tech > 0) {
+        base.resources.tech -= 1
+        base.resources.materials += 2
+        showToast('🛠 Мастерская: 1 🔌 → 2 🧱')
+      }
+    }
+  } else {
+    workshopAcc = 0
+  }
+}
+
 function tickSurvival() {
   if (!store.isAftermath || store.phase !== 'aftermath') return
   if (store.cars.length) {
@@ -455,7 +494,9 @@ function tickSurvival() {
   const inBase = isAtBase()
   s.satiety = Math.max(0, s.satiety - 0.18)
   s.water = Math.max(0, s.water - 0.22)
-  s.energy = Math.max(0, s.energy - (inBase ? 0.04 : 0.12))
+  const gymBonus = countRooms(store.base?.roomTypes, 'gym') > 0 ? 0.85 : 1
+  s.energy = Math.max(0, s.energy - (inBase ? 0.04 : 0.12) * gymBonus)
+  tickRooms()
   let damage = 0
   if (s.satiety <= 0) damage += 1.2
   if (s.water <= 0) damage += 1.4
@@ -501,24 +542,48 @@ function updateBasePrompt() {
   }
 }
 
+function storageUsed(): number {
+  const r = store.base?.resources
+  if (!r) return 0
+  return Object.values(r as unknown as Record<string, number>).reduce((sum, v) => sum + v, 0)
+}
+
 function depositBackpack() {
-  if (!store.base) return
+  const base = store.base
+  if (!base) return
+  const cap = storageCapacity(base.areaM2 ?? 250, base.roomTypes)
+  let free = Math.max(0, cap - storageUsed())
+  if (free <= 0) {
+    if (store.carried && Object.values(store.carried).some((v) => (v ?? 0) > 0)) {
+      showToast(`Хранилище заполнено (${storageUsed()}/${cap})`, 2600)
+    }
+    return
+  }
+
   const carried = store.carried as Partial<Record<ResourceKey, number>>
   const keys = Object.keys(carried) as ResourceKey[]
   const moved: string[] = []
   let total = 0
+  const target = base.resources as unknown as Record<string, number>
+
   for (const key of keys) {
     const amount = carried[key] ?? 0
-    if (amount <= 0) continue
-    const target = store.base.resources as unknown as Record<string, number>
-    target[key] = (target[key] ?? 0) + amount
-    moved.push(`${RESOURCE_META[key].icon}${amount}`)
-    total += amount
-    carried[key] = 0
+    if (amount <= 0 || free <= 0) continue
+    const put = Math.min(amount, free)
+    target[key] = (target[key] ?? 0) + put
+    carried[key] = amount - put
+    free -= put
+    total += put
+    moved.push(`${RESOURCE_META[key].icon}${put}`)
   }
   if (!total) return
   store.carried = { ...carried }
-  showToast(`Выгружено на базу: ${moved.join(' ')}`)
+  const left = Object.values(carried).reduce((sum, v) => sum + (v ?? 0), 0)
+  showToast(
+    left > 0
+      ? `Выгружено: ${moved.join(' ')} · хранилище полно, осталось в рюкзаке: ${left}`
+      : `Выгружено на базу: ${moved.join(' ')}`,
+  )
 }
 
 async function openMoveBase() {
