@@ -12,7 +12,7 @@ import BaseDialog from '@/components/BaseDialog.vue'
 import { fetchBuildingPolygon, fetchRealRooms, isInsidePolygon, polygonAreaM2, roomsToFeatureCollection, splitBuildingIntoRooms } from '@/engine/IndoorLoader'
 import LootDialog from '@/components/LootDialog.vue'
 import BackpackDialog from '@/components/BackpackDialog.vue'
-import { CARRY_CAPACITY, generateLoot, lootIcons, lootKey as makeLootKey, LOOT_TTL_MS, resourcesForPois, searchSeconds } from '@/engine/LootEngine'
+import { CARRY_CAPACITY, generateLoot, lootIcons, lootKey as makeLootKey, LOOT_TTL_MS, RESOURCE_META, resourcesForPois, searchSeconds, type ResourceKey } from '@/engine/LootEngine'
 
 const store = useGameStore()
 const baseUrl = import.meta.env.BASE_URL
@@ -38,6 +38,14 @@ const canSearchLoot = ref(false)
 const canMoveBase = ref(false)
 const lootDialogOpen = ref(false)
 const backpackOpen = ref(false)
+const toastText = ref('')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showToast(text: string, ms = 3200) {
+  toastText.value = text
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toastText.value = '' }, ms)
+}
 const activeLootKey = ref('')
 const currentLootKey = ref('')
 const searchActive = ref(false)
@@ -470,6 +478,9 @@ function updateBasePrompt() {
   canOpenBase.value = inBaseBuilding && insideBuilding && !cleaningUi.value.active
   canMoveBase.value = !!store.base && insideBuilding && !inBaseBuilding && !store.isInCar && !cleaningUi.value.active
 
+  // вернулся на базу — рюкзак выгружается в хранилище
+  if (inBaseBuilding && store.base) depositBackpack()
+
   // поиск ресурсов в магазинах
   if (insideBuilding && !store.isInCar) {
     poiCache = mapEngine.getPoisNear(pos.lng, pos.lat, 70)
@@ -480,6 +491,26 @@ function updateBasePrompt() {
     poiCache = []
     canSearchLoot.value = false
   }
+}
+
+function depositBackpack() {
+  if (!store.base) return
+  const carried = store.carried as Partial<Record<ResourceKey, number>>
+  const keys = Object.keys(carried) as ResourceKey[]
+  const moved: string[] = []
+  let total = 0
+  for (const key of keys) {
+    const amount = carried[key] ?? 0
+    if (amount <= 0) continue
+    const target = store.base.resources as unknown as Record<string, number>
+    target[key] = (target[key] ?? 0) + amount
+    moved.push(`${RESOURCE_META[key].icon}${amount}`)
+    total += amount
+    carried[key] = 0
+  }
+  if (!total) return
+  store.carried = { ...carried }
+  showToast(`Выгружено на базу: ${moved.join(' ')}`)
 }
 
 async function openMoveBase() {
@@ -889,6 +920,8 @@ function toggleMute() {
         🎒 {{ carriedTotal }} / {{ CARRY_CAPACITY }}
       </button>
     </div>
+
+    <div v-if="toastText" class="game-toast">{{ toastText }}</div>
 
     <BackpackDialog v-if="backpackOpen" @close="backpackOpen = false" />
 
@@ -1308,6 +1341,24 @@ function toggleMute() {
   cursor: pointer;
 }
 .debug-dev-btn:hover { background: rgba(255, 213, 74, 0.25); }
+
+.game-toast {
+  position: absolute;
+  left: 50%;
+  top: 96px;
+  transform: translateX(-50%);
+  z-index: 900;
+  padding: 10px 18px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: #e8f5e9;
+  background: rgba(18, 32, 22, 0.94);
+  border: 1px solid #4caf50;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
 
 .backpack-btn {
   margin-top: 6px;
