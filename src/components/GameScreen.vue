@@ -468,7 +468,8 @@ function updateBasePrompt() {
   // поиск ресурсов в магазинах
   if (insideBuilding && !store.isInCar) {
     poiCache = mapEngine.getPoisNear(pos.lng, pos.lat, 70)
-    canSearchLoot.value = resourcesForPois(poiCache).length > 0 && !baseDialogOpen.value && !lootDialogOpen.value && !inBaseBuilding
+    // искать можно в любом здании; магазины лишь определяют состав лута
+    canSearchLoot.value = !baseDialogOpen.value && !lootDialogOpen.value && !inBaseBuilding && !cleaningUi.value.active
     currentLootKey.value = makeLootKey(pos.lat, pos.lng)
   } else {
     poiCache = []
@@ -553,8 +554,12 @@ function openLoot() {
 
   const local = mapEngine.measureBuildingAt(pos.lng, pos.lat)
   const areaM2 = local ? local.areaM2 : 250
-  const keys = resourcesForPois(poiCache)
-  if (!keys.length) return
+  let keys = resourcesForPois(poiCache)
+  let generic = false
+  if (!keys.length) {
+    keys = ['food', 'water', 'materials', 'medicine']
+    generic = true
+  }
   const shops = new Set(poiCache.map((p) => p.subclass ?? p.class ?? '')).size
   const seconds = searchSeconds(areaM2, keys.length)
 
@@ -569,7 +574,7 @@ function openLoot() {
     searchProgress.value = p
     if (p >= 1) {
       if (searchTimer) { clearInterval(searchTimer); searchTimer = null }
-      const items = generateLoot(keys, areaM2, shops)
+      const items = generateLoot(keys, areaM2 * (generic ? 0.5 : 1), shops || 1)
       store.lootBuildings[key] = {
         key,
         lat: pos.lat,

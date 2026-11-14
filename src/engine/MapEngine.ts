@@ -803,24 +803,63 @@ export class MapEngine {
     return feats.some(f => f.layer && (f.layer.id === 'building' || f.layer.id === 'building-3d'))
   }
 
-  /** POI (магазины и т.п.) в радиусе вокруг точки. */
+  /**
+   * POI (магазины и т.п.) вокруг точки. Сэмплируем сеткой пикселей: символы с коллизией
+   * не всегда возвращаются точечным запросом, сетка повышает шанс поймать иконку.
+   */
   getPoisNear(lng: number, lat: number, radiusPx = 60): Array<{ class?: string; subclass?: string; name?: string }> {
     if (!this.map) return []
     const pt = this.map.project([lng, lat])
-    const r = radiusPx
-    const feats = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
+    const seen = new Set<string>()
     const out: Array<{ class?: string; subclass?: string; name?: string }> = []
-    for (const f of feats) {
-      const id = f.layer?.id ?? ''
-      if (!id.startsWith('poi')) continue
-      const p = f.properties as Record<string, unknown> | null
-      if (!p) continue
-      out.push({
-        class: (p.class as string) ?? undefined,
-        subclass: (p.subclass as string) ?? undefined,
-        name: (p.name as string) ?? undefined,
-      })
+    const step = Math.max(10, Math.floor(radiusPx / 5))
+    const layerIds = ['poi_r1', 'poi_r7', 'poi_r20']
+
+    const collect = (x: number, y: number) => {
+      const feats = this.map!.queryRenderedFeatures([[x, y], [x, y]] as never)
+      for (const f of feats) {
+        const id = f.layer?.id ?? ''
+        if (!id.startsWith('poi')) continue
+        const p = f.properties as Record<string, unknown> | null
+        if (!p) continue
+        const key = `${p.class ?? ''}|${p.subclass ?? ''}|${p.name ?? ''}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push({
+          class: (p.class as string) ?? undefined,
+          subclass: (p.subclass as string) ?? undefined,
+          name: (p.name as string) ?? undefined,
+        })
+      }
     }
+
+    for (let dx = -radiusPx; dx <= radiusPx; dx += step) {
+      for (let dy = -radiusPx; dy <= radiusPx; dy += step) {
+        collect(pt.x + dx, pt.y + dy)
+      }
+    }
+    if (!out.length) collect(pt.x, pt.y)
+
+    // запасной путь: любые POI из загруженных тайлов рядом (по свойствам, без геометрии)
+    if (!out.length) {
+      try {
+        const feats = this.map.querySourceFeatures('openmaptiles', { sourceLayer: 'poi' }) as never[]
+        for (const f of feats.slice(0, 200)) {
+          const p = (f as { properties?: Record<string, unknown> }).properties
+          if (!p) continue
+          const key = `${p.class ?? ''}|${p.subclass ?? ''}`
+          if (seen.has(key)) continue
+          seen.add(key)
+          out.push({
+            class: (p.class as string) ?? undefined,
+            subclass: (p.subclass as string) ?? undefined,
+            name: (p.name as string) ?? undefined,
+          })
+        }
+      } catch { /* source query недоступен */ }
+    }
+
+    void layerIds
     return out
   }
 
