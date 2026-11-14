@@ -26,18 +26,18 @@ function eat() {
   const r = store.base?.resources
   if (!r || r.food <= 0) return
   r.food -= 1
-  store.stats.hunger = Math.min(100, store.stats.hunger + 50)
+  store.stats.satiety = Math.min(100, store.stats.satiety + 50)
 }
 
 function drink() {
   const r = store.base?.resources
   if (!r || r.water <= 0) return
   r.water -= 1
-  store.stats.thirst = Math.min(100, store.stats.thirst + 50)
+  store.stats.water = Math.min(100, store.stats.water + 50)
 }
 
 function rest() {
-  store.stats.fatigue = Math.max(0, store.stats.fatigue - 60)
+  store.stats.energy = Math.min(100, store.stats.energy + 60)
   store.stats.health = Math.min(100, store.stats.health + 10)
 }
 
@@ -89,9 +89,9 @@ function heal() {
           <h3>Состояние</h3>
           <div class="mini">
             <div class="mini-row"><span>Здоровье</span><b>{{ Math.round(stats.health) }}</b></div>
-            <div class="mini-row"><span>Усталость</span><b>{{ Math.round(stats.fatigue) }}</b></div>
-            <div class="mini-row"><span>Голод</span><b>{{ Math.round(stats.hunger) }}</b></div>
-            <div class="mini-row"><span>Жажда</span><b>{{ Math.round(stats.thirst) }}</b></div>
+            <div class="mini-row"><span>Энергия</span><b>{{ Math.round(stats.energy) }}</b></div>
+            <div class="mini-row"><span>Сытость</span><b>{{ Math.round(stats.satiety) }}</b></div>
+            <div class="mini-row"><span>Вода</span><b>{{ Math.round(stats.water) }}</b></div>
           </div>
         </aside>
       </div>
@@ -99,7 +99,7 @@ function heal() {
       <footer>
         <button :disabled="!store.base || store.base.resources.food <= 0" @click="eat">🍖 Поесть</button>
         <button :disabled="!store.base || store.base.resources.water <= 0" @click="drink">💧 Попить</button>
-        <button @click="rest">💤 Отдохнуть</button>
+        <button @click="rest">⚡ Отдохнуть</button>
         <button :disabled="!store.base || store.base.resources.medicine <= 0" @click="heal">💊 Лечиться</button>
       </footer>
     </div>
@@ -114,7 +114,7 @@ function heal() {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 40;
+  z-index: 1000;
   font-family: 'Courier New', monospace;
 }
 .base-dialog {

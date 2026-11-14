@@ -16,7 +16,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        GH_PAGES: ${GH_PAGES:-1}
+        GH_PAGES: ${GH_PAGES:-0}
     ports:
       - "80:80"
     profiles:

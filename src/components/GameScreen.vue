@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useGameStore } from '@/stores/game'
 import type { TimelineEvent } from '@/scenarios/types'
 import { MapEngine } from '@/engine/MapEngine'
@@ -29,9 +29,23 @@ const showAftermathNotice = ref(false)
 const showBaseConfirm = ref(false)
 const baseDialogOpen = ref(false)
 const canMakeBase = ref(false)
+const canOpenBase = ref(false)
 const nearBase = ref(false)
 const roomsPreview = ref(1)
+const areaPreview = ref(0)
+const CLEAN_SEC_PER_ROOM = 15
+const cleaningTimeText = computed(() => {
+  const total = roomsPreview.value * CLEAN_SEC_PER_ROOM
+  const m = Math.floor(total / 60)
+  const sec = total % 60
+  if (!m) return `${sec} сек`
+  return sec ? `${m} мин ${sec} сек` : `${m} мин`
+})
 const cleaningUi = ref({ active: false, progress: 0, rooms: 0 })
+
+// блокировка движения, пока открыта любая модалка или идёт расчистка
+const anyModalOpen = computed(() => showAftermathNotice.value || showBaseConfirm.value || cleaningUi.value.active || baseDialogOpen.value)
+watch(anyModalOpen, (open) => { playerController?.setInputBlocked(open) }, { flush: 'post' })
 let statsInterval: ReturnType<typeof setInterval> | null = null
 let buildingInterval: ReturnType<typeof setInterval> | null = null
 let baseDismissed = false
@@ -141,21 +155,21 @@ onMounted(() => {
   mapEngine = new MapEngine()
   mapEngine.init(mapContainer.value!)
   mapEngine.onReady(() => {
+    ;(window as any).__trace = ['onReady']
     validateSpawn()
+    ;(window as any).__trace.push('validated')
     spawnValidationTimeouts.push(setTimeout(validateSpawn, 800))
     spawnValidationTimeouts.push(setTimeout(validateSpawn, 2500))
     soundEngine.startCityNoiseLoop()
     startTimer()
+    ;(window as any).__trace.push('timers-scheduled')
     setTimeout(() => {
+      ;(window as any).__trace.push('timeout-fired')
       mapEngine.refreshCarMarkers()
+      ;(window as any).__trace.push('cars-refreshed')
       gameReady.value = true
-      if (store.devAftermath) {
-        if (timerInterval) clearInterval(timerInterval)
-        if (explosionTimer) clearInterval(explosionTimer)
-        store.timeLeft = 0
-        hudTimeLeft.value = 0
-        startSurvival(false)
-      }
+      if (store.devAftermath) enterDevAftermath()
+      ;(window as any).__trace.push('dev-check-done')
     }, 3000)
   })
 
@@ -345,12 +359,10 @@ function triggerExplosion() {
   })
 }
 
+const ROOM_AREA_M2 = 260
 function roomsForArea(areaM2: number): number {
-  if (areaM2 < 200) return 1
-  if (areaM2 < 400) return 3
-  if (areaM2 < 700) return 5
-  if (areaM2 < 1200) return 7
-  return 10
+  // «комната» ≈ 260 м²: маленькие здания дают 1–2 комнаты, огромные упираются в 10
+  return Math.max(1, Math.min(10, Math.round(areaM2 / ROOM_AREA_M2)))
 }
 
 function isAtBase(): boolean {
@@ -360,10 +372,29 @@ function isAtBase(): boolean {
   return haversine(pos.lat, pos.lng, b.latitude, b.longitude) < 30
 }
 
+function enterDevAftermath() {
+  explosionStarted = true
+  if (timerInterval) clearInterval(timerInterval)
+  if (explosionTimer) clearInterval(explosionTimer)
+  store.devAftermath = true
+  store.timeLeft = 0
+  hudTimeLeft.value = 0
+  startSurvival(false)
+  // dev: сразу ставим игрока в ближайшее здание, чтобы кнопка базы была под рукой
+  if (mapEngine && playerController) {
+    const pos = playerController.getPosition()
+    const b = mapEngine.findBuildingCenterNear(pos.lng, pos.lat)
+    if (b) {
+      playerController.setPosition(b.lat, b.lng)
+      mapEngine.updatePlayerPosition(b.lng, b.lat)
+    }
+  }
+}
+
 function startSurvival(showNotice = true) {
   store.isAftermath = true
   store.phase = 'aftermath'
-  store.stats = { health: 100, fatigue: 35, hunger: 70, thirst: 60 }
+  store.stats = { health: 100, energy: 65, satiety: 70, water: 60 }
   showAftermathNotice.value = showNotice
   mapEngine?.clearWorldObjects()
   store.cars = []
@@ -380,22 +411,26 @@ function startSurvival(showNotice = true) {
 
 function tickSurvival() {
   if (!store.isAftermath || store.phase !== 'aftermath') return
+  if (store.cars.length) {
+    mapEngine?.removeAllCars()
+    store.cars = []
+  }
   const s = store.stats
   const inBase = isAtBase()
-  s.hunger = Math.max(0, s.hunger - 0.18)
-  s.thirst = Math.max(0, s.thirst - 0.22)
-  s.fatigue = Math.min(100, s.fatigue + (inBase ? 0.04 : 0.12))
+  s.satiety = Math.max(0, s.satiety - 0.18)
+  s.water = Math.max(0, s.water - 0.22)
+  s.energy = Math.max(0, s.energy - (inBase ? 0.04 : 0.12))
   let damage = 0
-  if (s.hunger <= 0) damage += 1.2
-  if (s.thirst <= 0) damage += 1.4
-  if (s.fatigue >= 100) damage += 0.4
+  if (s.satiety <= 0) damage += 1.2
+  if (s.water <= 0) damage += 1.4
+  if (s.energy <= 0) damage += 0.4
   if (damage > 0) {
     s.health = Math.max(0, s.health - damage)
   } else if (inBase) {
     s.health = Math.min(100, s.health + 0.15)
   }
   if (s.health <= 0) {
-    store.deathReasonText = s.thirst <= 0 ? 'Вы погибли от обезвоживания.' : 'Вы погибли от истощения.'
+    store.deathReasonText = s.water <= 0 ? 'Вы погибли от обезвоживания.' : 'Вы погибли от истощения.'
     deathReason.value = 'survival'
     store.phase = 'gameover'
     if (statsInterval) { clearInterval(statsInterval); statsInterval = null }
@@ -409,17 +444,18 @@ function updateBasePrompt() {
   const atBase = isAtBase()
   if (nearBase.value && !atBase) baseDismissed = false
   nearBase.value = atBase
-  const devAnywhere = import.meta.env.DEV && store.devAftermath
-  canMakeBase.value = !store.base && !store.isInCar && (devAnywhere || mapEngine.isInsideBuilding(pos.lng, pos.lat))
-  if (atBase && !baseDialogOpen.value && !baseDismissed && !cleaningUi.value.active) {
-    baseDialogOpen.value = true
-  }
+  const insideBuilding = mapEngine.isInsideBuildingStrict(pos.lng, pos.lat)
+  canMakeBase.value = !store.base && !store.isInCar && insideBuilding
+  // кнопка базы видна только пока игрок внутри здания базы
+  canOpenBase.value = !!store.base && insideBuilding && atBase && !cleaningUi.value.active
 }
 
 function openBaseConfirm() {
   if (!mapEngine || !playerController) return
   const pos = playerController.getPosition()
-  roomsPreview.value = roomsForArea(mapEngine.getBuildingAreaAt(pos.lng, pos.lat) ?? 250)
+  const areaM2 = mapEngine.getBuildingAreaAt(pos.lng, pos.lat) ?? 250
+  areaPreview.value = Math.round(areaM2)
+  roomsPreview.value = roomsForArea(areaM2)
   showBaseConfirm.value = true
 }
 
@@ -429,7 +465,7 @@ function confirmMakeBase() {
   const pos = playerController.getPosition()
   const areaM2 = mapEngine.getBuildingAreaAt(pos.lng, pos.lat) ?? 250
   const rooms = roomsForArea(areaM2)
-  const totalMs = rooms * 15 * 1000
+  const totalMs = rooms * CLEAN_SEC_PER_ROOM * 1000
   const started = Date.now()
   cleaningUi.value = { active: true, progress: 0, rooms }
   const timer = setInterval(() => {
@@ -520,6 +556,7 @@ function restartGame() {
   showBaseConfirm.value = false
   baseDialogOpen.value = false
   canMakeBase.value = false
+  canOpenBase.value = false
   cleaningUi.value = { active: false, progress: 0, rooms: 0 }
   baseDismissed = false
   if (statsInterval) { clearInterval(statsInterval); statsInterval = null }
@@ -552,6 +589,7 @@ function toggleMute() {
       <div>zoom: {{ debugZoom.toFixed(2) }}</div>
       <div>map: {{ ['close', 'medium', 'far'][store.mapMode] }}</div>
       <div>scale: {{ debugScale.toFixed(2) }}</div>
+      <button v-if="isDev" class="debug-dev-btn" @click.stop="enterDevAftermath()">→ БАЗА</button>
     </div>
 
     <div v-if="store.phase === 'playing'" class="hud">
@@ -614,6 +652,10 @@ function toggleMute() {
       ★ Сделать базой
     </button>
 
+    <button v-if="canOpenBase && !baseDialogOpen" class="open-base-btn" @click="baseDialogOpen = true">
+      ★ Открыть окно базы
+    </button>
+
     <div v-if="showAftermathNotice" class="aftermath-overlay">
       <div class="aftermath-card">
         <p class="aftermath-text">
@@ -628,8 +670,10 @@ function toggleMute() {
       <div class="aftermath-card narrow">
         <h2>Сделать здание вашей базой?</h2>
         <p class="aftermath-sub">
-          Потребуется расчистить помещения: {{ roomsPreview }} комн. × 15 с.
-          Внутри можно хранить найденные вещи, отдыхать и лечиться.
+          Площадь здания ≈ {{ areaPreview }} м² → помещений: <b>{{ roomsPreview }}</b>.
+          Расчистка: {{ roomsPreview }} × {{ CLEAN_SEC_PER_ROOM }} с ≈ <b>{{ cleaningTimeText }}</b>.
+          Пока идёт расчистка, вы не можете двигаться. Внутри можно хранить найденные вещи,
+          отдыхать и лечиться.
         </p>
         <div class="aftermath-actions">
           <button @click="showBaseConfirm = false">Отмена</button>
@@ -709,7 +753,7 @@ function toggleMute() {
   left: 0.5rem;
   bottom: 0.5rem;
   cursor: pointer;
-  z-index: 100;
+  z-index: 150;
   padding: 0.5rem 0.75rem;
   background: rgba(0, 0, 0, 0.6);
   color: #0f0;
@@ -954,7 +998,7 @@ function toggleMute() {
   align-items: center;
   justify-content: center;
   background: rgba(0,0,0,0.9);
-  z-index: 30;
+  z-index: 1000;
   color: #fff;
   font-family: 'Courier New', monospace;
 }
@@ -987,18 +1031,31 @@ function toggleMute() {
 </style>
 
 <style>
+.debug-dev-btn {
+  margin-top: 6px;
+  width: 100%;
+  font-family: inherit;
+  font-size: 10px;
+  padding: 4px 6px;
+  background: rgba(255, 213, 74, 0.12);
+  color: #ffd54a;
+  border: 1px solid #ffd54a;
+  cursor: pointer;
+}
+.debug-dev-btn:hover { background: rgba(255, 213, 74, 0.25); }
+
 .stats-hud {
   position: absolute;
   top: 14px;
   left: 14px;
-  z-index: 25;
+  z-index: 150;
 }
 
 .make-base-btn {
   position: absolute;
   right: 18px;
   bottom: 18px;
-  z-index: 28;
+  z-index: 160;
   font-family: 'Courier New', monospace;
   font-size: 13px;
   letter-spacing: 1px;
@@ -1011,6 +1068,23 @@ function toggleMute() {
 }
 .make-base-btn:hover { background: rgba(38, 46, 58, 0.95); }
 
+.open-base-btn {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 160;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  letter-spacing: 1px;
+  padding: 12px 18px;
+  background: rgba(28, 34, 20, 0.94);
+  color: #b8ff8a;
+  border: 1px solid #b8ff8a;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+.open-base-btn:hover { background: rgba(44, 54, 32, 0.95); }
+
 .aftermath-overlay {
   position: absolute;
   inset: 0;
@@ -1018,7 +1092,7 @@ function toggleMute() {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.82);
-  z-index: 35;
+  z-index: 1000;
   font-family: 'Courier New', monospace;
   padding: 20px;
 }

@@ -4,7 +4,7 @@ import { useGameStore } from '@/stores/game'
 import { scenarioRegistry } from '@/scenarios'
 import SpriteTable from '@/components/SpriteTable.vue'
 
-const isDev = import.meta.env.DEV
+const isDev = import.meta.env.DEV || new URLSearchParams(location.search).has('dev')
 const BUILD_TAG = 'build-2026-07-02-r2'
 
 const store = useGameStore()
@@ -133,13 +133,10 @@ async function startGame(baseMode = false) {
       {{ isStarting ? 'ЗАГРУЗКА…' : 'СТАРТ' }}
     </button>
 
-    <button v-if="isDev" class="sprite-btn dev-base-btn" @click="startGame(true)">
-      🧪 Режим базы (dev)
-    </button>
-
-    <button v-if="isDev" class="sprite-btn" @click="showSpriteTable = true">
-      Таблица спрайтов
-    </button>
+    <div v-if="isDev" class="dev-tools">
+      <button class="sprite-btn dev-base-btn" @click="startGame(true)">🧪 Режим базы</button>
+      <button class="sprite-btn" @click="showSpriteTable = true">Таблица спрайтов</button>
+    </div>
 
     <p class="build-tag">{{ BUILD_TAG }}</p>
 
@@ -320,9 +317,23 @@ async function startGame(baseMode = false) {
 .location-option input[type="radio"] {
   accent-color: #f44;
 }
+.dev-tools {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+.dev-tools .sprite-btn {
+  margin: 0;
+  background: rgba(12, 15, 19, 0.92);
+}
 .dev-base-btn {
-  border-color: #ffd54a;
-  color: #ffd54a;
+  border-color: #ffd54a !important;
+  color: #ffd54a !important;
 }
 
 .sprite-btn {

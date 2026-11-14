@@ -20,9 +20,9 @@ export interface Car {
 
 export interface SurvivalStats {
   health: number
-  fatigue: number
-  hunger: number
-  thirst: number
+  energy: number
+  satiety: number
+  water: number
 }
 
 export interface BaseResources {
@@ -86,7 +86,7 @@ export const useGameStore = defineStore('game', () => {
 
   // ---- пост-взрывной метагейм ----
   const isAftermath = ref(false)
-  const stats = ref<SurvivalStats>({ health: 100, fatigue: 30, hunger: 75, thirst: 65 })
+  const stats = ref<SurvivalStats>({ health: 100, energy: 65, satiety: 75, water: 65 })
   const base = ref<PlayerBase | null>(null)
   const cleaning = ref<{ active: boolean; progress: number; rooms: number }>({ active: false, progress: 0, rooms: 0 })
   const deathReasonText = ref<string | null>(null)

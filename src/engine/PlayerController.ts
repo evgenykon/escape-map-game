@@ -25,6 +25,7 @@ const HACK_THOUGHTS = [
 
 export class PlayerController {
   private keys: Set<string> = new Set()
+  private inputBlocked = false
   private mapEngine: MapEngine
   private carPhysics: CarPhysics
   private animationId: number | null = null
@@ -69,6 +70,12 @@ export class PlayerController {
     window.addEventListener('keydown', this.onKeyDown)
     window.addEventListener('keyup', this.onKeyUp)
     this.gameLoop()
+  }
+
+  /** Блокировка движения (открыта модалка, идёт расчистка и т.п.). */
+  setInputBlocked(blocked: boolean) {
+    this.inputBlocked = blocked
+    if (blocked) this.keys.clear()
   }
 
   stop() {
@@ -308,6 +315,11 @@ export class PlayerController {
     let forward = 0
     let rotation = 0
 
+    if (this.inputBlocked) {
+      this.keys.clear()
+      forward = 0
+      rotation = 0
+    }
     if (this.keys.has('w')) forward += 1
     if (this.keys.has('s')) forward -= 1
     if (this.keys.has('a')) rotation -= 1

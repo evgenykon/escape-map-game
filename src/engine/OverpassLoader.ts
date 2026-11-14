@@ -11,12 +11,20 @@ const STEPS: Step[] = [
   { delay: 2000, finalize: true },
 ]
 
-function preloadSprite(url: string): Promise<void> {
+function preloadSprite(url: string, timeoutMs = 8000): Promise<void> {
   return new Promise((resolve) => {
     const img = new Image()
-    img.onload = () => resolve()
-    img.onerror = () => resolve()
+    let done = false
+    const finish = () => {
+      if (done) return
+      done = true
+      resolve()
+    }
+    img.onload = finish
+    img.onerror = finish
     img.src = url
+    // страховка: битый/подвисший запрос не должен блокировать старт игры
+    setTimeout(finish, timeoutMs)
   })
 }
 

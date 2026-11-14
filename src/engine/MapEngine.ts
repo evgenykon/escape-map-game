@@ -1,4 +1,4 @@
-import { area as turfArea, circle, distance, destination } from '@turf/turf'
+import { area as turfArea, booleanPointInPolygon, centerOfMass, circle, distance, destination, point, pointOnFeature } from '@turf/turf'
 import maplibregl from 'maplibre-gl'
 import { useGameStore } from '@/stores/game'
 
@@ -18,6 +18,8 @@ export class MapEngine {
   private playerCarSpriteData: { url: string; w: number; h: number; count: number; duration: number } | null = null
   private playerCarFrameH = 0
   private onReadyCallback?: () => void
+  private readyFired = false
+  private readyFallback: ReturnType<typeof setTimeout> | null = null
   private targetZoom: number | null = null
   private crosshairMarker: maplibregl.Marker | null = null
   private playerThoughtEl: HTMLElement | null = null
@@ -109,6 +111,26 @@ export class MapEngine {
 
   onReady(cb: () => void) {
     this.onReadyCallback = cb
+    // страховка: если событие 'load' по какой-то причине не придёт, игра всё равно стартует
+    if (this.map && this.map.isStyleLoaded()) {
+      setTimeout(() => this.fireReady(), 0)
+    } else {
+      if (this.readyFallback) clearTimeout(this.readyFallback)
+      this.readyFallback = setTimeout(() => {
+        console.warn('[MapEngine] load fallback fired')
+        this.fireReady()
+      }, 8000)
+    }
+  }
+
+  private fireReady() {
+    if (this.readyFired) return
+    this.readyFired = true
+    if (this.readyFallback) {
+      clearTimeout(this.readyFallback)
+      this.readyFallback = null
+    }
+    this.onReadyCallback?.()
   }
 
   init(container: HTMLDivElement) {
@@ -125,15 +147,16 @@ export class MapEngine {
     this.map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: false }), 'top-right')
 
     this.map.on('load', () => {
-      try { this.createPlayerMarker() } catch (e) { console.warn('player marker fail', e) }
-      this.createCrosshairMarker()
-      this.applyAllCarsZoom(this.map!.getZoom())
-      this.onReadyCallback?.()
-
-      const layers = this.map!.getStyle().layers
-      console.log('[MapEngine] All layer IDs:')
-      for (const layer of layers) {
-        console.log('  ', layer.id)
+      // ВАЖНО: onReady обязан сработать, даже если что-то из подготовки упало,
+      // иначе игра навсегда остаётся на экране загрузки
+      try {
+        try { this.createPlayerMarker() } catch (e) { console.warn('player marker fail', e) }
+        try { this.createCrosshairMarker() } catch (e) { console.warn('crosshair fail', e) }
+        try { this.applyAllCarsZoom(this.map!.getZoom()) } catch (e) { console.warn('cars zoom fail', e) }
+      } catch (e) {
+        console.warn('map load prep fail', e)
+      } finally {
+        this.fireReady()
       }
     })
 
@@ -721,6 +744,23 @@ export class MapEngine {
     return MapEngine.CAR_SPRITES.find((s) => s.url === url) ?? MapEngine.CAR_RED
   }
 
+  /** Точка стоит ровно на здании: проверяем пиксель под игроком, без «поля» вокруг. */
+  isInsideBuildingStrict(lng: number, lat: number): boolean {
+    if (!this.map) return false
+    const pt = this.map.project([lng, lat])
+    const feats = this.map.queryRenderedFeatures([[pt.x, pt.y], [pt.x, pt.y]] as never)
+    const hit = feats.find(f => f.layer && (f.layer.id === 'building' || f.layer.id === 'building-3d'))
+    if (!hit) return false
+    if (hit.geometry) {
+      try {
+        return booleanPointInPolygon(point([lng, lat]), hit.geometry as never)
+      } catch {
+        return true
+      }
+    }
+    return true
+  }
+
   /** Площадь здания (м²) под точкой, либо null если точки нет в здании. */
   getBuildingAreaAt(lng: number, lat: number): number | null {
     if (!this.map) return null
@@ -1092,6 +1132,7 @@ export class MapEngine {
   }
 
   private _spawnFuelStationCars(station: { lng: number; lat: number }, store: ReturnType<typeof useGameStore>) {
+    if (store.isAftermath) return
     for (let i = 0; i < 4; i++) {
       const id = `fuel-${station.lng}-${station.lat}-${i}`
       const existingCar = store.cars.find(c => c.id === id)
@@ -1121,6 +1162,12 @@ export class MapEngine {
   }
 
   scanAndAddFuelStations(playerLng: number, playerLat: number) {
+    // после взрыва заправок и машин на них больше нет
+    if (useGameStore().isAftermath) {
+      this.fuelStations = []
+      this.clearFuelZones()
+      return
+    }
     const newStations = this._scanFuelStations(playerLng, playerLat)
     const reallyNew: { lng: number; lat: number }[] = []
     for (const s of newStations) {
@@ -1146,6 +1193,11 @@ export class MapEngine {
   findAndPlaceFuelStations() {
     if (!this.map) return
     const store = useGameStore()
+    if (store.isAftermath) {
+      this.fuelStations = []
+      this.clearFuelZones()
+      return
+    }
     this.fuelStations = this._scanFuelStations(store.playerLongitude, store.playerLatitude)
     if (this.fuelStations.length === 0) {
       const style = this.map.getStyle()
@@ -1170,6 +1222,7 @@ export class MapEngine {
   }
 
   isInFuelZone(lng: number, lat: number): boolean {
+    if (useGameStore().isAftermath) return false
     for (const s of this.fuelStations) {
       const d = distance([lng, lat], [s.lng, s.lat], { units: 'meters' })
       if (d < MapEngine.FUEL_ZONE_RADIUS_M) return true
@@ -1215,11 +1268,16 @@ export class MapEngine {
           if (first?.length) rings = first[0]
         }
         if (!rings.length) continue
-        let cx = 0, cy = 0, n = 0
-        for (const [x, y] of rings) {
-          cx += x; cy += y; n++
+        // берём точку, гарантированно внутри полигона (а не центроид, который может лежать во дворе)
+        try {
+          const inner = pointOnFeature(f.geometry) as never
+          const c = (inner as { geometry: { coordinates: [number, number] } }).geometry.coordinates
+          return { lng: c[0], lat: c[1] }
+        } catch {
+          const cm = centerOfMass(f.geometry) as never
+          const c = (cm as { geometry: { coordinates: [number, number] } }).geometry.coordinates
+          return { lng: c[0], lat: c[1] }
         }
-        return { lng: cx / n, lat: cy / n }
       }
     }
     return null
