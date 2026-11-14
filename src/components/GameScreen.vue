@@ -9,7 +9,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import StatsBars from '@/components/StatsBars.vue'
 import BaseDialog from '@/components/BaseDialog.vue'
-import { fetchRealRooms, roomsToFeatureCollection, splitBuildingIntoRooms } from '@/engine/IndoorLoader'
+import { fetchBuildingPolygon, fetchRealRooms, polygonAreaM2, roomsToFeatureCollection, splitBuildingIntoRooms } from '@/engine/IndoorLoader'
 import LootDialog from '@/components/LootDialog.vue'
 import { generateLoot, lootIcons, lootKey as makeLootKey, LOOT_TTL_MS, RESOURCE_META, resourcesForPois, searchSeconds, type ResourceKey } from '@/engine/LootEngine'
 
@@ -42,9 +42,10 @@ const searchProgress = ref(0)
 let searchTimer: ReturnType<typeof setInterval> | null = null
 let lootCleanup: ReturnType<typeof setInterval> | null = null
 let poiCache: Array<{ class?: string; subclass?: string; name?: string }> = []
+let pendingPolygon: GeoJSON.Polygon | null = null
 const nearBase = ref(false)
 const roomsPreview = ref(1)
-const areaPreview = ref(0)
+const areaPreview = ref<number | null>(null)
 const CLEAN_SEC_PER_ROOM = 15
 const cleaningTimeText = computed(() => {
   const total = roomsPreview.value * CLEAN_SEC_PER_ROOM
@@ -470,7 +471,7 @@ function updateBasePrompt() {
   }
 }
 
-function openLoot() {
+async function openLoot() {
   if (!mapEngine || !playerController) return
   const pos = playerController.getPosition()
   const key = makeLootKey(pos.lat, pos.lng)
@@ -481,7 +482,8 @@ function openLoot() {
     return
   }
 
-  const areaM2 = mapEngine.getBuildingAreaAt(pos.lng, pos.lat) ?? 250
+  const local = mapEngine.measureBuildingAt(pos.lng, pos.lat)
+  const areaM2 = local ? local.areaM2 : 250
   const keys = resourcesForPois(poiCache)
   if (!keys.length) return
   const shops = new Set(poiCache.map((p) => p.subclass ?? p.class ?? '')).size
@@ -536,21 +538,41 @@ function cleanupLoot() {
   }
 }
 
-function openBaseConfirm() {
+async function openBaseConfirm() {
   if (!mapEngine || !playerController) return
   const pos = playerController.getPosition()
-  const areaM2 = mapEngine.getBuildingAreaAt(pos.lng, pos.lat) ?? 250
-  areaPreview.value = Math.round(areaM2)
-  roomsPreview.value = roomsForArea(areaM2)
+
+  // 1) мгновенный локальный замер по пикселям карты (без сети)
+  const local = mapEngine.measureBuildingAt(pos.lng, pos.lat)
+  const localArea = local ? local.areaM2 : 250
+  pendingPolygon = local
+    ? mapEngine.rectPolygonAround(pos.lng, pos.lat, local.widthM, local.depthM)
+    : null
+  areaPreview.value = Math.round(localArea)
+  roomsPreview.value = roomsForArea(localArea)
   showBaseConfirm.value = true
+
+  // 2) уточнение по OSM (если доступен) — не блокирует диалог
+  try {
+    const poly = (await fetchBuildingPolygon(pos.lat, pos.lng)) as GeoJSON.Polygon | null
+    if (poly) {
+      const measured = polygonAreaM2(poly)
+      if (measured > 20) {
+        pendingPolygon = poly
+        areaPreview.value = Math.round(measured)
+        roomsPreview.value = roomsForArea(measured)
+      }
+    }
+  } catch {
+    /* Overpass недоступен — остаёмся на локальном замере */
+  }
 }
 
 function confirmMakeBase() {
   showBaseConfirm.value = false
   if (!mapEngine || !playerController) return
   const pos = playerController.getPosition()
-  const areaM2 = mapEngine.getBuildingAreaAt(pos.lng, pos.lat) ?? 250
-  const rooms = roomsForArea(areaM2)
+  const rooms = Math.max(1, Math.min(10, roomsPreview.value))
   const totalMs = rooms * CLEAN_SEC_PER_ROOM * 1000
   const started = Date.now()
   cleaningUi.value = { active: true, progress: 0, rooms }
@@ -565,7 +587,7 @@ function confirmMakeBase() {
 }
 
 function createBase(lat: number, lng: number, rooms: number) {
-  const polygon = mapEngine?.getBuildingPolygonAt(lng, lat) ?? null
+  const polygon = pendingPolygon ?? null
   store.base = {
     latitude: lat,
     longitude: lng,
@@ -811,7 +833,8 @@ function toggleMute() {
       <div class="aftermath-card narrow">
         <h2>Сделать здание вашей базой?</h2>
         <p class="aftermath-sub">
-          Площадь здания ≈ {{ areaPreview }} м² → помещений: <b>{{ roomsPreview }}</b>.
+          Площадь здания: <b>{{ areaPreview === null ? 'измеряем…' : areaPreview + ' м²' }}</b>
+          → помещений: <b>{{ roomsPreview }}</b>.
           Расчистка: {{ roomsPreview }} × {{ CLEAN_SEC_PER_ROOM }} с ≈ <b>{{ cleaningTimeText }}</b>.
           Пока идёт расчистка, вы не можете двигаться. Внутри можно хранить найденные вещи,
           отдыхать и лечиться.

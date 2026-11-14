@@ -1,4 +1,4 @@
-import { booleanPointInPolygon, center, intersect, point, squareGrid } from '@turf/turf'
+import { area, booleanPointInPolygon, center, intersect, point, squareGrid } from '@turf/turf'
 
 export interface RoomShape {
   id: number
@@ -8,8 +8,42 @@ export interface RoomShape {
 
 type Poly = GeoJSON.Polygon | GeoJSON.MultiPolygon
 
+const OVERPASS_HOSTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+]
+
+const polyCache = new Map<string, Poly | null>()
+const roomsCache = new Map<string, RoomShape[]>()
+
+async function overpass(query: string, timeoutMs = 7000): Promise<unknown> {
+  let lastErr: unknown = null
+  for (const host of OVERPASS_HOSTS) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+    try {
+      const res = await fetch(host, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ data: query }).toString(),
+        signal: ctrl.signal,
+      })
+      clearTimeout(timer)
+      if (!res.ok) throw new Error(`overpass ${res.status}`)
+      return await res.json()
+    } catch (e) {
+      clearTimeout(timer)
+      lastErr = e
+    }
+  }
+  throw lastErr ?? new Error('overpass failed')
+}
+
 function bboxOf(poly: Poly): [number, number, number, number] {
-  let minX = 180, minY = 90, maxX = -180, maxY = -90
+  let minX = 180
+  let minY = 90
+  let maxX = -180
+  let maxY = -90
   const walk = (rings: number[][][]) => {
     for (const ring of rings) {
       for (const [x, y] of ring) {
@@ -25,19 +59,59 @@ function bboxOf(poly: Poly): [number, number, number, number] {
   return [minX, minY, maxX, maxY]
 }
 
-/** Реальные помещения из OSM (indoor=room / indoor=area), попадающие в контур здания. */
+/** Полигон здания вокруг точки в широте/долготе: берём из OSM, тайлы отдают геометрию в иных координатах. */
+export async function fetchBuildingPolygon(lat: number, lng: number, radiusM = 25): Promise<Poly | null> {
+  const cacheKey = `${lat.toFixed(4)}:${lng.toFixed(4)}`
+  if (polyCache.has(cacheKey)) return polyCache.get(cacheKey) ?? null
+
+  const query = `[out:json][timeout:15];way(around:${radiusM},${lat},${lng})["building"];out geom;`
+  const data = (await overpass(query)) as { elements?: Array<{ geometry?: Array<{ lat: number; lon: number }> }> }
+
+  let best: Poly | null = null
+  let bestDist = Number.POSITIVE_INFINITY
+  for (const el of data.elements ?? []) {
+    if (!el.geometry || el.geometry.length < 4) continue
+    const ring = el.geometry.map((g) => [g.lon, g.lat] as [number, number])
+    const poly: GeoJSON.Polygon = { type: 'Polygon', coordinates: [ring] }
+    try {
+      if (booleanPointInPolygon(point([lng, lat]), poly)) {
+        polyCache.set(cacheKey, poly)
+        return poly
+      }
+    } catch {
+      /* некорректный полигон — пропускаем */
+    }
+    const c = center(poly)
+    const d = Math.hypot(c.geometry.coordinates[0] - lng, c.geometry.coordinates[1] - lat)
+    if (d < bestDist) {
+      bestDist = d
+      best = poly
+    }
+  }
+  polyCache.set(cacheKey, best)
+  return best
+}
+
+/** Площадь полигона в м². */
+export function polygonAreaM2(poly: Poly): number {
+  try {
+    return area(poly as never)
+  } catch {
+    return 0
+  }
+}
+
+/** Реальные помещения из OSM (indoor=room / indoor=area) внутри контура здания. */
 export async function fetchRealRooms(building: Poly): Promise<RoomShape[]> {
   const [minX, minY, maxX, maxY] = bboxOf(building)
-  const bbox = `${minY.toFixed(6)},${minX.toFixed(6)},${maxY.toFixed(6)},${maxX.toFixed(6)}`
-  const query = `[out:json][timeout:20];way["indoor"~"^(room|area)$"](${bbox});out geom;`
+  const cacheKey = `${minX.toFixed(4)}:${minY.toFixed(4)}`
+  if (roomsCache.has(cacheKey)) return roomsCache.get(cacheKey) ?? []
 
-  const res = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ data: query }).toString(),
-  })
-  if (!res.ok) throw new Error(`overpass ${res.status}`)
-  const data = (await res.json()) as { elements?: Array<{ type: string; tags?: Record<string, string>; geometry?: Array<{ lat: number; lon: number }> }> }
+  const bbox = `${minY.toFixed(6)},${minX.toFixed(6)},${maxY.toFixed(6)},${maxX.toFixed(6)}`
+  const query = `[out:json][timeout:15];way["indoor"~"^(room|area)$"](${bbox});out geom;`
+  const data = (await overpass(query, 8000)) as {
+    elements?: Array<{ type: string; tags?: Record<string, string>; geometry?: Array<{ lat: number; lon: number }> }>
+  }
 
   const rooms: RoomShape[] = []
   for (const el of data.elements ?? []) {
@@ -56,6 +130,7 @@ export async function fetchRealRooms(building: Poly): Promise<RoomShape[]> {
     })
     if (rooms.length >= 40) break
   }
+  roomsCache.set(cacheKey, rooms)
   return rooms
 }
 
@@ -103,5 +178,3 @@ export function polygonToFeature(poly: Poly): GeoJSON.FeatureCollection {
     features: [{ type: 'Feature', properties: {}, geometry: poly }],
   }
 }
-
-export { point }

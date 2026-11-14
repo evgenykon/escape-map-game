@@ -745,21 +745,62 @@ export class MapEngine {
     return MapEngine.CAR_SPRITES.find((s) => s.url === url) ?? MapEngine.CAR_RED
   }
 
-  /** Точка стоит ровно на здании: проверяем пиксель под игроком, без «поля» вокруг. */
+  /**
+   * Габариты здания под точкой, измеренные по пикселям карты (без сети):
+   * пускаем 4 луча до края здания и переводим пиксели в метры по текущему зуму.
+   */
+  measureBuildingAt(lng: number, lat: number): { areaM2: number; widthM: number; depthM: number } | null {
+    if (!this.map) return null
+    const pt = this.map.project([lng, lat])
+    const isBuilding = (x: number, y: number) =>
+      this.map!.queryRenderedFeatures([[x, y], [x, y]] as never)
+        .some(f => f.layer && (f.layer.id === 'building' || f.layer.id === 'building-3d'))
+    if (!isBuilding(pt.x, pt.y)) return null
+
+    const maxR = 220
+    const step = 1
+    const ray = (dx: number, dy: number) => {
+      let d = 0
+      while (d < maxR) {
+        const nd = d + step
+        if (!isBuilding(pt.x + dx * nd, pt.y + dy * nd)) break
+        d = nd
+      }
+      return d
+    }
+    const wPx = ray(1, 0) + ray(-1, 0)
+    const hPx = ray(0, 1) + ray(0, -1)
+    if (wPx < 2 || hPx < 2) return null
+
+    const zoom = this.map.getZoom()
+    const mpp = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom)
+    const widthM = wPx * mpp
+    const depthM = hPx * mpp
+    return { areaM2: Math.max(20, widthM * depthM), widthM, depthM }
+  }
+
+  /** Прямоугольник здания вокруг точки (для схемы помещений, когда OSM недоступен). */
+  rectPolygonAround(lng: number, lat: number, widthM: number, depthM: number): GeoJSON.Polygon {
+    const dLat = depthM / 111320
+    const dLng = widthM / (111320 * Math.cos((lat * Math.PI) / 180))
+    return {
+      type: 'Polygon',
+      coordinates: [[
+        [lng - dLng / 2, lat - dLat / 2],
+        [lng + dLng / 2, lat - dLat / 2],
+        [lng + dLng / 2, lat + dLat / 2],
+        [lng - dLng / 2, lat + dLat / 2],
+        [lng - dLng / 2, lat - dLat / 2],
+      ]],
+    }
+  }
+
+  /** Точка стоит ровно на здании: пиксель под игроком попадает в слой здания. */
   isInsideBuildingStrict(lng: number, lat: number): boolean {
     if (!this.map) return false
     const pt = this.map.project([lng, lat])
     const feats = this.map.queryRenderedFeatures([[pt.x, pt.y], [pt.x, pt.y]] as never)
-    const hit = feats.find(f => f.layer && (f.layer.id === 'building' || f.layer.id === 'building-3d'))
-    if (!hit) return false
-    if (hit.geometry) {
-      try {
-        return booleanPointInPolygon(point([lng, lat]), hit.geometry as never)
-      } catch {
-        return true
-      }
-    }
-    return true
+    return feats.some(f => f.layer && (f.layer.id === 'building' || f.layer.id === 'building-3d'))
   }
 
   /** POI (магазины и т.п.) в радиусе вокруг точки. */
