@@ -379,6 +379,45 @@ for i in range(PDIRS):
             r.filepath = os.path.join(FR, f"hack_{i:02d}_{f:02d}.png")
             bpy.ops.render.render(write_still=True)
             continue
+        if MODE == "swim":
+            # плывёт: руки гребут по очереди, ноги болтают, корпус чуть опущен
+            for k, (bn, sgn) in enumerate((("UpperArm.L", 1), ("UpperArm.R", -1))):
+                pb = arm.pose.bones[bn]
+                rest = pb.bone.matrix_local.to_3x3()
+                phase = ph + (0 if sgn > 0 else math.pi)
+                r_down = Matrix.Rotation(sgn * math.radians(60), 3, Vector((0, 0, 1)))
+                r_stroke = Matrix.Rotation(math.sin(phase) * math.radians(45) - math.radians(15), 3, Vector((1, 0, 0)))
+                l_down = rest.inverted() @ r_down @ rest
+                l_st = rest.inverted() @ r_stroke @ rest
+                pb.rotation_quaternion = (l_st @ l_down).to_quaternion()
+            for bn, sgn in (("LowerArm.L", 1), ("LowerArm.R", -1)):
+                world_rot(arm.pose.bones[bn], (1, 0, 0), math.radians(-35))
+            for bn, sgn in (("UpperLeg.L", 1), ("UpperLeg.R", -1)):
+                world_rot(arm.pose.bones[bn], (1, 0, 0), math.sin(ph * 2 + (0 if sgn > 0 else math.pi)) * math.radians(16))
+            for bn in ("LowerLeg.L", "LowerLeg.R"):
+                world_rot(arm.pose.bones[bn], (1, 0, 0), math.radians(-18))
+            pl_root.location.z = -0.05
+            pl_root.rotation_euler = (0, 0, 2 * math.pi * i / PDIRS)
+            bpy.context.view_layer.update()
+            r.filepath = os.path.join(FR, f"swim_{i:02d}_{f:02d}.png")
+            bpy.ops.render.render(write_still=True)
+            continue
+
+        if MODE == "dead":
+            # лежит: тело уложено, руки и ноги раскинуты
+            place_cam(0.35, 2.25)
+            for bn, sgn in (("UpperArm.L", 1), ("UpperArm.R", -1)):
+                world_rot(arm.pose.bones[bn], (0, 0, 1), sgn * math.radians(25))
+            for bn, sgn in (("LowerArm.L", 1), ("LowerArm.R", -1)):
+                world_rot(arm.pose.bones[bn], (0, 0, 1), sgn * math.radians(20))
+            for bn, sgn in (("UpperLeg.L", 1), ("UpperLeg.R", -1)):
+                world_rot(arm.pose.bones[bn], (0, 0, 1), sgn * math.radians(14))
+            pl_root.location = (0, 0.85, 0.10)
+            pl_root.rotation_euler = (math.radians(90), 0, 2 * math.pi * i / PDIRS)
+            bpy.context.view_layer.update()
+            r.filepath = os.path.join(FR, f"dead_{i:02d}_{f:02d}.png")
+            bpy.ops.render.render(write_still=True)
+            continue
         # arms down along body, then swing
         for bn, sgn in (("UpperArm.L", 1), ("UpperArm.R", -1)):
             pb = arm.pose.bones[bn]

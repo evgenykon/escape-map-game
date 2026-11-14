@@ -10,6 +10,8 @@ EEVEE с raytracing, прозрачный фон. На выходе — верт
 | Машина (каждый цвет) | `public/sprites/cars/car-<color>.png` | 128×2048 | 16 направлений, по 1 кадру |
 | Персонаж, ходьба | `public/sprites/player/walk-<dir>.png` | 128×1024 | 8 направлений × 8 кадров |
 | Персонаж, взлом | `public/sprites/player/hack-<dir>.png` | 128×768 | 8 направлений × 6 кадров |
+| Персонаж, плавание | `public/sprites/player/swim-<dir>.png` | 128×768 | 8 направлений × 6 кадров |
+| Персонаж, смерть | `public/sprites/player/dead-<dir>.png` | 128×128 | 8 направлений × 1 кадр (+ `dead-single.png` для оверлея) |
 
 Кадр машины выбирается в рантайме по углу (`MapEngine.carFrameIndex`), а не прокручивается
 по времени. У персонажа лист на направление, внутри — 8 кадров цикла ходьбы.
@@ -29,6 +31,10 @@ CARS=0 PDIRS=8 PFRAMES=8 blender -b -P bake_sprites.py
 
 # персонаж: анимация взлома (8 направлений × 6 кадров)
 CARS=0 PDIRS=8 PFRAMES=6 MODE=hack blender -b -P bake_sprites.py
+
+# персонаж: плавание и смерть
+CARS=0 PDIRS=8 PFRAMES=6 MODE=swim blender -b -P bake_sprites.py
+CARS=0 PDIRS=8 PFRAMES=1 MODE=dead blender -b -P bake_sprites.py
 ```
 
 Кадры складываются в `frames_v5_<color>/` (машины) и `frames_v5/` (персонаж) рядом со скриптом.
