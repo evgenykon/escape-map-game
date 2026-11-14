@@ -195,6 +195,8 @@ watch(
 )
 
 onUnmounted(() => {
+  // отдых идёт только пока открыто окно базы
+  store.resting = false
   miniMap?.remove()
   miniMap = null
 })
@@ -213,9 +215,8 @@ function drink() {
   store.stats.water = Math.min(100, store.stats.water + 50)
 }
 
-function rest() {
-  store.stats.energy = Math.min(100, store.stats.energy + (hasBedroom.value ? 85 : 60))
-  store.stats.health = Math.min(100, store.stats.health + (hasBedroom.value ? 15 : 10))
+function toggleRest() {
+  store.resting = !store.resting
 }
 
 function heal() {
@@ -238,6 +239,10 @@ function heal() {
         </span>
         <button class="close" @click="emit('close')">✕</button>
       </header>
+
+      <div v-if="store.resting" class="rest-bar">
+        Отдых: энергия восстанавливается {{ hasBedroom ? '3' : '2' }}% в секунду ({{ Math.round(stats.energy) }}%)
+      </div>
 
       <div class="body">
         <section class="plan">
@@ -332,7 +337,9 @@ function heal() {
       <footer>
         <button :disabled="!store.base || store.base.resources.food <= 0" @click="eat">🍖 Поесть</button>
         <button :disabled="!store.base || store.base.resources.water <= 0" @click="drink">💧 Попить</button>
-        <button @click="rest">⚡ Отдохнуть</button>
+        <button :class="{ resting: store.resting }" @click="toggleRest">
+          {{ store.resting ? '🛑 Встать' : '⚡ Отдохнуть' }}
+        </button>
         <button :disabled="!store.base || store.base.resources.medicine <= 0" @click="heal">💊 Лечиться</button>
       </footer>
     </div>
@@ -486,6 +493,18 @@ h3 {
 .mini-row b {
   color: #e6edf3;
 }
+.rest-bar {
+  padding: 8px 18px;
+  font-size: 11px;
+  color: #9fe9bf;
+  background: #101c14;
+  border-bottom: 1px solid #24402f;
+}
+footer button.resting {
+  border-color: #7ee2a8;
+  color: #9fe9bf;
+}
+
 .build {
   padding: 14px 18px;
   border-top: 1px solid #29323c;

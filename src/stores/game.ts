@@ -100,6 +100,7 @@ export const useGameStore = defineStore('game', () => {
   // ---- пост-взрывной метагейм ----
   const isAftermath = ref(false)
   const stats = ref<SurvivalStats>({ health: 100, energy: 65, satiety: 75, water: 65 })
+  const resting = ref(false)
   const base = ref<PlayerBase | null>(null)
   const cleaning = ref<{ active: boolean; progress: number; rooms: number }>({ active: false, progress: 0, rooms: 0 })
   const deathReasonText = ref<string | null>(null)
@@ -142,6 +143,7 @@ export const useGameStore = defineStore('game', () => {
     fuelStationsDisabled,
     isAftermath,
     stats,
+    resting,
     base,
     cleaning,
     deathReasonText,

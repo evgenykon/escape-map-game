@@ -497,6 +497,22 @@ function tickSurvival() {
   const gymBonus = countRooms(store.base?.roomTypes, 'gym') > 0 ? 0.85 : 1
   s.energy = Math.max(0, s.energy - (inBase ? 0.04 : 0.12) * gymBonus)
   tickRooms()
+
+  // отдых на базе: силы восстанавливаются постепенно (~2% в секунду)
+  if (store.resting) {
+    if (!inBase) {
+      store.resting = false
+    } else {
+      const s2 = store.stats
+      const restRate = countRooms(store.base?.roomTypes, 'bedroom') > 0 ? 3 : 2
+      s2.energy = Math.min(100, s2.energy + restRate)
+      if (s2.energy >= 100) {
+        store.resting = false
+        showToast('⚡ Отдохнули, силы восстановлены')
+      }
+    }
+  }
+
   let damage = 0
   if (s.satiety <= 0) damage += 1.2
   if (s.water <= 0) damage += 1.4
@@ -546,6 +562,16 @@ function storageUsed(): number {
   const r = store.base?.resources
   if (!r) return 0
   return Object.values(r as unknown as Record<string, number>).reduce((sum, v) => sum + v, 0)
+}
+
+/** Открытие окна базы: план помещений пересобирается, если он не из OSM. */
+function openBaseDialog() {
+  const base = store.base
+  if (!base) return
+  if (!base.roomsReal && base.polygon) {
+    base.roomsGeo = roomsToFeatureCollection(splitBuildingIntoRooms(base.polygon, base.rooms))
+  }
+  baseDialogOpen.value = true
 }
 
 function depositBackpack() {
@@ -889,6 +915,7 @@ function restartGame() {
   store.base = null
   store.carried = {}
   store.lootBuildings = {}
+  store.resting = false
   activeLootKey.value = ''
   lootDialogOpen.value = false
   searchActive.value = false
@@ -1006,7 +1033,7 @@ function toggleMute() {
       ★ Сделать базой
     </button>
 
-    <button v-if="canOpenBase && !baseDialogOpen" class="open-base-btn" @click="baseDialogOpen = true">
+    <button v-if="canOpenBase && !baseDialogOpen" class="open-base-btn" @click="openBaseDialog">
       ★ Открыть окно базы
     </button>
 

@@ -1,4 +1,4 @@
-import { area, booleanPointInPolygon, center, intersect, point, squareGrid } from '@turf/turf'
+import { area, booleanPointInPolygon, center, feature, featureCollection, intersect, point } from '@turf/turf'
 
 export interface RoomShape {
   id: number
@@ -134,31 +134,96 @@ export async function fetchRealRooms(building: Poly): Promise<RoomShape[]> {
   return rooms
 }
 
-/** Нарезка контура здания на N помещений (когда OSM-комнат нет). */
+/**
+ * Автоматический план помещений: рекурсивно делим контур пополам по длинной стороне,
+ * пока не получим ровно N помещений. Куски не пересекаются и вместе покрывают здание.
+ */
 export function splitBuildingIntoRooms(building: Poly, count: number): RoomShape[] {
+  const n = Math.max(1, Math.min(10, count))
   const [minX, minY, maxX, maxY] = bboxOf(building)
-  const cols = Math.ceil(Math.sqrt(count))
-  const rows = Math.ceil(count / cols)
-  const cellW = ((maxX - minX) / cols) * 111320 * Math.cos((minY * Math.PI) / 180)
-  const cellH = ((maxY - minY) / rows) * 111320
+  const buildingFeature = feature(building as never) as never
 
-  const grid = squareGrid([minX, minY, maxX, maxY], Math.max(cellW, cellH) || 10, { units: 'meters' })
-  const rooms: RoomShape[] = []
-  for (const cell of grid.features) {
-    if (rooms.length >= count) break
+  const largestPolygon = (geom: GeoJSON.Polygon | GeoJSON.MultiPolygon): GeoJSON.Polygon | null => {
+    if (geom.type === 'Polygon') return geom
+    if (!geom.coordinates.length) return null
+    let best = geom.coordinates[0]
+    let bestArea = -1
+    for (const poly of geom.coordinates) {
+      const candidate: GeoJSON.Polygon = { type: 'Polygon', coordinates: poly }
+      const a = area(candidate as never)
+      if (a > bestArea) {
+        bestArea = a
+        best = poly
+      }
+    }
+    return { type: 'Polygon', coordinates: best }
+  }
+
+  const clip = (poly: GeoJSON.Polygon): GeoJSON.Polygon | null => {
     try {
-      const buildingFeature = { type: 'Feature', properties: {}, geometry: building } as never
-      const clipped = intersect(cell as never, buildingFeature) as GeoJSON.Feature<GeoJSON.Polygon> | null
-      if (!clipped) continue
-      rooms.push({ id: rooms.length + 1, name: `Помещение ${rooms.length + 1}`, polygon: clipped.geometry })
+      const res = intersect(featureCollection([feature(poly as never), buildingFeature]) as never) as unknown as
+        | GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>
+        | null
+      if (!res?.geometry) return null
+      const poly2 = largestPolygon(res.geometry)
+      if (!poly2 || area(poly2 as never) < 4) return null
+      return poly2
     } catch {
-      continue
+      return null
     }
   }
-  while (rooms.length < count) {
-    rooms.push({ id: rooms.length + 1, name: `Помещение ${rooms.length + 1}`, polygon: building as GeoJSON.Polygon })
+
+  const rect = (x0: number, y0: number, x1: number, y1: number): GeoJSON.Polygon => ({
+    type: 'Polygon',
+    coordinates: [[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]],
+  })
+
+  const whole = clip(rect(minX, minY, maxX, maxY)) ?? (building as GeoJSON.Polygon)
+  let regions: GeoJSON.Polygon[] = [whole]
+
+  let guard = 0
+  while (regions.length < n && guard < 40) {
+    guard += 1
+
+    // делим самый большой кусок
+    let idx = 0
+    let maxArea = -1
+    regions.forEach((poly, i) => {
+      const a = area(poly as never)
+      if (a > maxArea) {
+        maxArea = a
+        idx = i
+      }
+    })
+
+    const target = regions[idx]
+    const [x0, y0, x1, y1] = bboxOf(target)
+    const vertical = x1 - x0 >= y1 - y0
+    const mx = (x0 + x1) / 2
+    const my = (y0 + y1) / 2
+
+    const parts = vertical
+      ? [rect(x0, y0, mx, y1), rect(mx, y0, x1, y1)]
+      : [rect(x0, y0, x1, my), rect(x0, my, x1, y1)]
+
+    const pieces: GeoJSON.Polygon[] = []
+    for (const part of parts) {
+      const piece = clip(part)
+      if (piece) pieces.push(piece)
+    }
+    if (pieces.length < 2) break
+
+    regions = [...regions.slice(0, idx), ...regions.slice(idx + 1), ...pieces]
   }
-  return rooms
+
+  return regions
+    .sort((a, b) => {
+      const [ax, ay] = center(feature(a as never) as never).geometry.coordinates
+      const [bx, by] = center(feature(b as never) as never).geometry.coordinates
+      if (Math.abs(ay - by) > 1e-6) return by - ay
+      return ax - bx
+    })
+    .map((polygon, i) => ({ id: i + 1, name: `Помещение ${i + 1}`, polygon }))
 }
 
 export function roomsToFeatureCollection(rooms: RoomShape[]): GeoJSON.FeatureCollection {
