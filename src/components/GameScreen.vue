@@ -498,10 +498,19 @@ function tickSurvival() {
   s.energy = Math.max(0, s.energy - (inBase ? 0.04 : 0.12) * gymBonus)
   tickRooms()
 
+  // постройка помещения завершается по таймеру, даже если окно базы закрыто
+  const job = store.construction
+  if (job && store.base && Date.now() >= job.endsAt) {
+    store.base.roomTypes = { ...(store.base.roomTypes ?? {}), [job.roomId]: job.type }
+    store.construction = null
+    showToast(`🏗 Помещение ${job.roomId} готово`)
+  }
+
   // отдых на базе: силы восстанавливаются постепенно (~2% в секунду)
   if (store.resting) {
     if (!inBase) {
       store.resting = false
+  store.construction = null
     } else {
       const s2 = store.stats
       const restRate = countRooms(store.base?.roomTypes, 'bedroom') > 0 ? 3 : 2

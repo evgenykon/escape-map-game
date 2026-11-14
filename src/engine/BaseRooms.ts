@@ -19,6 +19,8 @@ export interface RoomType {
 
 /** Стоимость обустройства одной комнаты и возврат при демонтаже. */
 export const ROOM_BUILD_COST = 10
+/** сколько длится постройка одного помещения, мс */
+export const ROOM_BUILD_MS = 20000
 export const ROOM_REFUND = 5
 
 export const ROOM_TYPES: RoomType[] = [
