@@ -11,6 +11,7 @@ os.makedirs(FR, exist_ok=True)
 CARS = int(os.environ.get("CARS", "16"))
 PDIRS = int(os.environ.get("PDIRS", "8"))
 PFRAMES = int(os.environ.get("PFRAMES", "8"))
+MODE = os.environ.get("MODE", "walk")
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
@@ -339,10 +340,15 @@ car_root.hide_render = True
 pl_root, arm, pl_objs = load_character()
 place_cam(0.92, 1.80)
 
+if MODE == "swim":
+    # под водой ног не видно — оставляем только голову, плечи и руки
+    for o in pl_objs:
+        if "Leg" in o.name or "Feet" in o.name or "Feet" in o.name:
+            o.hide_render = True
+    print("SWIM_HIDDEN", [o.name for o in pl_objs if o.hide_render], flush=True)
+
 LEGS = ("UpperLeg.L", "UpperLeg.R", "LowerLeg.L", "LowerLeg.R")
 ARMS = ("UpperArm.L", "UpperArm.R")
-
-MODE = os.environ.get("MODE", "walk")
 
 for i in range(PDIRS):
     for f in range(PFRAMES):
