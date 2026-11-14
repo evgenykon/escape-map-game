@@ -57,10 +57,10 @@ export class MapEngine {
   private static readonly PLAYER_BOX = 38
 
   private static readonly PLAYER_IDLE = { url: 'sprites/player-idle.png', w: 48, h: 48, count: 10, duration: 3 }
-  private static readonly PLAYER_HACK = { url: 'sprites/player/hack-0.png', w: 128, h: 128, count: 6, duration: 0.9 }
-  private static readonly PLAYER_DEAD = { url: 'sprites/player/dead-0.png', w: 128, h: 128, count: 1, duration: 0 }
-  private static readonly PLAYER_SWIM = { url: 'sprites/player/swim-0.png', w: 128, h: 128, count: 6, duration: 0.9 }
-  private static readonly PLAYER_WALK = { url: 'sprites/player/walk-0.png', w: 128, h: 128, count: 8, duration: 0.72 }
+  private static readonly PLAYER_HACK = { url: 'sprites/player/hack-4.png', w: 128, h: 128, count: 6, duration: 0.9 }
+  private static readonly PLAYER_DEAD = { url: 'sprites/player/dead-4.png', w: 128, h: 128, count: 1, duration: 0 }
+  private static readonly PLAYER_SWIM = { url: 'sprites/player/swim-4.png', w: 128, h: 128, count: 6, duration: 0.9 }
+  private static readonly PLAYER_WALK = { url: 'sprites/player/walk-4.png', w: 128, h: 128, count: 8, duration: 0.72 }
   private static readonly PLAYER_WALK_DIRS = [
     'sprites/player/walk-0.png',
     'sprites/player/walk-1.png',

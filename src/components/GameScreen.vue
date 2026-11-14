@@ -1095,7 +1095,7 @@ function toggleMute() {
   animation: none;
 }
 .walking {
-  animation: player-walk-anim 0.72s steps(8) infinite;
+  animation: player-walk-anim 0.58s steps(8) infinite;
 }
 .walking.running {
   animation: player-walk-anim 0.44s steps(8) infinite;

@@ -5,7 +5,7 @@ import { CarPhysics } from './CarPhysics'
 import { MapEngine } from './MapEngine'
 import { soundEngine } from './SoundEngine'
 
-const MOVE_SPEED_WALK = 2
+const MOVE_SPEED_WALK = 2.6
 const ROTATION_SPEED = 2.4
 const CAR_COLLISION_DIST = 0.2
 const SWIM_SPEED = 0.3
