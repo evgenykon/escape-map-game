@@ -12,8 +12,8 @@ export class MapEngine {
   private playerMarkerImg: HTMLElement | null = null
   private carMarkers: Map<string, maplibregl.Marker> = new Map()
   private carMarkerInners: Map<string, HTMLElement> = new Map()
-  private playerBaseW = 22
-  private playerBaseH = 28
+  private playerBaseW = MapEngine.PLAYER_BOX
+  private playerBaseH = MapEngine.PLAYER_BOX
   private playerIsCar = false
   private playerCarSpriteData: { url: string; w: number; h: number; count: number; duration: number } | null = null
   private playerCarFrameH = 0
@@ -51,15 +51,37 @@ export class MapEngine {
     MapEngine.CAR_H,
   ]
 
+  private static readonly CAR_DIRS = 16
+  private static readonly CAR_BOX = 44
+  private static readonly PLAYER_BOX = 32
+
   private static readonly PLAYER_IDLE = { url: 'sprites/player-idle.png', w: 48, h: 48, count: 10, duration: 3 }
-  private static readonly PLAYER_WALK = { url: 'sprites/player-walking.png', w: 48, h: 48, count: 6, duration: 0.6 }
   private static readonly PLAYER_HACK = { url: 'sprites/player-hacking.png', w: 48, h: 48, count: 4, duration: 1 }
   private static readonly PLAYER_DEAD = { url: 'sprites/dead.png', w: 32, h: 32, count: 1, duration: 0 }
   private static readonly PLAYER_SWIM = { url: 'sprites/player_swimming.png', w: 48, h: 48, count: 7, duration: 0.8 }
-  private static readonly CAR_RED = { url: 'sprites/car-red.png', w: 120, h: 180, count: 11, duration: 0.8 }
-  private static readonly CAR_BLUE = { url: 'sprites/car-blue.png', w: 120, h: 180, count: 11, duration: 0.8 }
-  private static readonly CAR_GREEN = { url: 'sprites/car-green.png', w: 120, h: 180, count: 11, duration: 0.8 }
+  private static readonly PLAYER_WALK = { url: 'sprites/player/walk-4.png', w: 128, h: 128, count: 8, duration: 0.72 }
+  private static readonly PLAYER_WALK_DIRS = [
+    'sprites/player/walk-0.png',
+    'sprites/player/walk-1.png',
+    'sprites/player/walk-2.png',
+    'sprites/player/walk-3.png',
+    'sprites/player/walk-4.png',
+    'sprites/player/walk-5.png',
+    'sprites/player/walk-6.png',
+    'sprites/player/walk-7.png',
+  ]
+  private static readonly CAR_RED = { url: 'sprites/cars/car-red.png', w: 128, h: 128, count: 16, duration: 0 }
+  private static readonly CAR_BLUE = { url: 'sprites/cars/car-blue.png', w: 128, h: 128, count: 16, duration: 0 }
+  private static readonly CAR_GREEN = { url: 'sprites/cars/car-green.png', w: 128, h: 128, count: 16, duration: 0 }
   private static readonly CAR_SPRITES = [MapEngine.CAR_RED, MapEngine.CAR_BLUE, MapEngine.CAR_GREEN]
+
+  /** Индекс кадра из 16 направлений по углу в радианах (0 = нос вверх). */
+  private static carFrameIndex(angle: number): number {
+    const step = (Math.PI * 2) / MapEngine.CAR_DIRS
+    let a = angle % (Math.PI * 2)
+    if (a < 0) a += Math.PI * 2
+    return Math.round(a / step) % MapEngine.CAR_DIRS
+  }
 
   private playerAnimState: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' | 'swimming' = 'idle'
 
@@ -302,36 +324,27 @@ export class MapEngine {
   private createCarImage(angle?: number, carSprite?: { url: string; w: number; h: number; count: number; duration: number }): { outer: HTMLElement; inner: HTMLElement } {
     const frame = carSprite ?? MapEngine.CAR_RED
     const outer = document.createElement('div')
-    outer.style.width = '36px'
-    outer.style.height = '53px'
+    outer.style.width = MapEngine.CAR_BOX + 'px'
+    outer.style.height = MapEngine.CAR_BOX + 'px'
 
     const inner = document.createElement('div')
     inner.style.width = '100%'
     inner.style.height = '100%'
-    inner.style.overflow = 'hidden'
     inner.style.filter = 'drop-shadow(0 0 6px #48f)'
-    if (angle !== undefined) {
-      inner.style.transform = `rotate(${angle}rad)`
-    }
+    inner.dataset.spriteAngle = String(angle ?? 0)
+    this.applyCarSpriteFrame(inner, frame, angle ?? 0, MapEngine.CAR_BOX)
 
-    const frameWrap = document.createElement('div')
-    frameWrap.style.width = '100%'
-    frameWrap.style.overflow = 'hidden'
-    frameWrap.style.position = 'relative'
-
-    const sprite = document.createElement('div')
-    sprite.style.width = '100%'
-    sprite.style.backgroundImage = `url(${import.meta.env.BASE_URL}${frame.url})`
-    sprite.style.backgroundRepeat = 'no-repeat'
-    sprite.style.backgroundPosition = '0 0'
-    sprite.style.position = 'absolute'
-    sprite.style.top = '0'
-    sprite.style.left = '0'
-
-    frameWrap.appendChild(sprite)
-    inner.appendChild(frameWrap)
     outer.appendChild(inner)
     return { outer, inner }
+  }
+
+  /** Кадр спрайта машины по направлению: лист — вертикальная полоса из 16 поворотов. */
+  private applyCarSpriteFrame(el: HTMLElement, sprite: { url: string; w: number; h: number; count: number }, angle: number, box: number) {
+    const idx = MapEngine.carFrameIndex(angle)
+    el.style.backgroundImage = `url(${import.meta.env.BASE_URL}${sprite.url})`
+    el.style.backgroundRepeat = 'no-repeat'
+    el.style.backgroundSize = `${box}px ${box * sprite.count}px`
+    el.style.backgroundPosition = `0 ${(-idx * box).toFixed(2)}px`
   }
 
   private applyCarCellBackground(el: HTMLElement, boxW: number, boxH: number) {
@@ -346,34 +359,20 @@ export class MapEngine {
   private applyAllCarsZoom(zoom: number) {
     const natural = MapEngine.getScale(zoom)
     const scale = Math.max(0.5, natural - 0.2)
-    const boxW = Math.round(36 * scale)
-    const boxH = Math.round(53 * scale)
+    const box = Math.round(MapEngine.CAR_BOX * scale)
 
     for (const marker of this.carMarkers.values()) {
-      marker.getElement().style.width = boxW + 'px'
-      marker.getElement().style.height = boxH + 'px'
+      marker.getElement().style.width = box + 'px'
+      marker.getElement().style.height = box + 'px'
     }
     for (const inner of this.carMarkerInners.values()) {
-      const sW = inner.dataset.spriteW ? Number(inner.dataset.spriteW) : 120
-      const sH = inner.dataset.spriteH ? Number(inner.dataset.spriteH) : 180
-      const sCount = inner.dataset.spriteCount ? Number(inner.dataset.spriteCount) : 11
+      const sCount = inner.dataset.spriteCount ? Number(inner.dataset.spriteCount) : MapEngine.CAR_DIRS
       const sUrl = inner.dataset.spriteUrl ?? MapEngine.CAR_RED.url
+      const angle = inner.dataset.spriteAngle ? Number(inner.dataset.spriteAngle) : 0
 
-      inner.style.width = boxW + 'px'
-      inner.style.height = boxH + 'px'
-      const frameWrap = inner.firstElementChild as HTMLElement | null
-      if (frameWrap) {
-        const s = Math.min(boxW / sW, boxH / sH)
-        const frameH = sH * s
-        frameWrap.style.height = `${(frameH - 2).toFixed(2)}px`
-        const sprite = frameWrap.firstElementChild as HTMLElement | null
-        if (sprite) {
-          sprite.style.backgroundImage = `url(${import.meta.env.BASE_URL}${sUrl})`
-          sprite.style.backgroundSize = `${(sW * s).toFixed(2)}px ${(sH * sCount * s).toFixed(2)}px`
-          sprite.style.width = `${(sW * s).toFixed(2)}px`
-          sprite.style.height = `${(sH * sCount * s).toFixed(2)}px`
-        }
-      }
+      inner.style.width = box + 'px'
+      inner.style.height = box + 'px'
+      this.applyCarSpriteFrame(inner, { url: sUrl, w: box, h: box, count: sCount }, angle, box)
     }
   }
 
@@ -491,7 +490,12 @@ export class MapEngine {
 
   setCarMarkerAngle(id: string, angle: number) {
     const inner = this.carMarkerInners.get(id)
-    if (inner) inner.style.transform = `rotate(${angle}rad)`
+    if (!inner) return
+    inner.dataset.spriteAngle = String(angle)
+    const box = inner.clientWidth || MapEngine.CAR_BOX
+    const sCount = inner.dataset.spriteCount ? Number(inner.dataset.spriteCount) : MapEngine.CAR_DIRS
+    const sUrl = inner.dataset.spriteUrl ?? MapEngine.CAR_RED.url
+    this.applyCarSpriteFrame(inner, { url: sUrl, w: box, h: box, count: sCount }, angle, box)
   }
 
   addCarMarker(id: string, lng: number, lat: number, angle?: number) {
@@ -627,7 +631,7 @@ export class MapEngine {
       : this.playerAnimState === 'walking' || this.playerAnimState === 'running' ? MapEngine.PLAYER_WALK
       : this.playerAnimState === 'dead' ? MapEngine.PLAYER_DEAD
       : this.playerAnimState === 'swimming' ? MapEngine.PLAYER_SWIM
-      : MapEngine.PLAYER_IDLE
+      : MapEngine.PLAYER_WALK
     const s = Math.min(boxW / frame.w, boxH / frame.h)
     const sheetW = frame.w * s
     const sheetH = frame.h * frame.count * s
@@ -646,7 +650,7 @@ export class MapEngine {
   setPlayerFrame(state: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' | 'swimming') {
     if (!this.playerMarkerImg) return
     this.playerAnimState = state
-    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'dead', 'swimming', 'car-moving')
+    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'dead', 'swimming', 'car-moving', 'still')
     this.applyPlayerZoom(this.map?.getZoom() ?? 18)
     if (state === 'walking' || state === 'running') {
       this.playerMarkerImg.classList.add('walking')
@@ -660,7 +664,7 @@ export class MapEngine {
     } else if (state === 'swimming') {
       this.playerMarkerImg.classList.add('swimming')
     } else {
-      this.playerMarkerImg.classList.add('idle')
+      this.playerMarkerImg.classList.add('still')
     }
   }
 
@@ -672,8 +676,8 @@ export class MapEngine {
 
   setPlayerMarkerShape(isCar: boolean) {
     if (!this.playerMarkerImg) return
-    this.playerBaseW = isCar ? 36 : 22
-    this.playerBaseH = isCar ? 53 : 28
+    this.playerBaseW = isCar ? MapEngine.CAR_BOX : MapEngine.PLAYER_BOX
+    this.playerBaseH = isCar ? MapEngine.CAR_BOX : MapEngine.PLAYER_BOX
     this.playerIsCar = isCar
     if (this.playerMarkerFlip) {
       this.playerMarkerFlip.style.transform = ''
@@ -683,7 +687,7 @@ export class MapEngine {
     } else {
       this.setPlayerMarkerShadow('#0f0')
     }
-    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'swimming', 'dead', 'car-moving')
+    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'swimming', 'dead', 'car-moving', 'still')
     this.applyPlayerZoom(this.map?.getZoom() ?? 18)
   }
 
@@ -696,25 +700,17 @@ export class MapEngine {
     this.playerCarSpriteData = null
   }
 
-  setPlayerCarMoving(moving: boolean) {
-    if (!this.playerMarkerImg || !this.playerIsCar) return
-    if (moving) {
-      this.playerMarkerImg.classList.add('car-moving')
-    } else {
-      this.playerMarkerImg.classList.remove('car-moving')
-    }
+  setPlayerCarMoving(_moving: boolean) {
+    // Спрайт машины — набор из 16 направлений, кадр выбирается по углу,
+    // а не прокручивается по времени, поэтому анимация здесь не нужна.
   }
 
   getCarMarkerSprite(carId: string): { url: string; w: number; h: number; count: number; duration: number } | null {
     const inner = this.carMarkerInners.get(carId)
     if (!inner) return null
     const url = inner.dataset.spriteUrl
-    const w = Number(inner.dataset.spriteW)
-    const h = Number(inner.dataset.spriteH)
-    const count = Number(inner.dataset.spriteCount)
-    if (!url || !w || !h || !count) return null
-    const duration = MapEngine.CAR_RED.duration
-    return { url, w, h, count, duration }
+    if (!url) return null
+    return MapEngine.CAR_SPRITES.find((s) => s.url === url) ?? MapEngine.CAR_RED
   }
 
   isInsideBuilding(lng: number, lat: number): boolean {

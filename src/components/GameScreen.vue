@@ -798,11 +798,14 @@ function toggleMute() {
 .idle {
   animation: player-idle-anim 3s steps(10) infinite;
 }
+.still {
+  animation: none;
+}
 .walking {
-  animation: player-walk-anim 0.6s steps(6) infinite;
+  animation: player-walk-anim 0.72s steps(8) infinite;
 }
 .walking.running {
-  animation: player-walk-anim 0.3s steps(6) infinite;
+  animation: player-walk-anim 0.44s steps(8) infinite;
 }
 .hacking {
   animation: player-hack-anim 1s steps(4) infinite;
