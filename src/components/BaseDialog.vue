@@ -4,6 +4,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useGameStore } from '@/stores/game'
 import { polygonToFeature } from '@/engine/IndoorLoader'
+import { ROOM_BUILD_COST, ROOM_REFUND, ROOM_TYPES, roomTypeOf, type RoomTypeKey } from '@/engine/BaseRooms'
 
 const store = useGameStore()
 const emit = defineEmits<{ (e: 'close'): void }>()
@@ -39,6 +40,43 @@ const resources = computed(() => {
 })
 
 const stats = computed(() => store.stats)
+
+const selectedRoom = ref<number | null>(null)
+const buildMessage = ref('')
+
+function roomType(id: number) {
+  return roomTypeOf(store.base?.roomTypes?.[id])
+}
+
+function materials(): number {
+  return store.base?.resources.materials ?? 0
+}
+
+function build(roomId: number, key: RoomTypeKey) {
+  const base = store.base
+  if (!base) return
+  if (base.roomTypes?.[roomId] === key) return
+  if (materials() < ROOM_BUILD_COST) {
+    buildMessage.value = `Нужно ${ROOM_BUILD_COST} 🧱 материалов`
+    return
+  }
+  base.resources.materials -= ROOM_BUILD_COST
+  base.roomTypes = { ...(base.roomTypes ?? {}), [roomId]: key }
+  const t = roomTypeOf(key)
+  buildMessage.value = `Помещение ${roomId}: построено «${t?.name}» (−${ROOM_BUILD_COST} 🧱)`
+  selectedRoom.value = null
+}
+
+function dismantle(roomId: number) {
+  const base = store.base
+  if (!base?.roomTypes?.[roomId]) return
+  const next = { ...base.roomTypes }
+  delete next[roomId]
+  base.roomTypes = next
+  base.resources.materials += ROOM_REFUND
+  buildMessage.value = `Помещение ${roomId}: разобрано (+${ROOM_REFUND} 🧱)`
+  selectedRoom.value = null
+}
 
 function draw() {
   if (!miniMap || !ready) return
@@ -220,6 +258,60 @@ function heal() {
         </aside>
       </div>
 
+      <section class="build">
+        <h3>Обустройство помещений · 🧱 {{ materials() }} материалов</h3>
+
+        <div class="rooms-grid">
+          <button
+            v-for="room in roomsList"
+            :key="room.id"
+            class="room-card"
+            :class="{ active: selectedRoom === room.id, built: !!roomType(room.id) }"
+            @click="selectedRoom = selectedRoom === room.id ? null : room.id"
+          >
+            <span class="room-num">{{ room.id }}</span>
+            <span class="room-name">{{ room.name }}</span>
+            <span v-if="roomType(room.id)" class="room-built">
+              {{ roomType(room.id)!.icon }} {{ roomType(room.id)!.name }}
+            </span>
+            <span v-else class="room-empty">пусто</span>
+          </button>
+        </div>
+
+        <div v-if="selectedRoom !== null" class="palette">
+          <div class="palette-head">
+            Помещение {{ selectedRoom }} —
+            <span v-if="roomType(selectedRoom)">{{ roomType(selectedRoom)!.perks }}</span>
+            <span v-else>выберите, что построить ({{ ROOM_BUILD_COST }} 🧱)</span>
+          </div>
+
+          <div class="palette-grid">
+            <button
+              v-for="t in ROOM_TYPES"
+              :key="t.key"
+              class="type-btn"
+              :class="{ current: store.base?.roomTypes?.[selectedRoom] === t.key }"
+              :disabled="materials() < ROOM_BUILD_COST"
+              @click="build(selectedRoom, t.key)"
+            >
+              <span class="type-ico">{{ t.icon }}</span>
+              <span class="type-name">{{ t.name }}</span>
+              <span class="type-cost">{{ ROOM_BUILD_COST }} 🧱</span>
+            </button>
+          </div>
+
+          <button
+            v-if="roomType(selectedRoom)"
+            class="dismantle"
+            @click="dismantle(selectedRoom)"
+          >
+            Демонтировать (возврат {{ ROOM_REFUND }} 🧱)
+          </button>
+        </div>
+
+        <div v-if="buildMessage" class="build-msg">{{ buildMessage }}</div>
+      </section>
+
       <footer>
         <button :disabled="!store.base || store.base.resources.food <= 0" @click="eat">🍖 Поесть</button>
         <button :disabled="!store.base || store.base.resources.water <= 0" @click="drink">💧 Попить</button>
@@ -351,6 +443,97 @@ h3 {
 .mini-row b {
   color: #e6edf3;
 }
+.build {
+  padding: 14px 18px;
+  border-top: 1px solid #29323c;
+  background: #10151b;
+}
+.rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+.room-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  font-family: inherit;
+  padding: 8px 10px;
+  background: #161d25;
+  border: 1px solid #2a3542;
+  color: #cfd8e2;
+  cursor: pointer;
+}
+.room-card:hover { border-color: #3f5468; }
+.room-card.built { border-color: #3c7d54; background: #14241a; }
+.room-card.active { outline: 1px solid #ffd54a; }
+.room-num {
+  font-size: 10px;
+  color: #6b7885;
+}
+.room-name {
+  font-size: 12px;
+  color: #e6edf3;
+}
+.room-built {
+  font-size: 11px;
+  color: #7ee2a8;
+}
+.room-empty {
+  font-size: 11px;
+  color: #5f6c79;
+}
+.palette {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px dashed #2f3d4b;
+  background: #0e1319;
+}
+.palette-head {
+  font-size: 11px;
+  color: #8b98a5;
+  margin-bottom: 8px;
+}
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+}
+.type-btn {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  gap: 6px;
+  align-items: center;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 7px 8px;
+  background: #17202a;
+  color: #cfd8e2;
+  border: 1px solid #2a3542;
+  cursor: pointer;
+}
+.type-btn:hover:not(:disabled) { border-color: #4c7fa8; }
+.type-btn.current { border-color: #7ee2a8; color: #9fe9bf; }
+.type-btn:disabled { opacity: 0.4; cursor: default; }
+.type-ico { text-align: center; }
+.type-cost { color: #8b98a5; font-size: 10px; }
+.dismantle {
+  margin-top: 10px;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 7px 12px;
+  background: #2a1616;
+  color: #ff9a9a;
+  border: 1px solid #6b2f2f;
+  cursor: pointer;
+}
+.build-msg {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #9fe9bf;
+}
+
 footer {
   display: flex;
   gap: 10px;

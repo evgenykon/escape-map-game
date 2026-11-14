@@ -1,3 +1,4 @@
+import type { RoomTypeKey } from '@/engine/BaseRooms'
 import { defineStore } from 'pinia'
 import { ref, shallowRef } from 'vue'
 import type { Scenario } from '@/scenarios/types'
@@ -46,6 +47,8 @@ export interface PlayerBase {
   /** измеренная площадь здания, м² */
   areaM2: number
   resources: BaseResources
+  /** обустройство комнат: id помещения -> тип постройки */
+  roomTypes: Record<number, RoomTypeKey>
   objects: string[]
   polygon: GeoJSON.Polygon | null
   roomsGeo: GeoJSON.FeatureCollection | null
