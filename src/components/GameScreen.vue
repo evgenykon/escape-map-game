@@ -446,7 +446,7 @@ function toggleMute() {
     </div>
 
     <div v-if="store.phase === 'gameover'" class="gameover-overlay">
-      <img :src="baseUrl + 'sprites/dead.png'" class="dead-sprite" alt="" />
+      <img :src="baseUrl + 'sprites/player/dead-single.png'" class="dead-sprite" alt="" />
       <h1>{{ deathReason === 'collapse' ? resultTexts?.collapseTitle : resultTexts?.gameoverTitle ?? 'GAME OVER' }}</h1>
       <p>{{ deathReason === 'collapse' ? resultTexts?.collapseSubtitle : resultTexts?.gameoverSubtitle }}</p>
       <button @click="restartGame">Заново</button>
@@ -754,9 +754,8 @@ function toggleMute() {
   font-family: 'Courier New', monospace;
 }
 .dead-sprite {
-  width: 32px;
-  height: 32px;
-  image-rendering: pixelated;
+  width: 96px;
+  height: 96px;
   margin-bottom: 0.5rem;
 }
 .gameover-overlay h1 {
@@ -815,7 +814,10 @@ function toggleMute() {
   to   { transform: translateY(-100%); }
 }
 .swimming {
-  animation: player-swim-anim 0.8s steps(7) infinite;
+  animation: player-swim-anim 0.9s steps(6) infinite;
+}
+.dead {
+  animation: none;
 }
 @keyframes car-move-anim {
   from { transform: translateY(-9.090909%); }

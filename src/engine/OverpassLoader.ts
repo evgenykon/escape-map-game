@@ -42,6 +42,9 @@ async function preloadSprites(): Promise<void> {
     preloadSprite(`${baseUrl}sprites/cars/car-blue.png`),
     preloadSprite(`${baseUrl}sprites/cars/car-green.png`),
     preloadSprite(`${baseUrl}sprites/player/walk-0.png`),
+    preloadSprite(`${baseUrl}sprites/player/hack-0.png`),
+    preloadSprite(`${baseUrl}sprites/player/swim-0.png`),
+    preloadSprite(`${baseUrl}sprites/player/dead-0.png`),
   ])
 }
 
