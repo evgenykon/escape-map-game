@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, shallowRef } from 'vue'
 import type { Scenario } from '@/scenarios/types'
 
-export type GamePhase = 'start' | 'loading' | 'playing' | 'explosion' | 'gameover' | 'victory'
+export type GamePhase = 'start' | 'loading' | 'playing' | 'explosion' | 'aftermath' | 'gameover' | 'victory'
 
 export interface Shelter {
   id: string
@@ -16,6 +16,30 @@ export interface Car {
   latitude: number
   angle: number
   fuel: number
+}
+
+export interface SurvivalStats {
+  health: number
+  fatigue: number
+  hunger: number
+  thirst: number
+}
+
+export interface BaseResources {
+  food: number
+  water: number
+  materials: number
+  fuel: number
+  medicine: number
+  energy: number
+}
+
+export interface PlayerBase {
+  latitude: number
+  longitude: number
+  rooms: number
+  resources: BaseResources
+  objects: string[]
 }
 
 export interface SMS {
@@ -60,6 +84,14 @@ export const useGameStore = defineStore('game', () => {
   const mapMode = ref(0)
   const fuelStationsDisabled = ref(false)
 
+  // ---- пост-взрывной метагейм ----
+  const isAftermath = ref(false)
+  const stats = ref<SurvivalStats>({ health: 100, fatigue: 30, hunger: 75, thirst: 65 })
+  const base = ref<PlayerBase | null>(null)
+  const cleaning = ref<{ active: boolean; progress: number; rooms: number }>({ active: false, progress: 0, rooms: 0 })
+  const deathReasonText = ref<string | null>(null)
+  const devAftermath = ref(false)
+
   const cacheBustTag = 'bust-2026-07-06-12-00'
 
   return {
@@ -93,6 +125,12 @@ export const useGameStore = defineStore('game', () => {
     mapMode,
     surfaceType,
     fuelStationsDisabled,
+    isAftermath,
+    stats,
+    base,
+    cleaning,
+    deathReasonText,
+    devAftermath,
     cacheBustTag,
   }
 })

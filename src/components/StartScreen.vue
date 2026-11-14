@@ -43,8 +43,9 @@ onMounted(() => {
   if (!gl) webglDisabled.value = true
 })
 
-async function startGame() {
+async function startGame(baseMode = false) {
   if (!selectedId.value || isStarting.value) return
+  store.devAftermath = baseMode
   const entry = scenarioRegistry.find(s => s.meta.id === selectedId.value)
   if (entry?.meta.disabled) return
   isStarting.value = true
@@ -127,9 +128,13 @@ async function startGame() {
     <button
       class="start-btn"
       :disabled="!selectedId || isStarting"
-      @click="startGame"
+      @click="startGame(false)"
     >
       {{ isStarting ? 'ЗАГРУЗКА…' : 'СТАРТ' }}
+    </button>
+
+    <button v-if="isDev" class="sprite-btn dev-base-btn" @click="startGame(true)">
+      🧪 Режим базы (dev)
     </button>
 
     <button v-if="isDev" class="sprite-btn" @click="showSpriteTable = true">
@@ -315,6 +320,11 @@ async function startGame() {
 .location-option input[type="radio"] {
   accent-color: #f44;
 }
+.dev-base-btn {
+  border-color: #ffd54a;
+  color: #ffd54a;
+}
+
 .sprite-btn {
   margin-top: 1rem;
   padding: 0.5rem 1.5rem;

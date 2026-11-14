@@ -32,7 +32,7 @@ export const nuclearScenario: Scenario = {
 
   computeEpicenter(ctx): EpicenterSpec {
     const angle = Math.random() * 2 * Math.PI
-    const { lat, lng } = offsetMeters(ctx.playerLatitude, ctx.playerLongitude, 1000, angle)
+    const { lat, lng } = offsetMeters(ctx.playerLatitude, ctx.playerLongitude, 4000, angle)
     return { latitude: lat, longitude: lng }
   },
 

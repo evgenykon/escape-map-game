@@ -7,6 +7,8 @@ import { PlayerController } from '@/engine/PlayerController'
 import { soundEngine } from '@/engine/SoundEngine'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import StatsBars from '@/components/StatsBars.vue'
+import BaseDialog from '@/components/BaseDialog.vue'
 
 const store = useGameStore()
 const baseUrl = import.meta.env.BASE_URL
@@ -15,12 +17,24 @@ const hudTimeLeft = ref(0)
 const gameElapsed = ref(0)
 const totalTime = ref(0)
 const gameReady = ref(false)
-const deathReason = ref<'explosion' | 'collapse' | null>(null)
+const deathReason = ref<'explosion' | 'collapse' | 'survival' | null>(null)
 const buildingDamagePercent = ref(0)
 const hudSms = ref<{ id: number; text: string; visible: boolean }[]>([])
 const showSplash = ref(false)
 const splashText = ref('')
 const showExplosionInfo = ref(false)
+
+// ---- пост-взрывной метагейм ----
+const showAftermathNotice = ref(false)
+const showBaseConfirm = ref(false)
+const baseDialogOpen = ref(false)
+const canMakeBase = ref(false)
+const nearBase = ref(false)
+const roomsPreview = ref(1)
+const cleaningUi = ref({ active: false, progress: 0, rooms: 0 })
+let statsInterval: ReturnType<typeof setInterval> | null = null
+let buildingInterval: ReturnType<typeof setInterval> | null = null
+let baseDismissed = false
 const currentFuel = computed(() => {
   const car = store.cars.find(c => c.id === store.activeCarId)
   return car?.fuel ?? 0
@@ -135,6 +149,13 @@ onMounted(() => {
     setTimeout(() => {
       mapEngine.refreshCarMarkers()
       gameReady.value = true
+      if (store.devAftermath) {
+        if (timerInterval) clearInterval(timerInterval)
+        if (explosionTimer) clearInterval(explosionTimer)
+        store.timeLeft = 0
+        hudTimeLeft.value = 0
+        startSurvival(false)
+      }
     }, 3000)
   })
 
@@ -155,6 +176,8 @@ onUnmounted(() => {
   clearInterval(explosionTimer!)
   clearInterval(shelterInterval)
   clearInterval(carInfoInterval)
+  if (statsInterval) clearInterval(statsInterval)
+  if (buildingInterval) clearInterval(buildingInterval)
   spawnValidationTimeouts.forEach(clearTimeout)
   mapEngine?.destroy()
 })
@@ -239,9 +262,11 @@ function showSMS(text: string) {
 }
 
 let explosionTimer: ReturnType<typeof setInterval> | null = null
+let explosionStarted = false
 
 function triggerExplosion() {
-  if (store.phase !== 'playing') return
+  if (store.phase !== 'playing' || explosionStarted) return
+  explosionStarted = true
   mapEngine.setMarkersVisible(false)
   store.cars.forEach(c => mapEngine.removeCarMarker(c.id))
   store.cars = []
@@ -320,6 +345,129 @@ function triggerExplosion() {
   })
 }
 
+function roomsForArea(areaM2: number): number {
+  if (areaM2 < 200) return 1
+  if (areaM2 < 400) return 3
+  if (areaM2 < 700) return 5
+  if (areaM2 < 1200) return 7
+  return 10
+}
+
+function isAtBase(): boolean {
+  const b = store.base
+  if (!b || !playerController) return false
+  const pos = playerController.getPosition()
+  return haversine(pos.lat, pos.lng, b.latitude, b.longitude) < 30
+}
+
+function startSurvival(showNotice = true) {
+  store.isAftermath = true
+  store.phase = 'aftermath'
+  store.stats = { health: 100, fatigue: 35, hunger: 70, thirst: 60 }
+  showAftermathNotice.value = showNotice
+  mapEngine?.clearWorldObjects()
+  store.cars = []
+  store.shelters = []
+  store.shelterHudVisible = false
+  store.isInCar = false
+  store.activeCarId = null
+  store.fuelStationsDisabled = true
+  if (statsInterval) clearInterval(statsInterval)
+  statsInterval = setInterval(tickSurvival, 1000)
+  if (buildingInterval) clearInterval(buildingInterval)
+  buildingInterval = setInterval(updateBasePrompt, 600)
+}
+
+function tickSurvival() {
+  if (!store.isAftermath || store.phase !== 'aftermath') return
+  const s = store.stats
+  const inBase = isAtBase()
+  s.hunger = Math.max(0, s.hunger - 0.18)
+  s.thirst = Math.max(0, s.thirst - 0.22)
+  s.fatigue = Math.min(100, s.fatigue + (inBase ? 0.04 : 0.12))
+  let damage = 0
+  if (s.hunger <= 0) damage += 1.2
+  if (s.thirst <= 0) damage += 1.4
+  if (s.fatigue >= 100) damage += 0.4
+  if (damage > 0) {
+    s.health = Math.max(0, s.health - damage)
+  } else if (inBase) {
+    s.health = Math.min(100, s.health + 0.15)
+  }
+  if (s.health <= 0) {
+    store.deathReasonText = s.thirst <= 0 ? 'Вы погибли от обезвоживания.' : 'Вы погибли от истощения.'
+    deathReason.value = 'survival'
+    store.phase = 'gameover'
+    if (statsInterval) { clearInterval(statsInterval); statsInterval = null }
+    if (buildingInterval) { clearInterval(buildingInterval); buildingInterval = null }
+  }
+}
+
+function updateBasePrompt() {
+  if (store.phase !== 'aftermath' || !playerController || !mapEngine) return
+  const pos = playerController.getPosition()
+  const atBase = isAtBase()
+  if (nearBase.value && !atBase) baseDismissed = false
+  nearBase.value = atBase
+  const devAnywhere = import.meta.env.DEV && store.devAftermath
+  canMakeBase.value = !store.base && !store.isInCar && (devAnywhere || mapEngine.isInsideBuilding(pos.lng, pos.lat))
+  if (atBase && !baseDialogOpen.value && !baseDismissed && !cleaningUi.value.active) {
+    baseDialogOpen.value = true
+  }
+}
+
+function openBaseConfirm() {
+  if (!mapEngine || !playerController) return
+  const pos = playerController.getPosition()
+  roomsPreview.value = roomsForArea(mapEngine.getBuildingAreaAt(pos.lng, pos.lat) ?? 250)
+  showBaseConfirm.value = true
+}
+
+function confirmMakeBase() {
+  showBaseConfirm.value = false
+  if (!mapEngine || !playerController) return
+  const pos = playerController.getPosition()
+  const areaM2 = mapEngine.getBuildingAreaAt(pos.lng, pos.lat) ?? 250
+  const rooms = roomsForArea(areaM2)
+  const totalMs = rooms * 15 * 1000
+  const started = Date.now()
+  cleaningUi.value = { active: true, progress: 0, rooms }
+  const timer = setInterval(() => {
+    const p = Math.min(1, (Date.now() - started) / totalMs)
+    cleaningUi.value = { active: p < 1, progress: p, rooms }
+    if (p >= 1) {
+      clearInterval(timer)
+      createBase(pos.lat, pos.lng, rooms)
+    }
+  }, 120)
+}
+
+function createBase(lat: number, lng: number, rooms: number) {
+  store.base = {
+    latitude: lat,
+    longitude: lng,
+    rooms,
+    resources: {
+      food: 2 + rooms,
+      water: 2 + rooms,
+      materials: rooms,
+      fuel: 1,
+      medicine: Math.max(1, Math.floor(rooms / 2)),
+      energy: 10,
+    },
+    objects: [],
+  }
+  mapEngine?.setBaseMarker(lng, lat)
+  canMakeBase.value = false
+  baseDismissed = true
+  baseDialogOpen.value = true
+}
+
+function closeBaseDialog() {
+  baseDialogOpen.value = false
+  baseDismissed = true
+}
+
 function checkGameResult() {
   clearInterval(explosionTimer!)
   clearInterval(shelterInterval)
@@ -332,7 +480,7 @@ function checkGameResult() {
   if (deathReason.value === 'collapse' || deathReason.value === 'explosion') {
     store.phase = 'gameover'
   } else {
-    store.phase = 'victory'
+    startSurvival()
   }
 }
 
@@ -364,6 +512,19 @@ function restartGame() {
   store.timeLeft = 0
   hudTimeLeft.value = 0
   hudSms.value = []
+  explosionStarted = false
+  store.isAftermath = false
+  store.base = null
+  store.deathReasonText = null
+  showAftermathNotice.value = false
+  showBaseConfirm.value = false
+  baseDialogOpen.value = false
+  canMakeBase.value = false
+  cleaningUi.value = { active: false, progress: 0, rooms: 0 }
+  baseDismissed = false
+  if (statsInterval) { clearInterval(statsInterval); statsInterval = null }
+  if (buildingInterval) { clearInterval(buildingInterval); buildingInterval = null }
+  mapEngine?.clearBaseMarker()
 }
 
 const resultTexts = computed(() => store.scenario?.resultTexts)
@@ -445,10 +606,54 @@ function toggleMute() {
       <h1 class="splash-text">{{ splashText }}</h1>
     </div>
 
+    <div v-if="store.isAftermath" class="stats-hud">
+      <StatsBars />
+    </div>
+
+    <button v-if="canMakeBase" class="make-base-btn" @click="openBaseConfirm">
+      ★ Сделать базой
+    </button>
+
+    <div v-if="showAftermathNotice" class="aftermath-overlay">
+      <div class="aftermath-card">
+        <p class="aftermath-text">
+          Скорее всего, все ваши близкие погибли. Вам решать что делать дальше:
+          исследовать новый мир, восстанавливать цивилизацию или искать гибель.
+        </p>
+        <button @click="showAftermathNotice = false">Продолжить</button>
+      </div>
+    </div>
+
+    <div v-if="showBaseConfirm" class="aftermath-overlay">
+      <div class="aftermath-card narrow">
+        <h2>Сделать здание вашей базой?</h2>
+        <p class="aftermath-sub">
+          Потребуется расчистить помещения: {{ roomsPreview }} комн. × 15 с.
+          Внутри можно хранить найденные вещи, отдыхать и лечиться.
+        </p>
+        <div class="aftermath-actions">
+          <button @click="showBaseConfirm = false">Отмена</button>
+          <button class="primary" @click="confirmMakeBase">Подтвердить</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="cleaningUi.active" class="aftermath-overlay">
+      <div class="aftermath-card narrow">
+        <h2>Расчистка помещений</h2>
+        <div class="clean-bar"><i :style="{ width: cleaningUi.progress * 100 + '%' }"></i></div>
+        <p class="aftermath-sub">
+          {{ Math.round(cleaningUi.progress * 100) }}% · {{ cleaningUi.rooms }} комн.
+        </p>
+      </div>
+    </div>
+
+    <BaseDialog v-if="baseDialogOpen" @close="closeBaseDialog" />
+
     <div v-if="store.phase === 'gameover'" class="gameover-overlay">
       <img :src="baseUrl + 'sprites/player/dead-single.png'" class="dead-sprite" alt="" />
-      <h1>{{ deathReason === 'collapse' ? resultTexts?.collapseTitle : resultTexts?.gameoverTitle ?? 'GAME OVER' }}</h1>
-      <p>{{ deathReason === 'collapse' ? resultTexts?.collapseSubtitle : resultTexts?.gameoverSubtitle }}</p>
+      <h1>{{ deathReason === 'collapse' ? resultTexts?.collapseTitle : deathReason === 'survival' ? 'ВЫ ПОГИБЛИ' : resultTexts?.gameoverTitle ?? 'GAME OVER' }}</h1>
+      <p>{{ deathReason === 'collapse' ? resultTexts?.collapseSubtitle : deathReason === 'survival' ? store.deathReasonText : resultTexts?.gameoverSubtitle }}</p>
       <button @click="restartGame">Заново</button>
     </div>
 
@@ -782,6 +987,95 @@ function toggleMute() {
 </style>
 
 <style>
+.stats-hud {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 25;
+}
+
+.make-base-btn {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 28;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  letter-spacing: 1px;
+  padding: 12px 18px;
+  background: rgba(20, 26, 34, 0.92);
+  color: #ffd54a;
+  border: 1px solid #ffd54a;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+.make-base-btn:hover { background: rgba(38, 46, 58, 0.95); }
+
+.aftermath-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.82);
+  z-index: 35;
+  font-family: 'Courier New', monospace;
+  padding: 20px;
+}
+.aftermath-card {
+  width: min(560px, 92vw);
+  background: #12161c;
+  border: 1px solid #3a4654;
+  padding: 26px 28px;
+  color: #e6edf3;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+}
+.aftermath-card.narrow { width: min(440px, 92vw); }
+.aftermath-card h2 {
+  font-size: 15px;
+  letter-spacing: 2px;
+  margin: 0 0 14px;
+  color: #ffd54a;
+}
+.aftermath-text {
+  font-size: 14px;
+  line-height: 1.7;
+  margin: 0 0 22px;
+  color: #dbe4ec;
+}
+.aftermath-sub {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #93a0ad;
+  margin: 0 0 18px;
+}
+.aftermath-actions { display: flex; gap: 10px; justify-content: center; }
+.aftermath-card button {
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 1px;
+  padding: 10px 20px;
+  background: #1d2733;
+  color: #dfe7ef;
+  border: 1px solid #3a4654;
+  cursor: pointer;
+}
+.aftermath-card button.primary { border-color: #ffd54a; color: #ffd54a; }
+.aftermath-card button:hover { background: #26333f; }
+.clean-bar {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid #3a4654;
+  margin: 6px 0 12px;
+}
+.clean-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ffd54a, #ff9f43);
+  transition: width 0.15s linear;
+}
+
 @keyframes player-idle-anim {
   from { transform: translateY(0); }
   to   { transform: translateY(-100%); }

@@ -1,4 +1,4 @@
-import { circle, distance, destination } from '@turf/turf'
+import { area as turfArea, circle, distance, destination } from '@turf/turf'
 import maplibregl from 'maplibre-gl'
 import { useGameStore } from '@/stores/game'
 
@@ -23,6 +23,7 @@ export class MapEngine {
   private playerThoughtEl: HTMLElement | null = null
   private thoughtTimer: ReturnType<typeof setTimeout> | null = null
   private shelterIconMarker: maplibregl.Marker | null = null
+  private baseMarker: maplibregl.Marker | null = null
   private buildingDamageMarker: maplibregl.Marker | null = null
   private explosionInfoMarker: maplibregl.Marker | null = null
   private fuelStations: { lng: number; lat: number }[] = []
@@ -378,6 +379,7 @@ export class MapEngine {
 
   private addCarMarkers() {
     const store = useGameStore()
+    if (store.isAftermath) return
 
     for (const car of store.cars) {
       if (this.carMarkers.has(car.id)) continue
@@ -398,6 +400,12 @@ export class MapEngine {
   refreshCarMarkers() {
     if (!this.map) return
     const store = useGameStore()
+    // после взрыва машин в мире нет
+    if (store.isAftermath) {
+      this.removeAllCars()
+      store.cars = []
+      return
+    }
     const M_PER_DEG = 111320
     const cosLat = Math.cos(store.playerLatitude * Math.PI / 180)
 
@@ -711,6 +719,55 @@ export class MapEngine {
     const url = inner.dataset.spriteUrl
     if (!url) return null
     return MapEngine.CAR_SPRITES.find((s) => s.url === url) ?? MapEngine.CAR_RED
+  }
+
+  /** Площадь здания (м²) под точкой, либо null если точки нет в здании. */
+  getBuildingAreaAt(lng: number, lat: number): number | null {
+    if (!this.map) return null
+    const pt = this.map.project([lng, lat])
+    const r = 4
+    const feats = this.map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]])
+    const b = feats.find(f => f.layer && (f.layer.id === 'building' || f.layer.id === 'building-3d'))
+    if (!b || !b.geometry) return null
+    try {
+      return turfArea(b.geometry as never)
+    } catch {
+      return null
+    }
+  }
+
+  /** Убирает с карты все машины (после взрыва). */
+  removeAllCars() {
+    for (const marker of this.carMarkers.values()) marker.remove()
+    this.carMarkers.clear()
+    this.carMarkerInners.clear()
+  }
+
+  /** Убирает маркер убежища и данные о зонах топлива. */
+  clearWorldObjects() {
+    if (this.shelterIconMarker) {
+      this.shelterIconMarker.remove()
+      this.shelterIconMarker = null
+    }
+    this.fuelStations = []
+    this.clearFuelZones()
+    this.removeAllCars()
+    this.removeBuildingDamageLabel()
+  }
+
+  setBaseMarker(lng: number, lat: number) {
+    if (this.baseMarker) this.baseMarker.remove()
+    const el = document.createElement('div')
+    el.textContent = '★'
+    el.style.cssText = 'font-size:26px;line-height:1;color:#ffd54a;text-shadow:0 0 8px rgba(255,180,0,.9),0 1px 2px rgba(0,0,0,.6);pointer-events:none'
+    this.baseMarker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(this.map!)
+  }
+
+  clearBaseMarker() {
+    if (this.baseMarker) {
+      this.baseMarker.remove()
+      this.baseMarker = null
+    }
   }
 
   isInsideBuilding(lng: number, lat: number): boolean {
@@ -1226,14 +1283,27 @@ export class MapEngine {
     }
   }
 
+  /** flyTo с гарантированным колбэком: moveend может не прийти (анимация отменена). */
+  private flyThen(opts: { center: [number, number]; zoom?: number; duration: number }, cb: () => void) {
+    if (!this.map) { cb(); return }
+    let done = false
+    const finish = () => {
+      if (done) return
+      done = true
+      this.map?.off('moveend', finish)
+      cb()
+    }
+    this.map.once('moveend', finish)
+    this.map.flyTo(opts)
+    window.setTimeout(finish, opts.duration + 900)
+  }
+
   flyToEpicenter(lng: number, lat: number, cb: () => void) {
-    this.map?.flyTo({ center: [lng, lat], zoom: 13, duration: 3000 })
-    this.map?.once('moveend', cb)
+    this.flyThen({ center: [lng, lat], zoom: 13, duration: 3000 }, cb)
   }
 
   flyToPlayer(lat: number, lng: number, cb: () => void) {
-    this.map?.flyTo({ center: [lng, lat], zoom: 19, duration: 1500 })
-    this.map?.once('moveend', cb)
+    this.flyThen({ center: [lng, lat], zoom: 19, duration: 1500 }, cb)
   }
 
   flyToZoom(zoom: number) {

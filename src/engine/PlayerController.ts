@@ -381,6 +381,8 @@ export class PlayerController {
   }
 
   private carSpawnCheck(dt: number) {
+    // после взрыва новых машин в мире не появляется
+    if (useGameStore().isAftermath) return
     const spawnInterval = this.trafficMode ? 0.8 : 1.5
     this.spawnTimer += dt
     if (this.spawnTimer < spawnInterval) return
