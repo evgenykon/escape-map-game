@@ -634,7 +634,8 @@ let doorAnimTimer: ReturnType<typeof setTimeout> | null = null
 /** Вход в здание: фигура останавливается, тянет дверь, звук открытия. */
 function playDoorAnimation() {
   if (!mapEngine || !playerController) return
-  playerController.stop()
+  // НЕ stop(): он снимает слушатели и останавливает игровой цикл навсегда.
+  // Блокировка ввода очищает нажатые клавиши и замораживает движение.
   playerController.setInputBlocked(true)
   mapEngine.setPlayerFrame('dooring')
   soundEngine.playDoorOpeningClosing()
