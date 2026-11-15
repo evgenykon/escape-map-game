@@ -64,6 +64,18 @@ function resumeGame() {
   void startGame(false)
 }
 
+const confirmingDrop = ref(false)
+
+function confirmDrop() {
+  if (!confirmingDrop.value) {
+    confirmingDrop.value = true
+    window.setTimeout(() => { confirmingDrop.value = false }, 4000)
+    return
+  }
+  confirmingDrop.value = false
+  dropSave()
+}
+
 function dropSave() {
   clearSave()
   canResume.value = false
@@ -167,6 +179,15 @@ async function startGame(baseMode = false) {
       @click="resumeGame"
     >
       ⟳ ПРОДОЛЖИТЬ <small>{{ resumeAge }}</small>
+    </button>
+
+    <button
+      v-if="canResume"
+      class="drop-save"
+      :disabled="isStarting"
+      @click="confirmDrop"
+    >
+      {{ confirmingDrop ? 'Точно сбросить? Нажмите ещё раз' : 'Сбросить сохранение' }}
     </button>
 
     <div v-if="isDev" class="dev-tools">
@@ -293,6 +314,22 @@ async function startGame(baseMode = false) {
   font-style: italic;
   margin-top: 0.15rem;
 }
+.drop-save {
+  margin-top: 8px;
+  background: none;
+  border: 1px solid #3a4654;
+  color: #8b98a5;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+.drop-save:hover {
+  border-color: #6b2f2f;
+  color: #ff9a9a;
+}
+
 .start-btn {
   padding: 1rem 3rem;
   font-size: 1.5rem;
