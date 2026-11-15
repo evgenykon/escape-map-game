@@ -1,4 +1,4 @@
-import { area as turfArea, booleanPointInPolygon, centerOfMass, circle, distance, destination, point, pointOnFeature } from '@turf/turf'
+import { area as turfArea, booleanPointInPolygon, buffer, centerOfMass, circle, distance, destination, feature, featureCollection, point, pointOnFeature, union } from '@turf/turf'
 import maplibregl from 'maplibre-gl'
 import { useGameStore } from '@/stores/game'
 
@@ -793,6 +793,130 @@ export class MapEngine {
         [lng - dLng / 2, lat - dLat / 2],
       ]],
     }
+  }
+
+  // ─── туман войны: неисследованный мир в тени ─────────────────────────────
+  private fogEnabled = false
+  private exploredUnion: GeoJSON.Polygon | GeoJSON.MultiPolygon | null = null
+  private lastPlayerPos: [number, number] | null = null
+  private readonly EXPLORED_BUFFER_M = 15
+  private readonly PLAYER_CLEAR_M = 55
+
+  /** Включить «тень» на неисследованной карте (после взрыва). */
+  enableFog(): void {
+    if (!this.map || this.fogEnabled) return
+    this.fogEnabled = true
+    if (!this.map.getSource('fog-mask')) {
+      this.map.addSource('fog-mask', { type: 'geojson', data: this.fogGeoJson() })
+      this.map.addLayer({
+        id: 'fog-mask-fill',
+        type: 'fill',
+        source: 'fog-mask',
+        paint: { 'fill-color': '#04070b', 'fill-opacity': 0.9 },
+      })
+    }
+    this.refreshFog()
+  }
+
+  disableFog(): void {
+    this.fogEnabled = false
+    this.exploredUnion = null
+    this.lastPlayerPos = null
+    if (!this.map) return
+    if (this.map.getLayer('fog-mask-fill')) this.map.removeLayer('fog-mask-fill')
+    if (this.map.getSource('fog-mask')) this.map.removeSource('fog-mask')
+  }
+
+  /** Отметить здание исследованным: буфер вокруг контура попадает в «расчистку». */
+  markExplored(lng: number, lat: number): void {
+    const measured = this.measureBuildingAt(lng, lat)
+    const poly: GeoJSON.Polygon = measured
+      ? this.rectPolygonAround(lng, lat, measured.widthM, measured.depthM)
+      : (circle([lng, lat], 0.02, { steps: 24 }).geometry as GeoJSON.Polygon)
+
+    let buffered: GeoJSON.Polygon | GeoJSON.MultiPolygon
+    try {
+      buffered = buffer(feature(poly as never), this.EXPLORED_BUFFER_M, { units: 'meters' })?.geometry as
+        | GeoJSON.Polygon
+        | GeoJSON.MultiPolygon
+    } catch {
+      buffered = poly
+    }
+    if (!buffered) return
+
+    if (!this.exploredUnion) {
+      this.exploredUnion = buffered
+    } else {
+      try {
+        const merged = union(
+          featureCollection([feature(this.exploredUnion as never), feature(buffered as never)]) as never,
+        ) as unknown as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> | null
+        if (merged?.geometry) this.exploredUnion = merged.geometry
+      } catch {
+        /* при ошибке объединения просто оставляем прежнюю область */
+      }
+    }
+    this.refreshFog()
+  }
+
+  /** Позиция игрока тоже расчищает тень вокруг себя. */
+  updatePlayerClearing(lng: number, lat: number): void {
+    if (!this.fogEnabled) return
+    const moved =
+      !this.lastPlayerPos ||
+      Math.abs(this.lastPlayerPos[0] - lng) > 0.00002 ||
+      Math.abs(this.lastPlayerPos[1] - lat) > 0.00002
+    if (!moved) return
+    this.lastPlayerPos = [lng, lat]
+    this.refreshFog()
+  }
+
+  private clearedShape(): GeoJSON.Polygon | GeoJSON.MultiPolygon | null {
+    let cleared = this.exploredUnion
+    if (this.lastPlayerPos) {
+      const near = circle(this.lastPlayerPos, this.PLAYER_CLEAR_M / 1000, { steps: 28 }).geometry as GeoJSON.Polygon
+      if (!cleared) {
+        cleared = near
+      } else {
+        try {
+          const merged = union(
+            featureCollection([feature(cleared as never), feature(near as never)]) as never,
+          ) as unknown as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> | null
+          if (merged?.geometry) cleared = merged.geometry
+        } catch {
+          /* пропускаем */
+        }
+      }
+    }
+    return cleared
+  }
+
+  private fogGeoJson(): GeoJSON.FeatureCollection {
+    const world = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]
+    const holes: number[][][] = []
+    const cleared = this.clearedShape()
+    if (cleared) {
+      const polys = cleared.type === 'Polygon' ? [cleared.coordinates] : cleared.coordinates
+      for (const poly of polys) {
+        if (poly[0]) holes.push(poly[0] as number[][])
+      }
+    }
+    return {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'Polygon', coordinates: [world as number[][], ...holes] },
+        },
+      ],
+    }
+  }
+
+  private refreshFog(): void {
+    if (!this.map || !this.fogEnabled) return
+    const src = this.map.getSource('fog-mask') as maplibregl.GeoJSONSource | undefined
+    if (src) src.setData(this.fogGeoJson() as never)
   }
 
   /** Точка стоит ровно на здании: пиксель под игроком попадает в слой здания. */

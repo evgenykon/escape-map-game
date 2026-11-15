@@ -313,6 +313,7 @@ function triggerExplosion() {
   soundEngine.stopAllLoops()
   soundEngine.stopAftermathAmbience()
   soundEngine.setAftermathMode(false)
+  mapEngine?.disableFog()
 
   hudTimeLeft.value = 0
   if (explosionTimer) clearInterval(explosionTimer)
@@ -433,6 +434,7 @@ function startSurvival(showNotice = true) {
   store.phase = 'aftermath'
   soundEngine.setAftermathMode(true)
   soundEngine.startAftermathAmbience()
+  mapEngine?.enableFog()
   store.stats = { health: 100, energy: 65, satiety: 70, water: 60 }
   showAftermathNotice.value = showNotice
   mapEngine?.clearWorldObjects()
@@ -548,6 +550,7 @@ function tickSurvival() {
 function updateBasePrompt() {
   if (store.phase !== 'aftermath' || !playerController || !mapEngine) return
   const pos = playerController.getPosition()
+  mapEngine.updatePlayerClearing(pos.lng, pos.lat)
   const insideBuilding = mapEngine.isInsideBuildingStrict(pos.lng, pos.lat)
   const atBase = insideBuilding && isAtBase()
   if (nearBase.value && !atBase) baseDismissed = false
@@ -582,6 +585,10 @@ function storageUsed(): number {
 function openBaseDialog() {
   const base = store.base
   if (!base) return
+  if (!base.roomsGeo && base.polygon) {
+    base.roomsGeo = roomsToFeatureCollection(splitBuildingIntoRooms(base.polygon, base.rooms))
+    base.roomsReal = false
+  }
   if (!base.roomsReal && base.polygon) {
     base.roomsGeo = roomsToFeatureCollection(splitBuildingIntoRooms(base.polygon, base.rooms))
   }
@@ -672,6 +679,8 @@ function relocateBase(lat: number, lng: number, rooms: number) {
   mapEngine?.setBaseMarker(lng, lat)
   const polygon = pendingPolygon
   if (polygon) {
+    store.base.roomsGeo = roomsToFeatureCollection(splitBuildingIntoRooms(polygon, rooms))
+    store.base.roomsReal = false
     void (async () => {
       let roomsGeo: GeoJSON.FeatureCollection | null = null
       let real = false
@@ -718,6 +727,7 @@ function openLoot() {
   searchActive.value = true
   searchProgress.value = 0
   lootDialogOpen.value = true
+  mapEngine.markExplored(pos.lng, pos.lat)
   const started = Date.now()
   if (searchTimer) clearInterval(searchTimer)
   searchTimer = setInterval(() => {
@@ -847,8 +857,10 @@ function createBase(lat: number, lng: number, rooms: number) {
     roomsReal: false,
   }
 
-  // помещения: сначала пробуем настоящие из OSM, иначе режем контур здания
+  // помещения: сразу строим схему по контуру, уточняем по OSM в фоне
   if (polygon) {
+    store.base.roomsGeo = roomsToFeatureCollection(splitBuildingIntoRooms(polygon, rooms))
+    store.base.roomsReal = false
     void (async () => {
       let roomsGeo: GeoJSON.FeatureCollection | null = null
       let real = false
@@ -891,6 +903,7 @@ function checkGameResult() {
   soundEngine.stopAllLoops()
   soundEngine.stopAftermathAmbience()
   soundEngine.setAftermathMode(false)
+  mapEngine?.disableFog()
   if (deathReason.value === 'collapse' || deathReason.value === 'explosion') {
     store.phase = 'gameover'
   } else {
