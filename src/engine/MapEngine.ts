@@ -866,6 +866,35 @@ export class MapEngine {
     this.queueFogRedraw()
   }
 
+  private idleZoomActive = false
+  private zoomBeforeIdle = 19
+
+  /** Игрок остановился — плавно подъезжаем к зуму 21, пошёл — возвращаемся. */
+  setIdleZoom(idle: boolean): void {
+    if (!this.map || idle === this.idleZoomActive) return
+    this.idleZoomActive = idle
+    if (idle) {
+      this.zoomBeforeIdle = this.map.getZoom()
+      this.map.easeTo({ zoom: 21, duration: 900, easing: (t) => t * (2 - t) })
+    } else {
+      const back = this.zoomBeforeIdle > 0 ? this.zoomBeforeIdle : 19
+      this.map.easeTo({ zoom: back, duration: 700, easing: (t) => t * (2 - t) })
+    }
+  }
+
+  /** Центры исследованных зданий (для сохранения). */
+  getExploredPoints(): Array<[number, number]> {
+    return this.exploredSeen.map(([lng, lat]) => [lng, lat] as [number, number])
+  }
+
+  /** Восстановить исследованные здания из сохранения. */
+  restoreExplored(points: Array<[number, number]>): void {
+    this.exploredSeen = []
+    this.exploredPolys = []
+    for (const [lng, lat] of points) this.markExplored(lng, lat)
+    this.queueFogRedraw()
+  }
+
   updatePlayerClearing(lng: number, lat: number): void {
     if (!this.fogCanvas) return
     const prev = this.fogPlayer

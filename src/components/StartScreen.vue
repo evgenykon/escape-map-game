@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { scenarioRegistry } from '@/scenarios'
+import { hasSave, loadGame, saveAgeText, clearSave } from '@/engine/SaveEngine'
 import SpriteTable from '@/components/SpriteTable.vue'
 
 const isDev = import.meta.env.DEV || new URLSearchParams(location.search).has('dev')
@@ -37,11 +38,37 @@ const cities = [
   { name: 'Сочи', lat: 43.5855, lng: 39.7231 },
 ]
 
+const canResume = ref(false)
+const resumeAge = ref('')
+
 onMounted(() => {
+  canResume.value = hasSave()
+  resumeAge.value = saveAgeText()
+
+  // после перезагрузки страницы (в том числе HMR в dev) продолжаем игру сами
+  const save = loadGame()
+  if (save && Date.now() - save.savedAt < 120000 && selectedId.value) {
+    store.resumeSave = true
+    void startGame(false)
+    return
+  }
+
   const canvas = document.createElement('canvas')
   const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
   if (!gl) webglDisabled.value = true
 })
+
+function resumeGame() {
+  if (isStarting.value || !selectedId.value) return
+  store.resumeSave = true
+  void startGame(false)
+}
+
+function dropSave() {
+  clearSave()
+  canResume.value = false
+  resumeAge.value = ''
+}
 
 async function startGame(baseMode = false) {
   if (!selectedId.value || isStarting.value) return
@@ -131,6 +158,15 @@ async function startGame(baseMode = false) {
       @click="startGame(false)"
     >
       {{ isStarting ? 'ЗАГРУЗКА…' : 'СТАРТ' }}
+    </button>
+
+    <button
+      v-if="canResume"
+      class="start-btn resume-btn"
+      :disabled="isStarting || !selectedId"
+      @click="resumeGame"
+    >
+      ⟳ ПРОДОЛЖИТЬ <small>{{ resumeAge }}</small>
     </button>
 
     <div v-if="isDev" class="dev-tools">

@@ -11,6 +11,7 @@ import StatsBars from '@/components/StatsBars.vue'
 import BaseDialog from '@/components/BaseDialog.vue'
 import { fetchBuildingPolygon, fetchRealRooms, polygonAreaM2, roomsToFeatureCollection, splitBuildingIntoRooms } from '@/engine/IndoorLoader'
 import { countRooms, storageCapacity } from '@/engine/BaseRooms'
+import { loadGame, saveGame } from '@/engine/SaveEngine'
 import LootDialog from '@/components/LootDialog.vue'
 import BackpackDialog from '@/components/BackpackDialog.vue'
 import { CARRY_CAPACITY, generateLoot, lootIcons, lootKey as makeLootKey, LOOT_TTL_MS, RESOURCE_META, resourcesForPois, searchSeconds, type ResourceKey } from '@/engine/LootEngine'
@@ -78,6 +79,7 @@ watch(anyModalOpen, (open) => { playerController?.setInputBlocked(open) }, { flu
 let statsInterval: ReturnType<typeof setInterval> | null = null
 let buildingInterval: ReturnType<typeof setInterval> | null = null
 let fogInterval: ReturnType<typeof setInterval> | null = null
+let autosaveInterval: ReturnType<typeof setInterval> | null = null
 let baseDismissed = false
 const currentFuel = computed(() => {
   const car = store.cars.find(c => c.id === store.activeCarId)
@@ -193,7 +195,13 @@ onMounted(() => {
     setTimeout(() => {
       mapEngine.refreshCarMarkers()
       gameReady.value = true
-      if (store.devAftermath) enterDevAftermath()
+      if (store.resumeSave) {
+        store.resumeSave = false
+        enterDevAftermath(false)
+        applySave()
+      } else if (store.devAftermath) {
+        enterDevAftermath()
+      }
     }, 3000)
   })
 
@@ -201,6 +209,8 @@ onMounted(() => {
   playerController.start()
   shelterInterval = setInterval(updateShelterInfo, 500)
   carInfoInterval = setInterval(() => {
+    const moving = store.isWalking || store.isSwimming || store.isInCar
+    mapEngine?.setIdleZoom(!moving && store.phase === 'aftermath' && !anyModalOpen.value)
     carSpeed.value = playerController.getCarSpeed()
     carGear.value = playerController.getCarGear()
     debugZoom.value = mapEngine.getCurrentZoom()
@@ -316,6 +326,7 @@ function triggerExplosion() {
   soundEngine.setAftermathMode(false)
   mapEngine?.disableFog()
   if (fogInterval) { clearInterval(fogInterval); fogInterval = null }
+  stopAutosave()
 
   hudTimeLeft.value = 0
   if (explosionTimer) clearInterval(explosionTimer)
@@ -412,7 +423,7 @@ function isAtBase(): boolean {
   return haversine(pos.lat, pos.lng, b.latitude, b.longitude) <= baseRadiusM()
 }
 
-function enterDevAftermath() {
+function enterDevAftermath(teleport = true) {
   explosionStarted = true
   if (timerInterval) clearInterval(timerInterval)
   if (explosionTimer) clearInterval(explosionTimer)
@@ -421,7 +432,7 @@ function enterDevAftermath() {
   hudTimeLeft.value = 0
   startSurvival(false)
   // dev: сразу ставим игрока в ближайшее здание, чтобы кнопка базы была под рукой
-  if (mapEngine && playerController) {
+  if (teleport && mapEngine && playerController) {
     const pos = playerController.getPosition()
     const b = mapEngine.findBuildingCenterNear(pos.lng, pos.lat)
     if (b) {
@@ -431,9 +442,63 @@ function enterDevAftermath() {
   }
 }
 
+/** Сохранить текущее состояние игры в localStorage. */
+function persistGame(): void {
+  if (store.phase !== 'aftermath' || !playerController) return
+  const pos = playerController.getPosition()
+  saveGame({
+    player: { lat: pos.lat, lng: pos.lng },
+    stats: { ...store.stats },
+    carried: { ...store.carried },
+    base: store.base ? JSON.parse(JSON.stringify(store.base)) : null,
+    explored: mapEngine?.getExploredPoints() ?? [],
+    loot: JSON.parse(JSON.stringify(store.lootBuildings)),
+  })
+}
+
+function startAutosave(): void {
+  if (import.meta.hot) {
+    import.meta.hot.dispose(() => persistGame())
+  }
+  if (autosaveInterval) clearInterval(autosaveInterval)
+  autosaveInterval = setInterval(persistGame, 8000)
+  window.addEventListener('beforeunload', persistGame)
+}
+
+function stopAutosave(): void {
+  if (autosaveInterval) { clearInterval(autosaveInterval); autosaveInterval = null }
+  window.removeEventListener('beforeunload', persistGame)
+}
+
+/** Продолжить игру из сохранения. */
+function applySave(): void {
+  const data = loadGame()
+  if (!data) return
+  store.stats = { ...data.stats }
+  store.carried = { ...(data.carried ?? {}) }
+  store.base = data.base ?? null
+  store.lootBuildings = { ...(data.loot ?? {}) }
+
+  playerController?.setPosition(data.player.lat, data.player.lng)
+  mapEngine?.updatePlayerPosition(data.player.lng, data.player.lat)
+  mapEngine?.flyToPlayer(data.player.lat, data.player.lng, () => {})
+
+  if (data.base) {
+    mapEngine?.setBaseMarker(data.base.longitude, data.base.latitude)
+  }
+  mapEngine?.restoreExplored((data.explored ?? []) as Array<[number, number]>)
+
+  for (const [key, loot] of Object.entries(store.lootBuildings)) {
+    if (loot.expiresAt <= Date.now()) continue
+    mapEngine?.setLootMarker(key, loot.lng, loot.lat, loot.icons, loot.emptied)
+  }
+  showToast('Сохранение загружено')
+}
+
 function startSurvival(showNotice = true) {
   store.isAftermath = true
   store.phase = 'aftermath'
+  startAutosave()
   soundEngine.setAftermathMode(true)
   soundEngine.startAftermathAmbience()
   mapEngine?.enableFog()
@@ -443,7 +508,9 @@ function startSurvival(showNotice = true) {
     const pos = playerController?.getPosition()
     if (pos) mapEngine?.updatePlayerClearing(pos.lng, pos.lat)
   }, 80)
-  store.stats = { health: 100, energy: 65, satiety: 70, water: 60 }
+  if (!store.resumeSave) {
+    store.stats = { health: 100, energy: 65, satiety: 70, water: 60 }
+  }
   showAftermathNotice.value = showNotice
   mapEngine?.clearWorldObjects()
   store.cars = []
@@ -551,6 +618,7 @@ function tickSurvival() {
     store.phase = 'gameover'
     soundEngine.stopAftermathAmbience()
     if (fogInterval) { clearInterval(fogInterval); fogInterval = null }
+  stopAutosave()
     if (statsInterval) { clearInterval(statsInterval); statsInterval = null }
     if (buildingInterval) { clearInterval(buildingInterval); buildingInterval = null }
   }
@@ -711,10 +779,37 @@ function relocateBase(lat: number, lng: number, rooms: number) {
   canMoveBase.value = false
 }
 
+/** Уже осмотренное здание рядом (в радиусе 25 м) — лутать заново не нужно. */
+function findNearbyLoot(lat: number, lng: number): string | null {
+  const now = Date.now()
+  let bestKey: string | null = null
+  let bestDist = Number.POSITIVE_INFINITY
+  for (const [key, loot] of Object.entries(store.lootBuildings)) {
+    if (loot.expiresAt <= now) continue
+    const d = haversine(lat, lng, loot.lat, loot.lng)
+    if (d < 25 && d < bestDist) {
+      bestDist = d
+      bestKey = key
+    }
+  }
+  return bestKey
+}
+
 function openLoot() {
   if (!mapEngine || !playerController) return
   const pos = playerController.getPosition()
   const key = makeLootKey(pos.lat, pos.lng)
+
+  // здание уже осматривали и содержимое ещё не «забыто» — открываем сразу
+  const nearby = findNearbyLoot(pos.lat, pos.lng)
+  if (nearby) {
+    activeLootKey.value = nearby
+    searchActive.value = false
+    searchProgress.value = 1
+    lootDialogOpen.value = true
+    return
+  }
+
   const existing = store.lootBuildings[key]
   if (existing && existing.expiresAt > Date.now()) {
     activeLootKey.value = key
@@ -918,6 +1013,7 @@ function checkGameResult() {
   soundEngine.setAftermathMode(false)
   mapEngine?.disableFog()
   if (fogInterval) { clearInterval(fogInterval); fogInterval = null }
+  stopAutosave()
   if (deathReason.value === 'collapse' || deathReason.value === 'explosion') {
     store.phase = 'gameover'
   } else {

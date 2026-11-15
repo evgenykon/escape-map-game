@@ -101,6 +101,7 @@ export const useGameStore = defineStore('game', () => {
   const isAftermath = ref(false)
   const stats = ref<SurvivalStats>({ health: 100, energy: 65, satiety: 75, water: 65 })
   const resting = ref(false)
+  const resumeSave = ref(false)
   /** идущая постройка помещения */
   const construction = ref<{ roomId: number; type: RoomTypeKey; endsAt: number; durationMs: number } | null>(null)
   const base = ref<PlayerBase | null>(null)
@@ -146,6 +147,7 @@ export const useGameStore = defineStore('game', () => {
     isAftermath,
     stats,
     resting,
+    resumeSave,
     construction,
     base,
     cleaning,
