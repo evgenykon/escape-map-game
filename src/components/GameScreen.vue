@@ -437,6 +437,7 @@ function startSurvival(showNotice = true) {
   soundEngine.setAftermathMode(true)
   soundEngine.startAftermathAmbience()
   mapEngine?.enableFog()
+  if (store.base) mapEngine?.markExplored(store.base.longitude, store.base.latitude)
   if (fogInterval) clearInterval(fogInterval)
   fogInterval = setInterval(() => {
     const pos = playerController?.getPosition()
@@ -567,6 +568,9 @@ function updateBasePrompt() {
   canOpenBase.value = inBaseBuilding && insideBuilding && !cleaningUi.value.active
   canMoveBase.value = !!store.base && insideBuilding && !inBaseBuilding && !store.isInCar && !cleaningUi.value.active
 
+  // посещённые здания остаются расчищенными
+  if (insideBuilding && !store.isInCar) mapEngine.markExplored(pos.lng, pos.lat)
+
   // вернулся на базу — рюкзак выгружается в хранилище
   if (inBaseBuilding && store.base) depositBackpack()
 
@@ -684,6 +688,7 @@ function relocateBase(lat: number, lng: number, rooms: number) {
     roomsReal: false,
   }
   mapEngine?.setBaseMarker(lng, lat)
+  mapEngine?.markExplored(lng, lat)
   const polygon = pendingPolygon
   if (polygon) {
     store.base.roomsGeo = roomsToFeatureCollection(splitBuildingIntoRooms(polygon, rooms))
@@ -864,6 +869,8 @@ function createBase(lat: number, lng: number, rooms: number) {
     roomsReal: false,
   }
 
+  mapEngine?.markExplored(lng, lat)
+
   // помещения: сразу строим схему по контуру, уточняем по OSM в фоне
   if (polygon) {
     store.base.roomsGeo = roomsToFeatureCollection(splitBuildingIntoRooms(polygon, rooms))
@@ -889,6 +896,7 @@ function createBase(lat: number, lng: number, rooms: number) {
   }
 
   mapEngine?.setBaseMarker(lng, lat)
+  mapEngine?.markExplored(lng, lat)
   canMakeBase.value = false
   baseDismissed = true
   baseDialogOpen.value = true

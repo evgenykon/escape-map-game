@@ -758,7 +758,7 @@ export class MapEngine {
     if (!isBuilding(pt.x, pt.y)) return null
 
     const maxR = 220
-    const step = 1
+    const step = 2
     const ray = (dx: number, dy: number) => {
       let d = 0
       while (d < maxR) {
@@ -799,6 +799,8 @@ export class MapEngine {
   private fogCanvas: HTMLCanvasElement | null = null
   /** контуры расчищенных зон (ring-массивы в широте/долготе) */
   private exploredPolys: number[][][][] = []
+  /** центры уже отмеченных зданий — чтобы не плодить дубли контуров */
+  private exploredSeen: Array<[number, number]> = []
   private fogPlayer: [number, number] | null = null
   private fogRedrawQueued = false
   private fogListener: (() => void) | null = null
@@ -828,6 +830,7 @@ export class MapEngine {
     this.fogCanvas?.remove()
     this.fogCanvas = null
     this.exploredPolys = []
+    this.exploredSeen = []
     this.fogPlayer = null
   }
 
@@ -837,6 +840,12 @@ export class MapEngine {
 
   /** Отметить здание исследованным (буфер вокруг контура). */
   markExplored(lng: number, lat: number): void {
+    // одно и то же место не отмечаем повторно
+    for (const [slng, slat] of this.exploredSeen) {
+      if (Math.abs(slng - lng) < 0.00008 && Math.abs(slat - lat) < 0.00008) return
+    }
+    this.exploredSeen.push([lng, lat])
+
     const measured = this.measureBuildingAt(lng, lat)
     const poly: GeoJSON.Polygon = measured
       ? this.rectPolygonAround(lng, lat, measured.widthM, measured.depthM)
