@@ -933,14 +933,12 @@ export class MapEngine {
 
     if (this.fogPlayer) {
       const p = map.project(this.fogPlayer)
-      const zoom = map.getZoom()
-      const lat = this.fogPlayer[1]
-      const mpp = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom)
-      const r = Math.max(10, this.PLAYER_CLEAR_M / mpp)
+      // свет игрока достаёт до краёв окна и растёт/сжимается вместе с зумом
+      const r = Math.max(40, (Math.hypot(w, h) / 2) * 1.05)
 
-      const grad = ctx.createRadialGradient(p.x, p.y, r * 0.35, p.x, p.y, r)
+      const grad = ctx.createRadialGradient(p.x, p.y, r * 0.25, p.x, p.y, r)
       grad.addColorStop(0, 'rgba(255,255,255,1)')
-      grad.addColorStop(0.55, 'rgba(255,255,255,0.9)')
+      grad.addColorStop(0.5, 'rgba(255,255,255,0.92)')
       grad.addColorStop(1, 'rgba(255,255,255,0)')
       ctx.beginPath()
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
