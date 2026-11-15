@@ -568,8 +568,6 @@ function updateBasePrompt() {
   canOpenBase.value = inBaseBuilding && insideBuilding && !cleaningUi.value.active
   canMoveBase.value = !!store.base && insideBuilding && !inBaseBuilding && !store.isInCar && !cleaningUi.value.active
 
-  // посещённые здания остаются расчищенными
-  if (insideBuilding && !store.isInCar) mapEngine.markExplored(pos.lng, pos.lat)
 
   // вернулся на базу — рюкзак выгружается в хранилище
   if (inBaseBuilding && store.base) depositBackpack()
