@@ -812,7 +812,10 @@ export class MapEngine {
         id: 'fog-mask-fill',
         type: 'fill',
         source: 'fog-mask',
-        paint: { 'fill-color': '#04070b', 'fill-opacity': 0.9 },
+        paint: {
+          'fill-color': '#04070b',
+          'fill-opacity': ['get', 'opacity'] as never,
+        },
       })
     }
     this.refreshFog()
@@ -891,26 +894,46 @@ export class MapEngine {
     return cleared
   }
 
+  /** Полосы градиента: чем дальше от расчищенной зоны, тем плотнее тень. */
+  private static readonly FOG_BANDS = [0, 12, 25, 38, 50]
+
   private fogGeoJson(): GeoJSON.FeatureCollection {
     const world = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]
-    const holes: number[][][] = []
     const cleared = this.clearedShape()
-    if (cleared) {
-      const polys = cleared.type === 'Polygon' ? [cleared.coordinates] : cleared.coordinates
-      for (const poly of polys) {
-        if (poly[0]) holes.push(poly[0] as number[][])
+    const stepOpacity = 0.9 / MapEngine.FOG_BANDS.length
+    const features: GeoJSON.Feature[] = []
+
+    for (let i = 0; i < MapEngine.FOG_BANDS.length; i++) {
+      const grow = MapEngine.FOG_BANDS[i]
+
+      let holeSource = cleared
+      if (grow > 0 && cleared) {
+        try {
+          const grown = buffer(feature(cleared as never), grow, { units: 'meters', steps: 4 }) as unknown as
+            | GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>
+            | null
+          if (grown?.geometry) holeSource = grown.geometry
+        } catch {
+          /* оставляем исходную форму */
+        }
       }
+
+      const holes: number[][][] = []
+      if (holeSource) {
+        const polys = holeSource.type === 'Polygon' ? [holeSource.coordinates] : holeSource.coordinates
+        for (const poly of polys) {
+          if (poly[0]) holes.push(poly[0] as number[][])
+        }
+      }
+
+      features.push({
+        type: 'Feature',
+        properties: { opacity: stepOpacity },
+        geometry: { type: 'Polygon', coordinates: [world as number[][], ...holes] },
+      })
     }
-    return {
-      type: 'FeatureCollection',
-      features: [
-        {
-          type: 'Feature',
-          properties: {},
-          geometry: { type: 'Polygon', coordinates: [world as number[][], ...holes] },
-        },
-      ],
-    }
+
+    return { type: 'FeatureCollection', features }
   }
 
   private refreshFog(): void {
