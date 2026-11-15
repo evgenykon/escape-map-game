@@ -61,6 +61,7 @@ export class MapEngine {
 
   private static readonly PLAYER_IDLE = { url: 'sprites/player-idle.png', w: 48, h: 48, count: 10, duration: 3 }
   private static readonly PLAYER_HACK = { url: 'sprites/player/hack-4.png', w: 128, h: 128, count: 6, duration: 0.9 }
+  private static readonly PLAYER_DOOR = { url: 'sprites/player/door-4.png', w: 128, h: 128, count: 6, duration: 1.0 }
   private static readonly PLAYER_DEAD = { url: 'sprites/player/dead-4.png', w: 128, h: 128, count: 1, duration: 0 }
   private static readonly PLAYER_SWIM = { url: 'sprites/player/swim-4.png', w: 128, h: 128, count: 6, duration: 0.9 }
   private static readonly PLAYER_WALK = { url: 'sprites/player/walk-4.png', w: 128, h: 128, count: 8, duration: 0.72 }
@@ -87,7 +88,7 @@ export class MapEngine {
     return Math.round(a / step) % MapEngine.CAR_DIRS
   }
 
-  private playerAnimState: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' | 'swimming' = 'idle'
+  private playerAnimState: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' | 'swimming' | 'dooring' = 'idle'
 
   static getScale(zoom: number): number {
     return Math.max(0.4, 1 + (zoom - 19) * 0.7)
@@ -659,7 +660,8 @@ export class MapEngine {
       }
       return
     }
-    const frame = this.playerAnimState === 'hacking' ? MapEngine.PLAYER_HACK
+    const frame = this.playerAnimState === 'dooring' ? MapEngine.PLAYER_DOOR
+      : this.playerAnimState === 'hacking' ? MapEngine.PLAYER_HACK
       : this.playerAnimState === 'walking' || this.playerAnimState === 'running' ? MapEngine.PLAYER_WALK
       : this.playerAnimState === 'dead' ? MapEngine.PLAYER_DEAD
       : this.playerAnimState === 'swimming' ? MapEngine.PLAYER_SWIM
@@ -679,10 +681,10 @@ export class MapEngine {
     this.playerMarkerImg.style.height = `${sheetH.toFixed(2)}px`
   }
 
-  setPlayerFrame(state: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' | 'swimming') {
+  setPlayerFrame(state: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' | 'swimming' | 'dooring') {
     if (!this.playerMarkerImg) return
     this.playerAnimState = state
-    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'dead', 'swimming', 'car-moving', 'still')
+    this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'dead', 'swimming', 'dooring', 'car-moving', 'still')
     this.applyPlayerZoom(this.map?.getZoom() ?? 18)
     if (state === 'walking' || state === 'running') {
       this.playerMarkerImg.classList.add('walking')
@@ -693,6 +695,8 @@ export class MapEngine {
       this.playerMarkerImg.classList.add('hacking')
     } else if (state === 'dead') {
       this.playerMarkerImg.classList.add('dead')
+    } else if (state === 'dooring') {
+      this.playerMarkerImg.classList.add('dooring')
     } else if (state === 'swimming') {
       this.playerMarkerImg.classList.add('swimming')
     } else {
@@ -1057,7 +1061,7 @@ export class MapEngine {
     const el = document.createElement('div')
     el.textContent = emptied ? `${icons}` : icons
     el.style.cssText =
-      'font-size:15px;line-height:1;pointer-events:none;text-shadow:0 1px 3px rgba(0,0,0,.9);' +
+      'font-size:15px;line-height:1;pointer-events:none;text-shadow:0 1px 3px rgba(0,0,0,.9);z-index:115;' +
       `background:rgba(12,16,20,${emptied ? 0.45 : 0.72});border:1px solid rgba(255,255,255,${emptied ? 0.12 : 0.25});` +
       `border-radius:6px;padding:2px 4px;${emptied ? 'text-decoration:line-through;text-decoration-thickness:2px;text-decoration-color:#ff5c5c;opacity:.6;' : ''}`
     const marker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(this.map!)
@@ -1128,8 +1132,12 @@ export class MapEngine {
     if (this.baseMarker) this.baseMarker.remove()
     const el = document.createElement('div')
     el.textContent = '★'
-    el.style.cssText = 'font-size:26px;line-height:1;color:#ffd54a;text-shadow:0 0 8px rgba(255,180,0,.9),0 1px 2px rgba(0,0,0,.6);pointer-events:none'
+    el.style.cssText = 'font-size:26px;line-height:1;color:#ffd54a;text-shadow:0 0 8px rgba(255,180,0,.9),0 1px 2px rgba(0,0,0,.6);pointer-events:none;z-index:120'
     this.baseMarker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(this.map!)
+  }
+
+  hasBaseMarker(): boolean {
+    return !!this.baseMarker
   }
 
   clearBaseMarker() {

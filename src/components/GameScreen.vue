@@ -168,6 +168,8 @@ function updateShelterInfo() {
 
 function validateSpawn() {
   if (!mapEngine) return
+  // после взрыва/восстановления позиция игрока осмысленна — не переносим его на спавн
+  if (store.phase === 'aftermath') return
   const valid = mapEngine.findValidSpawnPoint(store.playerLongitude, store.playerLatitude)
   if (valid) {
     store.playerLatitude = valid.lat
@@ -479,6 +481,8 @@ function applySave(): void {
   store.base = data.base ?? null
   store.lootBuildings = { ...(data.loot ?? {}) }
 
+  store.playerLatitude = data.player.lat
+  store.playerLongitude = data.player.lng
   playerController?.setPosition(data.player.lat, data.player.lng)
   mapEngine?.updatePlayerPosition(data.player.lng, data.player.lat)
   mapEngine?.flyToPlayer(data.player.lat, data.player.lng, () => {})
@@ -624,10 +628,34 @@ function tickSurvival() {
   }
 }
 
+let wasInsideBuilding = false
+let doorAnimTimer: ReturnType<typeof setTimeout> | null = null
+
+/** Вход в здание: фигура останавливается, тянет дверь, звук открытия. */
+function playDoorAnimation() {
+  if (!mapEngine || !playerController) return
+  playerController.stop()
+  playerController.setInputBlocked(true)
+  mapEngine.setPlayerFrame('dooring')
+  soundEngine.playDoorOpeningClosing()
+  if (doorAnimTimer) clearTimeout(doorAnimTimer)
+  doorAnimTimer = setTimeout(() => {
+    mapEngine?.setPlayerFrame('idle')
+    playerController?.setInputBlocked(anyModalOpen.value)
+  }, 1050)
+}
+
 function updateBasePrompt() {
   if (store.phase !== 'aftermath' || !playerController || !mapEngine) return
   const pos = playerController.getPosition()
   const insideBuilding = mapEngine.isInsideBuildingStrict(pos.lng, pos.lat)
+  // звезда базы всегда на карте, даже после восстановления сохранения
+  if (store.base && mapEngine && !mapEngine.hasBaseMarker()) {
+    mapEngine.setBaseMarker(store.base.longitude, store.base.latitude)
+  }
+
+  if (insideBuilding && !wasInsideBuilding && !store.isInCar) playDoorAnimation()
+  wasInsideBuilding = insideBuilding
   const atBase = insideBuilding && isAtBase()
   if (nearBase.value && !atBase) baseDismissed = false
   nearBase.value = atBase
@@ -1789,6 +1817,9 @@ function toggleMute() {
 }
 .hacking {
   animation: player-hack-anim 0.9s steps(6) infinite;
+}
+.dooring {
+  animation: player-hack-anim 1s steps(6) 1 forwards;
 }
 @keyframes player-swim-anim {
   from { transform: translateY(0); }
