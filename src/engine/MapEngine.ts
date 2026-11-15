@@ -802,8 +802,8 @@ export class MapEngine {
   private fogPlayer: [number, number] | null = null
   private fogRedrawQueued = false
   private fogListener: (() => void) | null = null
-  private readonly EXPLORED_BUFFER_M = 15
-  private readonly PLAYER_CLEAR_M = 55
+  private readonly EXPLORED_BUFFER_M = 22
+  private readonly PLAYER_CLEAR_M = 95
 
   enableFog(): void {
     if (!this.map || this.fogCanvas) return
@@ -813,10 +813,10 @@ export class MapEngine {
     this.map.getCanvasContainer().appendChild(canvas)
     this.fogCanvas = canvas
 
-    this.fogListener = () => this.queueFogRedraw()
+    this.fogListener = () => this.drawFog()
     this.map.on('render', this.fogListener)
     this.map.on('move', this.fogListener)
-    this.queueFogRedraw()
+    this.drawFog()
   }
 
   disableFog(): void {
@@ -832,12 +832,7 @@ export class MapEngine {
   }
 
   private queueFogRedraw(): void {
-    if (this.fogRedrawQueued) return
-    this.fogRedrawQueued = true
-    requestAnimationFrame(() => {
-      this.fogRedrawQueued = false
-      this.drawFog()
-    })
+    this.drawFog()
   }
 
   /** Отметить здание исследованным (буфер вокруг контура). */
@@ -887,29 +882,44 @@ export class MapEngine {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.clearRect(0, 0, w, h)
-    ctx.globalCompositeOperation = 'source-over'
     ctx.filter = 'none'
-    ctx.fillStyle = 'rgba(3, 6, 10, 0.93)'
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.clearRect(0, 0, w, h)
+
+    // тень
+    ctx.fillStyle = 'rgba(3, 6, 10, 0.94)'
     ctx.fillRect(0, 0, w, h)
 
-    // вырезаем расчищенные зоны с размытым краем
+    // расчищенные зоны вырезаем из тени
     ctx.globalCompositeOperation = 'destination-out'
-    ctx.filter = 'blur(16px)'
 
     for (const rings of this.exploredPolys) {
       if (!rings.length) continue
-      ctx.beginPath()
-      for (const ring of rings) {
-        ring.forEach(([lng, lat], i) => {
-          const p = map.project([lng, lat])
-          if (i === 0) ctx.moveTo(p.x, p.y)
-          else ctx.lineTo(p.x, p.y)
-        })
-        ctx.closePath()
+      const trace = () => {
+        ctx.beginPath()
+        for (const ring of rings) {
+          ring.forEach(([lng, lat], i) => {
+            const p = map.project([lng, lat])
+            if (i === 0) ctx.moveTo(p.x, p.y)
+            else ctx.lineTo(p.x, p.y)
+          })
+          ctx.closePath()
+        }
       }
-      ctx.fillStyle = '#fff'
+
+      trace()
+      ctx.fillStyle = 'rgba(255,255,255,1)'
       ctx.fill()
+
+      // мягкий край: несколько полупрозрачных обводок разной ширины
+      const feather: Array<[number, number]> = [[52, 0.14], [34, 0.18], [18, 0.24]]
+      for (const [width, alpha] of feather) {
+        trace()
+        ctx.lineWidth = width
+        ctx.lineJoin = 'round'
+        ctx.strokeStyle = `rgba(255,255,255,${alpha})`
+        ctx.stroke()
+      }
     }
 
     if (this.fogPlayer) {
@@ -917,14 +927,18 @@ export class MapEngine {
       const zoom = map.getZoom()
       const lat = this.fogPlayer[1]
       const mpp = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom)
-      const r = Math.max(8, this.PLAYER_CLEAR_M / mpp)
+      const r = Math.max(10, this.PLAYER_CLEAR_M / mpp)
+
+      const grad = ctx.createRadialGradient(p.x, p.y, r * 0.35, p.x, p.y, r)
+      grad.addColorStop(0, 'rgba(255,255,255,1)')
+      grad.addColorStop(0.55, 'rgba(255,255,255,0.9)')
+      grad.addColorStop(1, 'rgba(255,255,255,0)')
       ctx.beginPath()
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
-      ctx.fillStyle = '#fff'
+      ctx.fillStyle = grad
       ctx.fill()
     }
 
-    ctx.filter = 'none'
     ctx.globalCompositeOperation = 'source-over'
   }
 
