@@ -805,7 +805,7 @@ export class MapEngine {
   private fogRedrawQueued = false
   private fogListener: (() => void) | null = null
   private readonly EXPLORED_BUFFER_M = 22
-  private readonly PLAYER_CLEAR_M = 95
+  private readonly PLAYER_CLEAR_M = 200
 
   enableFog(): void {
     if (!this.map || this.fogCanvas) return
@@ -933,8 +933,12 @@ export class MapEngine {
 
     if (this.fogPlayer) {
       const p = map.project(this.fogPlayer)
-      // свет игрока достаёт до краёв окна и растёт/сжимается вместе с зумом
-      const r = Math.max(40, (Math.hypot(w, h) / 2) * 1.05)
+      // пятно имеет постоянную площадь в метрах: в режиме карты (зум меньше) оно
+      // визуально сжимается, а не растягивается на весь экран
+      const zoom = map.getZoom()
+      const lat = this.fogPlayer[1]
+      const mpp = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom)
+      const r = Math.max(10, this.PLAYER_CLEAR_M / mpp)
 
       const grad = ctx.createRadialGradient(p.x, p.y, r * 0.25, p.x, p.y, r)
       grad.addColorStop(0, 'rgba(255,255,255,1)')
