@@ -77,6 +77,7 @@ const anyModalOpen = computed(() => showAftermathNotice.value || showBaseConfirm
 watch(anyModalOpen, (open) => { playerController?.setInputBlocked(open) }, { flush: 'post' })
 let statsInterval: ReturnType<typeof setInterval> | null = null
 let buildingInterval: ReturnType<typeof setInterval> | null = null
+let fogInterval: ReturnType<typeof setInterval> | null = null
 let baseDismissed = false
 const currentFuel = computed(() => {
   const car = store.cars.find(c => c.id === store.activeCarId)
@@ -314,6 +315,7 @@ function triggerExplosion() {
   soundEngine.stopAftermathAmbience()
   soundEngine.setAftermathMode(false)
   mapEngine?.disableFog()
+  if (fogInterval) { clearInterval(fogInterval); fogInterval = null }
 
   hudTimeLeft.value = 0
   if (explosionTimer) clearInterval(explosionTimer)
@@ -435,6 +437,11 @@ function startSurvival(showNotice = true) {
   soundEngine.setAftermathMode(true)
   soundEngine.startAftermathAmbience()
   mapEngine?.enableFog()
+  if (fogInterval) clearInterval(fogInterval)
+  fogInterval = setInterval(() => {
+    const pos = playerController?.getPosition()
+    if (pos) mapEngine?.updatePlayerClearing(pos.lng, pos.lat)
+  }, 80)
   store.stats = { health: 100, energy: 65, satiety: 70, water: 60 }
   showAftermathNotice.value = showNotice
   mapEngine?.clearWorldObjects()
@@ -542,6 +549,7 @@ function tickSurvival() {
     deathReason.value = 'survival'
     store.phase = 'gameover'
     soundEngine.stopAftermathAmbience()
+    if (fogInterval) { clearInterval(fogInterval); fogInterval = null }
     if (statsInterval) { clearInterval(statsInterval); statsInterval = null }
     if (buildingInterval) { clearInterval(buildingInterval); buildingInterval = null }
   }
@@ -550,7 +558,6 @@ function tickSurvival() {
 function updateBasePrompt() {
   if (store.phase !== 'aftermath' || !playerController || !mapEngine) return
   const pos = playerController.getPosition()
-  mapEngine.updatePlayerClearing(pos.lng, pos.lat)
   const insideBuilding = mapEngine.isInsideBuildingStrict(pos.lng, pos.lat)
   const atBase = insideBuilding && isAtBase()
   if (nearBase.value && !atBase) baseDismissed = false
@@ -904,6 +911,7 @@ function checkGameResult() {
   soundEngine.stopAftermathAmbience()
   soundEngine.setAftermathMode(false)
   mapEngine?.disableFog()
+  if (fogInterval) { clearInterval(fogInterval); fogInterval = null }
   if (deathReason.value === 'collapse' || deathReason.value === 'explosion') {
     store.phase = 'gameover'
   } else {

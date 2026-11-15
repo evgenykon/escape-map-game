@@ -795,151 +795,137 @@ export class MapEngine {
     }
   }
 
-  // ─── туман войны: неисследованный мир в тени ─────────────────────────────
-  private fogEnabled = false
-  private exploredUnion: GeoJSON.Polygon | GeoJSON.MultiPolygon | null = null
-  private lastPlayerPos: [number, number] | null = null
+  // ─── туман войны: неисследованный мир в тени (canvas-оверлей) ─────────────
+  private fogCanvas: HTMLCanvasElement | null = null
+  /** контуры расчищенных зон (ring-массивы в широте/долготе) */
+  private exploredPolys: number[][][][] = []
+  private fogPlayer: [number, number] | null = null
+  private fogRedrawQueued = false
+  private fogListener: (() => void) | null = null
   private readonly EXPLORED_BUFFER_M = 15
   private readonly PLAYER_CLEAR_M = 55
 
-  /** Включить «тень» на неисследованной карте (после взрыва). */
   enableFog(): void {
-    if (!this.map || this.fogEnabled) return
-    this.fogEnabled = true
-    if (!this.map.getSource('fog-mask')) {
-      this.map.addSource('fog-mask', { type: 'geojson', data: this.fogGeoJson() })
-      this.map.addLayer({
-        id: 'fog-mask-fill',
-        type: 'fill',
-        source: 'fog-mask',
-        paint: {
-          'fill-color': '#04070b',
-          'fill-opacity': ['get', 'opacity'] as never,
-        },
-      })
-    }
-    this.refreshFog()
+    if (!this.map || this.fogCanvas) return
+    const canvas = document.createElement('canvas')
+    canvas.style.cssText =
+      'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1'
+    this.map.getCanvasContainer().appendChild(canvas)
+    this.fogCanvas = canvas
+
+    this.fogListener = () => this.queueFogRedraw()
+    this.map.on('render', this.fogListener)
+    this.map.on('move', this.fogListener)
+    this.queueFogRedraw()
   }
 
   disableFog(): void {
-    this.fogEnabled = false
-    this.exploredUnion = null
-    this.lastPlayerPos = null
-    if (!this.map) return
-    if (this.map.getLayer('fog-mask-fill')) this.map.removeLayer('fog-mask-fill')
-    if (this.map.getSource('fog-mask')) this.map.removeSource('fog-mask')
+    if (this.map && this.fogListener) {
+      this.map.off('render', this.fogListener)
+      this.map.off('move', this.fogListener)
+    }
+    this.fogListener = null
+    this.fogCanvas?.remove()
+    this.fogCanvas = null
+    this.exploredPolys = []
+    this.fogPlayer = null
   }
 
-  /** Отметить здание исследованным: буфер вокруг контура попадает в «расчистку». */
+  private queueFogRedraw(): void {
+    if (this.fogRedrawQueued) return
+    this.fogRedrawQueued = true
+    requestAnimationFrame(() => {
+      this.fogRedrawQueued = false
+      this.drawFog()
+    })
+  }
+
+  /** Отметить здание исследованным (буфер вокруг контура). */
   markExplored(lng: number, lat: number): void {
     const measured = this.measureBuildingAt(lng, lat)
     const poly: GeoJSON.Polygon = measured
       ? this.rectPolygonAround(lng, lat, measured.widthM, measured.depthM)
       : (circle([lng, lat], 0.02, { steps: 24 }).geometry as GeoJSON.Polygon)
 
-    let buffered: GeoJSON.Polygon | GeoJSON.MultiPolygon
+    let shape: GeoJSON.Polygon | GeoJSON.MultiPolygon = poly
     try {
-      buffered = buffer(feature(poly as never), this.EXPLORED_BUFFER_M, { units: 'meters' })?.geometry as
-        | GeoJSON.Polygon
-        | GeoJSON.MultiPolygon
+      const grown = buffer(feature(poly as never), this.EXPLORED_BUFFER_M, { units: 'meters', steps: 6 }) as unknown as
+        | GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>
+        | null
+      if (grown?.geometry) shape = grown.geometry
     } catch {
-      buffered = poly
+      /* без буфера тоже сойдёт */
     }
-    if (!buffered) return
 
-    if (!this.exploredUnion) {
-      this.exploredUnion = buffered
-    } else {
-      try {
-        const merged = union(
-          featureCollection([feature(this.exploredUnion as never), feature(buffered as never)]) as never,
-        ) as unknown as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> | null
-        if (merged?.geometry) this.exploredUnion = merged.geometry
-      } catch {
-        /* при ошибке объединения просто оставляем прежнюю область */
-      }
-    }
-    this.refreshFog()
+    const polys = shape.type === 'Polygon' ? [shape.coordinates] : shape.coordinates
+    for (const rings of polys) this.exploredPolys.push(rings as number[][][])
+    this.queueFogRedraw()
   }
 
-  /** Позиция игрока тоже расчищает тень вокруг себя. */
   updatePlayerClearing(lng: number, lat: number): void {
-    if (!this.fogEnabled) return
-    const moved =
-      !this.lastPlayerPos ||
-      Math.abs(this.lastPlayerPos[0] - lng) > 0.00002 ||
-      Math.abs(this.lastPlayerPos[1] - lat) > 0.00002
-    if (!moved) return
-    this.lastPlayerPos = [lng, lat]
-    this.refreshFog()
+    if (!this.fogCanvas) return
+    const prev = this.fogPlayer
+    if (prev && Math.abs(prev[0] - lng) < 1e-6 && Math.abs(prev[1] - lat) < 1e-6) return
+    this.fogPlayer = [lng, lat]
+    this.queueFogRedraw()
   }
 
-  private clearedShape(): GeoJSON.Polygon | GeoJSON.MultiPolygon | null {
-    let cleared = this.exploredUnion
-    if (this.lastPlayerPos) {
-      const near = circle(this.lastPlayerPos, this.PLAYER_CLEAR_M / 1000, { steps: 28 }).geometry as GeoJSON.Polygon
-      if (!cleared) {
-        cleared = near
-      } else {
-        try {
-          const merged = union(
-            featureCollection([feature(cleared as never), feature(near as never)]) as never,
-          ) as unknown as GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> | null
-          if (merged?.geometry) cleared = merged.geometry
-        } catch {
-          /* пропускаем */
-        }
-      }
-    }
-    return cleared
-  }
+  private drawFog(): void {
+    const map = this.map
+    const canvas = this.fogCanvas
+    if (!map || !canvas) return
 
-  /** Полосы градиента: чем дальше от расчищенной зоны, тем плотнее тень. */
-  private static readonly FOG_BANDS = [0, 12, 25, 38, 50]
-
-  private fogGeoJson(): GeoJSON.FeatureCollection {
-    const world = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]
-    const cleared = this.clearedShape()
-    const stepOpacity = 0.9 / MapEngine.FOG_BANDS.length
-    const features: GeoJSON.Feature[] = []
-
-    for (let i = 0; i < MapEngine.FOG_BANDS.length; i++) {
-      const grow = MapEngine.FOG_BANDS[i]
-
-      let holeSource = cleared
-      if (grow > 0 && cleared) {
-        try {
-          const grown = buffer(feature(cleared as never), grow, { units: 'meters', steps: 4 }) as unknown as
-            | GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon>
-            | null
-          if (grown?.geometry) holeSource = grown.geometry
-        } catch {
-          /* оставляем исходную форму */
-        }
-      }
-
-      const holes: number[][][] = []
-      if (holeSource) {
-        const polys = holeSource.type === 'Polygon' ? [holeSource.coordinates] : holeSource.coordinates
-        for (const poly of polys) {
-          if (poly[0]) holes.push(poly[0] as number[][])
-        }
-      }
-
-      features.push({
-        type: 'Feature',
-        properties: { opacity: stepOpacity },
-        geometry: { type: 'Polygon', coordinates: [world as number[][], ...holes] },
-      })
+    const dpr = window.devicePixelRatio || 1
+    const w = canvas.clientWidth || map.getCanvas().clientWidth
+    const h = canvas.clientHeight || map.getCanvas().clientHeight
+    if (!w || !h) return
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr)
+      canvas.height = Math.round(h * dpr)
     }
 
-    return { type: 'FeatureCollection', features }
-  }
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, w, h)
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.filter = 'none'
+    ctx.fillStyle = 'rgba(3, 6, 10, 0.93)'
+    ctx.fillRect(0, 0, w, h)
 
-  private refreshFog(): void {
-    if (!this.map || !this.fogEnabled) return
-    const src = this.map.getSource('fog-mask') as maplibregl.GeoJSONSource | undefined
-    if (src) src.setData(this.fogGeoJson() as never)
+    // вырезаем расчищенные зоны с размытым краем
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.filter = 'blur(16px)'
+
+    for (const rings of this.exploredPolys) {
+      if (!rings.length) continue
+      ctx.beginPath()
+      for (const ring of rings) {
+        ring.forEach(([lng, lat], i) => {
+          const p = map.project([lng, lat])
+          if (i === 0) ctx.moveTo(p.x, p.y)
+          else ctx.lineTo(p.x, p.y)
+        })
+        ctx.closePath()
+      }
+      ctx.fillStyle = '#fff'
+      ctx.fill()
+    }
+
+    if (this.fogPlayer) {
+      const p = map.project(this.fogPlayer)
+      const zoom = map.getZoom()
+      const lat = this.fogPlayer[1]
+      const mpp = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom)
+      const r = Math.max(8, this.PLAYER_CLEAR_M / mpp)
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
+      ctx.fillStyle = '#fff'
+      ctx.fill()
+    }
+
+    ctx.filter = 'none'
+    ctx.globalCompositeOperation = 'source-over'
   }
 
   /** Точка стоит ровно на здании: пиксель под игроком попадает в слой здания. */
