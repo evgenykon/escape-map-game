@@ -637,11 +637,10 @@ function playDoorAnimation() {
   // НЕ stop(): он снимает слушатели и останавливает игровой цикл навсегда.
   // Блокировка ввода очищает нажатые клавиши и замораживает движение.
   playerController.setInputBlocked(true)
-  mapEngine.setPlayerFrame('dooring')
+  mapEngine.playDoorAnimation(1050)
   soundEngine.playDoorOpeningClosing()
   if (doorAnimTimer) clearTimeout(doorAnimTimer)
   doorAnimTimer = setTimeout(() => {
-    mapEngine?.setPlayerFrame('idle')
     playerController?.setInputBlocked(anyModalOpen.value)
   }, 1050)
 }
@@ -1819,8 +1818,12 @@ function toggleMute() {
 .hacking {
   animation: player-hack-anim 0.9s steps(6) infinite;
 }
+@keyframes player-door-anim {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-100%); }
+}
 .dooring {
-  animation: player-hack-anim 1s steps(6) 1 forwards;
+  animation: player-door-anim 1.05s steps(6) 1;
 }
 @keyframes player-swim-anim {
   from { transform: translateY(0); }

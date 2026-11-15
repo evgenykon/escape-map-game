@@ -89,6 +89,8 @@ export class MapEngine {
   }
 
   private playerAnimState: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' | 'swimming' | 'dooring' = 'idle'
+  /** пока идёт анимация двери, другие состояния её не перебивают */
+  private doorAnimUntil = 0
 
   static getScale(zoom: number): number {
     return Math.max(0.4, 1 + (zoom - 19) * 0.7)
@@ -681,8 +683,19 @@ export class MapEngine {
     this.playerMarkerImg.style.height = `${sheetH.toFixed(2)}px`
   }
 
+  /** Анимация открытия двери: фиксирует кадры на указанное время. */
+  playDoorAnimation(durationMs = 1050) {
+    this.doorAnimUntil = Date.now() + durationMs
+    this.setPlayerFrame('dooring')
+  }
+
+  isDoorAnimationActive(): boolean {
+    return Date.now() < this.doorAnimUntil
+  }
+
   setPlayerFrame(state: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' | 'swimming' | 'dooring') {
     if (!this.playerMarkerImg) return
+    if (state !== 'dooring' && this.isDoorAnimationActive()) return
     this.playerAnimState = state
     this.playerMarkerImg.classList.remove('walking', 'running', 'hacking', 'idle', 'dead', 'swimming', 'dooring', 'car-moving', 'still')
     this.applyPlayerZoom(this.map?.getZoom() ?? 18)
