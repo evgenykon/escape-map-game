@@ -1,5 +1,6 @@
 import { area as turfArea, booleanPointInPolygon, buffer, centerOfMass, circle, distance, destination, feature, featureCollection, point, pointOnFeature, union } from '@turf/turf'
 import maplibregl from 'maplibre-gl'
+import { soundEngine } from '@/engine/SoundEngine'
 import { useGameStore } from '@/stores/game'
 
 export class MapEngine {
@@ -450,7 +451,8 @@ export class MapEngine {
   // ─── прохожие на canvas-слое ────────────────────────────────────────────
   private pedCanvas: HTMLCanvasElement | null = null
   private pedImages: HTMLImageElement[] = []
-  private pedestrians: Array<{ lng: number; lat: number; angle: number; dir: number; phase: number; tick: number; turnLeft: number }> = []
+  private pedDeadImages: HTMLImageElement[] = []
+  private pedestrians: Array<{ lng: number; lat: number; angle: number; dir: number; phase: number; tick: number; turnLeft: number; dead: boolean; deadUntil: number }> = []
   private pedRaf: number | null = null
   private pedLastTime = 0
   private pedVisible = true
@@ -473,12 +475,20 @@ export class MapEngine {
   }
 
   private loadPedestrianSprites(): void {
-    if (this.pedImages.length) return
-    this.pedImages = Array.from({ length: 8 }, (_, i) => {
-      const img = new Image()
-      img.src = `${import.meta.env.BASE_URL}sprites/player/walk-${i}.png`
-      return img
-    })
+    if (!this.pedImages.length) {
+      this.pedImages = Array.from({ length: 8 }, (_, i) => {
+        const img = new Image()
+        img.src = `${import.meta.env.BASE_URL}sprites/player/walk-${i}.png`
+        return img
+      })
+    }
+    if (!this.pedDeadImages.length) {
+      this.pedDeadImages = Array.from({ length: 8 }, (_, i) => {
+        const img = new Image()
+        img.src = `${import.meta.env.BASE_URL}sprites/player/dead-${i}.png`
+        return img
+      })
+    }
   }
 
   private static dirFromAngle(angle: number, bearingRad = 0): number {
@@ -535,6 +545,8 @@ export class MapEngine {
         phase: Math.random() * 1000,
         tick: i % 5,
         turnLeft: 4000 + Math.random() * 12000,
+        dead: false,
+        deadUntil: 0,
       })
     }
 
@@ -629,11 +641,42 @@ export class MapEngine {
         phase: Math.random() * 1000,
         tick: 0,
         turnLeft: 6000 + Math.random() * 9000,
+        dead: false,
+        deadUntil: 0,
       })
     }
 
     const stepM = 1.15 * (dtMs / 1000)
+    const nowMs = Date.now()
+
+    // тела пропадают через минуту
+    this.pedestrians = this.pedestrians.filter((ped) => !ped.dead || ped.deadUntil > nowMs)
+
+    // наезд: игрок в машине и близко к человеку
+    let hitSomeone = false
+    if (store.isInCar) {
+      const M_PER_DEG = 111320
+      const cosLat = Math.cos((store.playerLatitude * Math.PI) / 180)
+      for (const ped of this.pedestrians) {
+        if (ped.dead) continue
+        const dx = (ped.lng - store.playerLongitude) * M_PER_DEG * cosLat
+        const dy = (ped.lat - store.playerLatitude) * M_PER_DEG
+        if (Math.hypot(dx, dy) < 2.4) {
+          ped.dead = true
+          ped.deadUntil = nowMs + 60000
+          // падает в направлении движения
+          ped.dir = MapEngine.dirFromAngle(
+            this.lastPlayerAngle ?? ped.angle,
+            this.map ? (this.map.getBearing() * Math.PI) / 180 : 0,
+          )
+          hitSomeone = true
+        }
+      }
+    }
+    if (hitSomeone) soundEngine.playCarCrash()
+
     for (const ped of this.pedestrians) {
+      if (ped.dead) continue
       ped.tick += 1
       ped.turnLeft -= dtMs
       if (ped.turnLeft <= 0) {
@@ -693,9 +736,14 @@ export class MapEngine {
       const p = map.project([ped.lng, ped.lat])
       if (p.x < -size || p.y < -size || p.x > w + size || p.y > h + size) continue
 
+      const deadImg = this.pedDeadImages[ped.dir]
       const img = this.pedImages[ped.dir]
       const row = (frame + Math.floor(ped.phase)) % 8
-      if (img?.complete && img.naturalWidth) {
+      if (ped.dead && deadImg?.complete && deadImg.naturalWidth) {
+        ctx.globalAlpha = 0.95
+        ctx.drawImage(deadImg, 0, 0, 128, 128, p.x - size / 2, p.y - size / 2, size, size)
+        ctx.globalAlpha = 1
+      } else if (img?.complete && img.naturalWidth) {
         ctx.drawImage(img, 0, row * 128, 128, 128, p.x - size / 2, p.y - size / 2, size, size)
       } else {
         ctx.fillStyle = '#c8d2dc'
