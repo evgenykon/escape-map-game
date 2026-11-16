@@ -90,6 +90,7 @@ let statsInterval: ReturnType<typeof setInterval> | null = null
 let buildingInterval: ReturnType<typeof setInterval> | null = null
 let fogInterval: ReturnType<typeof setInterval> | null = null
 let autosaveInterval: ReturnType<typeof setInterval> | null = null
+const onUnload = () => persistGame(false)
 let baseDismissed = false
 const currentFuel = computed(() => {
   const car = store.cars.find(c => c.id === store.activeCarId)
@@ -481,8 +482,10 @@ function enterDevAftermath(teleport = true) {
 }
 
 /** Сохранить текущее состояние игры в localStorage. */
-function persistGame(): void {
-  if (store.phase !== 'aftermath' || !playerController) return
+function persistGame(force = false): void {
+  if (store.phase !== 'aftermath' || !playerController || !store.base) return
+  // обычное автосохранение — только пока игрок у базы; force — снимок при уходе
+  if (!force && !nearBaseNow) return
   const pos = playerController.getPosition()
   saveGame({
     player: { lat: pos.lat, lng: pos.lng },
@@ -496,16 +499,16 @@ function persistGame(): void {
 
 function startAutosave(): void {
   if (import.meta.hot) {
-    import.meta.hot.dispose(() => persistGame())
+    import.meta.hot.dispose(() => persistGame(false))
   }
   if (autosaveInterval) clearInterval(autosaveInterval)
-  autosaveInterval = setInterval(persistGame, 8000)
-  window.addEventListener('beforeunload', persistGame)
+  autosaveInterval = setInterval(() => persistGame(false), 8000)
+  window.addEventListener('beforeunload', onUnload)
 }
 
 function stopAutosave(): void {
   if (autosaveInterval) { clearInterval(autosaveInterval); autosaveInterval = null }
-  window.removeEventListener('beforeunload', persistGame)
+  window.removeEventListener('beforeunload', onUnload)
 }
 
 /** Продолжить игру из сохранения. */
@@ -517,11 +520,14 @@ function applySave(): void {
   store.base = data.base ?? null
   store.lootBuildings = { ...(data.loot ?? {}) }
 
-  store.playerLatitude = data.player.lat
-  store.playerLongitude = data.player.lng
-  playerController?.setPosition(data.player.lat, data.player.lng)
-  mapEngine?.updatePlayerPosition(data.player.lng, data.player.lat)
-  mapEngine?.flyToPlayer(data.player.lat, data.player.lng, () => {})
+  // сохранение делается у базы, поэтому и восстанавливаемся на базе
+  const spawnLat = data.base ? data.base.latitude : data.player.lat
+  const spawnLng = data.base ? data.base.longitude : data.player.lng
+  store.playerLatitude = spawnLat
+  store.playerLongitude = spawnLng
+  playerController?.setPosition(spawnLat, spawnLng)
+  mapEngine?.updatePlayerPosition(spawnLng, spawnLat)
+  mapEngine?.flyToPlayer(spawnLat, spawnLng, () => {})
 
   if (data.base) {
     mapEngine?.setBaseMarker(data.base.longitude, data.base.latitude)
@@ -677,6 +683,8 @@ function tickSurvival() {
 let wasInsideBuilding = false
 let doorArmed = true
 let depositedThisVisit = false
+let nearBaseNow = false
+let wasNearBase = false
 let lastOutsidePos: { lat: number; lng: number } | null = null
 
 /**
@@ -743,6 +751,11 @@ function updateBasePrompt() {
   canMoveBase.value = !!store.base && insideBuilding && !inBaseBuilding && !store.isInCar && !cleaningUi.value.active
   canDropHere.value = !!store.base && insideBuilding && !inBaseBuilding && !store.isInCar
 
+
+  // «у базы» с запасом по расстоянию: большой дом целиком входит в 70 м
+  nearBaseNow = !!store.base && haversine(pos.lat, pos.lng, store.base.latitude, store.base.longitude) < 70
+  if (wasNearBase && !nearBaseNow) persistGame(true) // снимок на момент ухода с базы
+  wasNearBase = nearBaseNow
 
   // вернулся на базу — рюкзак выгружается ОДИН раз за визит
   // (иначе взятое из хранилища тут же возвращалось обратно)
