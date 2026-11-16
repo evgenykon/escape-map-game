@@ -8,6 +8,7 @@ export type RoomTypeKey =
   | 'library'
   | 'radio'
   | 'armory'
+  | 'generator'
 
 export interface RoomType {
   key: RoomTypeKey
@@ -33,10 +34,17 @@ export const ROOM_TYPES: RoomType[] = [
   { key: 'library', name: 'Библиотека', icon: '📚', perks: 'ускоряет изучение и взлом' },
   { key: 'radio', name: 'Радиоточка', icon: '📡', perks: 'принимает сообщения и координаты' },
   { key: 'armory', name: 'Оружейная', icon: '🔫', perks: 'хранилище оружия и боеприпасов' },
+  { key: 'generator', name: 'Генераторы', icon: '⚙', perks: 'сжигают топливо и дают электричество' },
 ]
 
 /** Вместимость хранилища: зависит от площади здания + склад даёт прибавку. */
 export const STORAGE_PER_ROOM = 60
+
+/** Предел и выработка электричества генераторами. */
+export const ELECTRICITY_MAX = 100
+export const FUEL_PER_CYCLE = 1
+export const POWER_PER_CYCLE = 5
+export const GENERATOR_CYCLE_SEC = 30
 
 export function storageCapacity(areaM2: number, roomTypes: Record<number, RoomTypeKey> = {}): number {
   const fromArea = Math.round((areaM2 || 250) / 12)

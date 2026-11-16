@@ -433,15 +433,17 @@ export class MapEngine {
     }
   }
 
+  /** Заново расставить машины вокруг игрока (например, после взрыва). */
+  respawnCars() {
+    this.removeAllCars()
+    useGameStore().cars = []
+    this.initialCarsPlaced = false
+    this.refreshCarMarkers()
+  }
+
   refreshCarMarkers() {
     if (!this.map) return
     const store = useGameStore()
-    // после взрыва машин в мире нет
-    if (store.isAftermath) {
-      this.removeAllCars()
-      store.cars = []
-      return
-    }
     const M_PER_DEG = 111320
     const cosLat = Math.cos(store.playerLatitude * Math.PI / 180)
 

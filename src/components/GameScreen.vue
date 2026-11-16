@@ -10,7 +10,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import StatsBars from '@/components/StatsBars.vue'
 import BaseDialog from '@/components/BaseDialog.vue'
 import { fetchBuildingPolygon, fetchRealRooms, polygonAreaM2, roomsToFeatureCollection, splitBuildingIntoRooms } from '@/engine/IndoorLoader'
-import { CRAFT_RECIPES, countRooms, storageCapacity } from '@/engine/BaseRooms'
+import { CRAFT_RECIPES, ELECTRICITY_MAX, FUEL_PER_CYCLE, GENERATOR_CYCLE_SEC, POWER_PER_CYCLE, countRooms, storageCapacity } from '@/engine/BaseRooms'
 import { loadGame, saveGame } from '@/engine/SaveEngine'
 import LootDialog from '@/components/LootDialog.vue'
 import BackpackDialog from '@/components/BackpackDialog.vue'
@@ -567,7 +567,9 @@ function startSurvival(showNotice = true) {
   store.shelterHudVisible = false
   store.isInCar = false
   store.activeCarId = null
+  // заправляться нельзя, но машины в мире остаются
   store.fuelStationsDisabled = true
+  setTimeout(() => mapEngine?.respawnCars(), 600)
   if (statsInterval) clearInterval(statsInterval)
   statsInterval = setInterval(tickSurvival, 1000)
   if (buildingInterval) clearInterval(buildingInterval)
@@ -578,6 +580,7 @@ function startSurvival(showNotice = true) {
 
 let greenhouseAcc = 0
 let workshopAcc = 0
+let generatorAcc = 0
 
 /** Пассивное производство обустроенных комнат (раз в секунду). */
 function tickRooms() {
@@ -597,6 +600,25 @@ function tickRooms() {
     }
   } else {
     greenhouseAcc = 0
+  }
+
+  // генераторы: тратят топливо и дают электричество
+  if (countRooms(types, 'generator') > 0) {
+    generatorAcc += 1
+    if (generatorAcc >= GENERATOR_CYCLE_SEC) {
+      generatorAcc = 0
+      const gens = countRooms(types, 'generator')
+      const fuelNeed = FUEL_PER_CYCLE * gens
+      if (base.resources.fuel >= fuelNeed) {
+        base.resources.fuel -= fuelNeed
+        const room = Math.max(0, ELECTRICITY_MAX - base.resources.energy)
+        const produced = Math.min(room, POWER_PER_CYCLE * gens)
+        base.resources.energy += produced
+        if (produced > 0) showToast(`⚙ Генераторы: +${produced} ⚡ (−${fuelNeed} ⛽)`)
+      }
+    }
+  } else {
+    generatorAcc = 0
   }
 
   if (countRooms(types, 'workshop') > 0) {
@@ -625,10 +647,6 @@ const SURVIVAL = {
 
 function tickSurvival() {
   if (!store.isAftermath || store.phase !== 'aftermath') return
-  if (store.cars.length) {
-    mapEngine?.removeAllCars()
-    store.cars = []
-  }
   const s = store.stats
   const inBase = isAtBase()
   s.satiety = Math.max(0, s.satiety - SURVIVAL.satietyDrain)
