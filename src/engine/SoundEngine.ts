@@ -19,6 +19,7 @@ type SoundKey =
   | 'carFillingStation'
   | 'deadForest'
   | 'lonely'
+  | 'bodyFall'
 
 const SOUND_PATHS: Record<SoundKey, string> = {
   openingCarDoor: `${import.meta.env.BASE_URL}sounds/opening-car-door.mp3`,
@@ -41,6 +42,7 @@ const SOUND_PATHS: Record<SoundKey, string> = {
   carFillingStation: `${import.meta.env.BASE_URL}sounds/car-filling-station.mp3`,
   deadForest: `${import.meta.env.BASE_URL}sounds/myortvyy-les.mp3`,
   lonely: `${import.meta.env.BASE_URL}sounds/odinokiy.mp3`,
+  bodyFall: `${import.meta.env.BASE_URL}sounds/silent-fall-into-the-sand.mp3`,
 }
 
 const ONE_SHOT_KEYS: SoundKey[] = [
@@ -53,6 +55,7 @@ const ONE_SHOT_KEYS: SoundKey[] = [
   'explosion',
   'doorOpeningClosing',
   'doorClosing',
+  'bodyFall',
 ]
 
 const LOOP_KEYS: SoundKey[] = [
@@ -99,6 +102,7 @@ class SoundEngine {
     carFillingStation: 0.5,
     deadForest: 0.35,
     lonely: 0.3,
+    bodyFall: 0.85,
   }
   private loops: Partial<Record<SoundKey, LoopHandle>> = {}
   /** эмбиент посмертного мира играет по очереди, а не двумя треками сразу */
@@ -242,6 +246,7 @@ class SoundEngine {
   playExplosion(): void { this.playOneShot('explosion') }
   playDoorOpeningClosing(): void { this.playOneShot('doorOpeningClosing') }
   playDoorClosing(): void { this.playOneShot('doorClosing') }
+  playBodyFall(): void { this.playOneShot('bodyFall') }
   startNuclearDangerLoop(): void { this.startLoop('nuclearDanger') }
   stopNuclearDangerLoop(): void { this.stopLoop('nuclearDanger') }
   setNuclearDangerVolume(v: number): void { this.setVolume('nuclearDanger', v) }

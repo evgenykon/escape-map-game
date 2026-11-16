@@ -689,7 +689,7 @@ export class MapEngine {
         }
       }
     }
-    if (hitSomeone) soundEngine.playCarCrash()
+    if (hitSomeone) soundEngine.playBodyFall()
 
     for (const ped of this.pedestrians) {
       if (ped.dead) continue
