@@ -13,6 +13,43 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 const mapEl = ref<HTMLDivElement>()
 let miniMap: maplibregl.Map | null = null
 let ready = false
+let roomMarkers: maplibregl.Marker[] = []
+
+function clearRoomMarkers() {
+  for (const m of roomMarkers) m.remove()
+  roomMarkers = []
+}
+
+/** Иконки построек прямо на схеме: эмодзи в глифах карты нет, поэтому DOM-маркеры. */
+function drawRoomIcons() {
+  if (!miniMap) return
+  clearRoomMarkers()
+  for (const feature of roomsWithTypes.value.features) {
+    const props = feature.properties as Record<string, unknown>
+    const type = String(props?.type ?? 'empty')
+    if (type === 'empty') continue
+    const t = roomTypeOf(type as RoomTypeKey)
+    if (!t) continue
+
+    const geom = feature.geometry
+    if (geom.type !== 'Polygon' || !geom.coordinates[0]) continue
+    const ring = geom.coordinates[0]
+    let x = 0
+    let y = 0
+    for (const [lng, lat] of ring) {
+      x += lng
+      y += lat
+    }
+    const lng = x / ring.length
+    const lat = y / ring.length
+
+    const el = document.createElement('div')
+    el.textContent = t.icon
+    el.style.cssText =
+      'font-size:17px;line-height:1;pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.9))'
+    roomMarkers.push(new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(miniMap))
+  }
+}
 
 const roomsList = computed(() => {
   const fc = store.base?.roomsGeo
@@ -294,6 +331,8 @@ function draw() {
     ;(miniMap.getSource('rooms') as maplibregl.GeoJSONSource).setData(roomsGeo ?? empty)
   }
 
+  drawRoomIcons()
+
   if (polygon) {
     const fc = polygonToFeature(polygon)
     if (!miniMap.getSource('building')) {
@@ -362,6 +401,7 @@ watch(
 watch(roomsWithTypes, () => draw())
 
 onUnmounted(() => {
+  clearRoomMarkers()
   // отдых идёт только пока открыто окно базы
   store.resting = false
   if (nowTimer) clearInterval(nowTimer)
