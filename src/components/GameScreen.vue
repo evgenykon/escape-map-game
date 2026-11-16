@@ -515,7 +515,8 @@ function stopAutosave(): void {
 function applySave(): void {
   const data = loadGame()
   if (!data) return
-  store.stats = { ...data.stats }
+  // после восстановления у базы игрок отдохнувший: энергия всегда 100%
+  store.stats = { ...data.stats, energy: 100 }
   store.carried = { ...(data.carried ?? {}) }
   store.base = data.base ?? null
   store.lootBuildings = { ...(data.loot ?? {}) }
