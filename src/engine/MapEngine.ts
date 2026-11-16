@@ -197,6 +197,11 @@ export class MapEngine {
       if (this.map) this.applyAllCarsZoom(this.map.getZoom())
     })
 
+    // любой зум (взлом, отдаление, анимация) — сразу пересчитываем размеры машин
+    this.map.on('zoom', () => {
+      if (this.map) this.applyAllCarsZoom(this.map.getZoom())
+    })
+
     this.map.on('moveend', () => {
       if (this.map) this.applyAllCarsZoom(this.map.getZoom())
       const st = useGameStore()
