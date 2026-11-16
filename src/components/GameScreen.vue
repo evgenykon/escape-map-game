@@ -637,11 +637,12 @@ function tickSurvival() {
     showToast(`🏗 Помещение ${job.roomId} готово`)
   }
 
-  // отдых на базе: силы восстанавливаются постепенно (~2% в секунду)
+  // отдых на базе: силы восстанавливаются постепенно (~2% в секунду).
+  // Условие — «внутри здания базы» (как и открытие окна), а не радиус от точки базы:
+  // в большом здании игрок легко оказывается дальше радиуса и отдых обрывался.
   if (store.resting) {
-    if (!inBase) {
+    if (!insideBuildingNow.value) {
       store.resting = false
-  store.construction = null
     } else {
       const s2 = store.stats
       const restRate = countRooms(store.base?.roomTypes, 'bedroom') > 0 ? 3 : 2

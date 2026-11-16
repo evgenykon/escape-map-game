@@ -487,6 +487,8 @@ header h2 {
   gap: 18px;
   padding: 18px;
   overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 h3 {
   font-size: 11px;
@@ -615,6 +617,9 @@ footer button.resting {
 }
 
 .build {
+  flex: 0 0 auto;
+  max-height: 34vh;
+  overflow: auto;
   padding: 14px 18px;
   border-top: 1px solid #29323c;
   background: #10151b;
@@ -726,6 +731,7 @@ footer {
   padding: 14px 18px;
   border-top: 1px solid #29323c;
   flex-wrap: wrap;
+  flex: 0 0 auto;
 }
 footer button {
   font-family: inherit;
