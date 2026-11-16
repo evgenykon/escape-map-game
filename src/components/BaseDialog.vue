@@ -47,6 +47,23 @@ const carriedTotal = computed(() =>
 )
 const freeSlots = computed(() => Math.max(0, CARRY_CAPACITY - carriedTotal.value))
 
+const carriedOf = (key: string): number =>
+  (store.carried as Partial<Record<ResourceKey, number>>)[key as ResourceKey] ?? 0
+
+/** Положить одну единицу из рюкзака в хранилище. */
+function putToStorage(key: ResourceKey) {
+  const r = store.base?.resources as unknown as Record<string, number> | undefined
+  if (!r) return
+  const carried = store.carried as Partial<Record<ResourceKey, number>>
+  const have = carried[key] ?? 0
+  if (have <= 0) return
+  if (usedUnits.value >= capacity.value) return
+
+  carried[key] = have - 1
+  r[key] = (r[key] ?? 0) + 1
+  store.carried = { ...carried }
+}
+
 /** Взять ресурс из хранилища в рюкзак. */
 function takeFromStorage(key: ResourceKey, all = false) {
   const r = store.base?.resources as unknown as Record<string, number> | undefined
@@ -323,14 +340,27 @@ function heal() {
               <span class="res-label">{{ res.label }}</span>
               <span class="res-val">{{ res.value }}</span>
               <template v-if="res.key !== 'energy'">
+                <span
+                  v-if="carriedOf(res.key) > 0"
+                  class="res-carry"
+                  title="в рюкзаке"
+                >🎒{{ carriedOf(res.key) }}</span>
+                <button
+                  class="take-btn put"
+                  :disabled="carriedOf(res.key) <= 0 || usedUnits >= capacity"
+                  title="Положить из рюкзака"
+                  @click="putToStorage(res.key as ResourceKey)"
+                >−1</button>
                 <button
                   class="take-btn"
                   :disabled="res.value <= 0 || freeSlots <= 0"
+                  title="Взять 1 в рюкзак"
                   @click="takeFromStorage(res.key as ResourceKey)"
                 >+1</button>
                 <button
                   class="take-btn"
                   :disabled="res.value <= 0 || freeSlots <= 0"
+                  title="Взять максимум"
                   @click="takeFromStorage(res.key as ResourceKey, true)"
                 >макс</button>
               </template>
@@ -540,6 +570,15 @@ h3 {
 .take-btn:disabled {
   opacity: 0.35;
   cursor: default;
+}
+.take-btn.put {
+  color: #ffd54a;
+  border-color: #6b5b2f;
+}
+.res-carry {
+  font-size: 10px;
+  color: #ffd54a;
+  white-space: nowrap;
 }
 .res li {
   display: flex;
