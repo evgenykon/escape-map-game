@@ -637,14 +637,24 @@ function tickSurvival() {
 
 let wasInsideBuilding = false
 let doorAnimTimer: ReturnType<typeof setTimeout> | null = null
+let insideStreak = 0
+let doorCooldownUntil = 0
+let lastOutsidePos: { lat: number; lng: number } | null = null
 
-/** Вход в здание: фигура останавливается, тянет дверь, звук открытия. */
-function playDoorAnimation() {
+/** Вход в здание: фигура останавливается, тянет дверь, створка двери распахивается. */
+function playDoorAnimation(pos: { lat: number; lng: number }) {
   if (!mapEngine || !playerController) return
   // НЕ stop(): он снимает слушатели и останавливает игровой цикл навсегда.
   // Блокировка ввода очищает нажатые клавиши и замораживает движение.
   playerController.setInputBlocked(true)
   mapEngine.playDoorAnimation(1050)
+
+  // створка ставится на линии входа, разворот — по направлению движения
+  const angle = playerController.getAngle() - Math.PI / 2
+  const doorPos = lastOutsidePos
+    ? { lat: (lastOutsidePos.lat + pos.lat) / 2, lng: (lastOutsidePos.lng + pos.lng) / 2 }
+    : pos
+  mapEngine.playDoorSwing(doorPos.lng, doorPos.lat, angle)
   soundEngine.playDoorOpeningClosing()
   if (doorAnimTimer) clearTimeout(doorAnimTimer)
   doorAnimTimer = setTimeout(() => {
@@ -661,7 +671,17 @@ function updateBasePrompt() {
     mapEngine.setBaseMarker(store.base.longitude, store.base.latitude)
   }
 
-  if (insideBuilding && !wasInsideBuilding && !store.isInCar) playDoorAnimation()
+  // вход в здание: 2 подтверждения подряд (пиксельный тест шумит на границе)
+  if (insideBuilding && store.phase === 'aftermath' && !store.isInCar) {
+    insideStreak += 1
+    if (insideStreak === 2 && Date.now() > doorCooldownUntil) {
+      doorCooldownUntil = Date.now() + 3000
+      playDoorAnimation(pos)
+    }
+  } else {
+    insideStreak = 0
+    lastOutsidePos = { lat: pos.lat, lng: pos.lng }
+  }
   wasInsideBuilding = insideBuilding
   const atBase = insideBuilding && isAtBase()
   if (nearBase.value && !atBase) baseDismissed = false

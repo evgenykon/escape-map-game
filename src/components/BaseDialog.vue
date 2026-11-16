@@ -31,7 +31,7 @@ const resources = computed(() => {
     { key: 'materials', icon: '🧱', label: 'Материалы', value: r.materials },
     { key: 'fuel', icon: '⛽', label: 'Топливо', value: r.fuel },
     { key: 'medicine', icon: '💊', label: 'Медицина', value: r.medicine },
-    { key: 'energy', icon: '⚡', label: 'Энергия', value: r.energy },
+    { key: 'energy', icon: '⚡', label: 'Электричество', value: r.energy },
     { key: 'clothes', icon: '👕', label: 'Одежда', value: r.clothes },
     { key: 'tech', icon: '🔌', label: 'Техника', value: r.tech },
     { key: 'weapons', icon: '🔪', label: 'Оружие', value: r.weapons },

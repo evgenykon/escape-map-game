@@ -683,6 +683,32 @@ export class MapEngine {
     this.playerMarkerImg.style.height = `${sheetH.toFixed(2)}px`
   }
 
+  /** Створка двери: появляется у входа и распахивается. */
+  playDoorSwing(lng: number, lat: number, angleRad = 0) {
+    if (!this.map) return
+    const wrap = document.createElement('div')
+    wrap.style.cssText =
+      'width:40px;height:40px;position:relative;pointer-events:none;z-index:118;' +
+      `transform:rotate(${angleRad}rad)`
+
+    const leaf = document.createElement('div')
+    leaf.style.cssText =
+      'position:absolute;left:4px;top:18px;width:30px;height:5px;border-radius:2px;' +
+      'background:linear-gradient(90deg,#7a4a26,#c98a4b 60%,#8a5a33);' +
+      'border:1px solid rgba(0,0,0,.65);box-shadow:0 2px 6px rgba(0,0,0,.65);' +
+      'transform-origin:2px 50%;transform:rotate(0deg);' +
+      'transition:transform .55s cubic-bezier(.2,.75,.3,1),opacity .4s ease'
+
+    wrap.appendChild(leaf)
+    const marker = new maplibregl.Marker({ element: wrap }).setLngLat([lng, lat]).addTo(this.map)
+
+    requestAnimationFrame(() => {
+      leaf.style.transform = 'rotate(-82deg)'
+    })
+    window.setTimeout(() => { leaf.style.opacity = '0' }, 1000)
+    window.setTimeout(() => marker.remove(), 1500)
+  }
+
   /** Анимация открытия двери: фиксирует кадры на указанное время. */
   playDoorAnimation(durationMs = 1050) {
     this.doorAnimUntil = Date.now() + durationMs
