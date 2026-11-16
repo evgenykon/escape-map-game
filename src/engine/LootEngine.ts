@@ -8,6 +8,8 @@ export type ComponentKey =
   | 'wheel'
   | 'chain'
 
+export const COMPONENT_KEYS = ['battery', 'wire', 'metal', 'pipe', 'circuit', 'wheel', 'chain'] as const
+
 export type ResourceKey =
   | 'water'
   | 'food'

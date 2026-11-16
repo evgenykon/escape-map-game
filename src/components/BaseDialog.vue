@@ -5,6 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { useGameStore } from '@/stores/game'
 import { polygonToFeature } from '@/engine/IndoorLoader'
 import CraftDialog from '@/components/CraftDialog.vue'
+import ComponentBox from '@/components/ComponentBox.vue'
 import { CRAFT_RECIPES, ROOM_BUILD_COST, ROOM_BUILD_MS, ROOM_REFUND, ROOM_TYPES, countRooms, roomTypeOf, storageCapacity, type CraftRecipe, type RoomTypeKey } from '@/engine/BaseRooms'
 import { CARRY_CAPACITY, type ResourceKey } from '@/engine/LootEngine'
 
@@ -75,13 +76,6 @@ const resources = computed(() => {
     { key: 'tech', icon: '🔌', label: 'Техника', value: r.tech },
     { key: 'weapons', icon: '🔪', label: 'Оружие', value: r.weapons },
     { key: 'tools', icon: '🔧', label: 'Инструменты', value: r.tools },
-    { key: 'battery', icon: '🔋', label: 'Батарейка', value: r.battery },
-    { key: 'wire', icon: '🧵', label: 'Провод', value: r.wire },
-    { key: 'metal', icon: '▤', label: 'Лист металла', value: r.metal },
-    { key: 'pipe', icon: '▯', label: 'Труба', value: r.pipe },
-    { key: 'circuit', icon: '🎛', label: 'Эл. плата', value: r.circuit },
-    { key: 'wheel', icon: '🛞', label: 'Колесо', value: r.wheel },
-    { key: 'chain', icon: '⛓', label: 'Цепь', value: r.chain },
   ]
 })
 
@@ -204,6 +198,7 @@ const builtLegend = computed(() => {
 })
 
 const craftOpen = ref(false)
+const boxOpen = ref(false)
 const craftMessage = ref('')
 
 function canCraft(recipe: CraftRecipe): boolean {
@@ -607,11 +602,13 @@ function heal() {
           {{ store.resting ? '🛑 Встать' : '⚡ Отдохнуть' }}
         </button>
         <button :disabled="!store.base || store.base.resources.medicine <= 0" @click="heal">💊 Лечиться</button>
+        <button class="box-btn" @click="boxOpen = !boxOpen">📦 Ящик с вещами</button>
         <button v-if="hasWorkshop" class="craft-btn" @click="craftOpen = !craftOpen">
           🛠 Крафт
         </button>
       </footer>
     </div>
+    <ComponentBox v-if="boxOpen" @close="boxOpen = false" />
     <CraftDialog v-if="hasWorkshop && craftOpen" @close="craftOpen = false" />
   </div>
 </template>
@@ -874,6 +871,10 @@ footer button.resting {
 .craft-btn {
   border-color: #6b5b2f;
   color: #ffd54a;
+}
+.box-btn {
+  border-color: #3a4654;
+  color: #b9c4cf;
 }
 
 .build {
