@@ -221,6 +221,7 @@ onMounted(() => {
     startTimer()
     setTimeout(() => {
       mapEngine.refreshCarMarkers()
+    mapEngine.spawnPedestrians(14)
       gameReady.value = true
       if (store.resumeSave) {
         store.resumeSave = false
@@ -253,6 +254,8 @@ onMounted(() => {
     } else {
       showBaseArrow.value = false
     }
+
+    mapEngine?.updatePedestrians(200)
 
     const moving = store.isWalking || store.isSwimming || store.isInCar
     const closeUp = store.phase === 'aftermath' && !anyModalOpen.value &&
@@ -569,6 +572,7 @@ function startSurvival(showNotice = true) {
     store.stats = { health: 100, energy: 65, satiety: 70, water: 60 }
   }
   showAftermathNotice.value = showNotice
+  mapEngine?.clearPedestrians()
   mapEngine?.clearWorldObjects()
   store.cars = []
   store.shelters = []

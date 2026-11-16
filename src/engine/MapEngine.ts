@@ -433,6 +433,114 @@ export class MapEngine {
     }
   }
 
+  private pedestrianMarkers = new Map<string, {
+    marker: maplibregl.Marker
+    inner: HTMLElement
+    lng: number
+    lat: number
+    angle: number
+    dir: number
+  }>()
+
+  private ensurePedestrianStyle() {
+    if (document.getElementById('ped-walk-style')) return
+    const st = document.createElement('style')
+    st.id = 'ped-walk-style'
+    st.textContent =
+      '@keyframes ped-walk{from{background-position-y:0}to{background-position-y:100%}}'
+    document.head.appendChild(st)
+  }
+
+  private static dirFromAngle(angle: number): number {
+    const norm = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)
+    return Math.round(norm / (Math.PI / 4)) % 8
+  }
+
+  /** Случайные прохожие, которые бродят по улицам. */
+  spawnPedestrians(count = 14) {
+    if (!this.map) return
+    this.ensurePedestrianStyle()
+    this.clearPedestrians()
+    const store = useGameStore()
+
+    for (let i = 0; i < count; i++) {
+      const spot = this.findValidSpawnPoint(store.playerLongitude, store.playerLatitude, 280)
+      if (!spot) continue
+
+      const dir = Math.floor(Math.random() * 8)
+      const wrap = document.createElement('div')
+      wrap.style.cssText = 'width:30px;height:30px;pointer-events:none;z-index:95'
+
+      const inner = document.createElement('div')
+      inner.style.cssText =
+        'width:30px;height:30px;background-repeat:no-repeat;' +
+        `background-image:url(${import.meta.env.BASE_URL}sprites/player/walk-${dir}.png);` +
+        'background-size:30px 240px;animation:ped-walk 0.72s steps(8) infinite;' +
+        'filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))'
+
+      wrap.appendChild(inner)
+      const marker = new maplibregl.Marker({ element: wrap }).setLngLat([spot.lng, spot.lat]).addTo(this.map)
+      this.pedestrianMarkers.set(`ped-${i}`, {
+        marker,
+        inner,
+        lng: spot.lng,
+        lat: spot.lat,
+        angle: Math.random() * Math.PI * 2,
+        dir,
+      })
+    }
+  }
+
+  updatePedestrians(dtMs: number) {
+    if (!this.map || !this.pedestrianMarkers.size) return
+    const store = useGameStore()
+    if (store.isAftermath) {
+      this.clearPedestrians()
+      return
+    }
+
+    const stepM = 1.15 * (dtMs / 1000)
+    for (const ped of this.pedestrianMarkers.values()) {
+      if (Math.random() < 0.03) ped.angle += (Math.random() - 0.5) * Math.PI * 0.8
+
+      const cosLat = Math.cos((ped.lat * Math.PI) / 180)
+      const nLng = ped.lng + (Math.sin(ped.angle) * stepM) / (111320 * cosLat)
+      const nLat = ped.lat + (Math.cos(ped.angle) * stepM) / 111320
+
+      let blocked = false
+      try {
+        blocked = this.isInsideBuilding(nLng, nLat) || this.isOnWater(nLng, nLat)
+      } catch {
+        blocked = false
+      }
+      if (blocked) {
+        ped.angle += Math.PI
+        continue
+      }
+
+      ped.lng = nLng
+      ped.lat = nLat
+      ped.marker.setLngLat([nLng, nLat])
+
+      const dir = MapEngine.dirFromAngle(ped.angle)
+      if (dir !== ped.dir) {
+        ped.dir = dir
+        ped.inner.style.backgroundImage = `url(${import.meta.env.BASE_URL}sprites/player/walk-${dir}.png)`
+      }
+    }
+  }
+
+  setPedestriansVisible(visible: boolean) {
+    for (const ped of this.pedestrianMarkers.values()) {
+      ped.marker.getElement().style.display = visible ? '' : 'none'
+    }
+  }
+
+  clearPedestrians() {
+    for (const ped of this.pedestrianMarkers.values()) ped.marker.remove()
+    this.pedestrianMarkers.clear()
+  }
+
   /** Заново расставить машины вокруг игрока (например, после взрыва). */
   respawnCars() {
     this.removeAllCars()
@@ -449,12 +557,12 @@ export class MapEngine {
 
     if (!this.initialCarsPlaced) {
       this.initialCarsPlaced = true
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 34; i++) {
         let placed = false
         for (let pass = 0; pass < 2 && !placed; pass++) {
           for (let attempt = 0; attempt < 60; attempt++) {
             const angle = Math.random() * 2 * Math.PI
-            const dist = 30 + Math.random() * 150
+            const dist = 30 + Math.random() * 380
             const dlat = (dist / M_PER_DEG) * Math.cos(angle)
             const dlng = (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
             const lng = store.playerLongitude + dlng
@@ -498,6 +606,7 @@ export class MapEngine {
           const lat = originLat + dlat
           try {
             if (this.isInsideBuilding(lng, lat)) continue
+            if (this.isOnWater(lng, lat)) continue
             if (this.isOnOffroadSurface(lng, lat)) continue
             if (pass === 0 && !this.isOnRoad(lng, lat) && this._hasAnyFeature(lng, lat)) continue
           } catch { continue }

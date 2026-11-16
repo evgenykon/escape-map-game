@@ -98,15 +98,14 @@ export class PlayerController {
       if (this.mapMode === 0) {
         this.mapEngine.setMapZoom(20)
         this.mapEngine.setCarMarkersVisible(true)
+        this.mapEngine.setPedestriansVisible(true)
         this.mapEngine.setMapModeCrosshair(false)
         if (store.activeCarId) this.mapEngine.hideCarMarker(store.activeCarId)
-      } else if (this.mapMode === 1) {
-        this.mapEngine.setMapZoom(14)
-        this.mapEngine.setCarMarkersVisible(true)
-        this.mapEngine.setMapModeCrosshair(true)
       } else {
-        this.mapEngine.setMapZoom(10)
+        // режим карты: прячем всё, с чем игрок сейчас не взаимодействует
+        this.mapEngine.setMapZoom(this.mapMode === 1 ? 14 : 10)
         this.mapEngine.setCarMarkersVisible(false)
+        this.mapEngine.setPedestriansVisible(false)
         this.mapEngine.setMapModeCrosshair(true)
       }
       return
