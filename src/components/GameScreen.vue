@@ -900,17 +900,37 @@ function confirmMoveBase() {
 
 function relocateBase(lat: number, lng: number, rooms: number) {
   if (!store.base) return
+
+  const newArea = areaPreview.value ?? store.base.areaM2 ?? 250
+  // оборудование комнат НЕ переносится — на новом месте комнаты пустые
+  const capacity = storageCapacity(newArea, {})
+
+  // ресурсы переносим, но обрезаем по лимиту нового помещения
+  const res = { ...store.base.resources } as unknown as Record<string, number>
+  // сначала режем менее важное
+  const cutOrder = ['materials', 'fuel', 'clothes', 'tech', 'weapons', 'tools', 'medicine', 'food', 'water', 'energy']
+  let total = Object.values(res).reduce((sum, v) => sum + v, 0)
+  for (const key of cutOrder) {
+    if (total <= capacity) break
+    const excess = total - capacity
+    const cut = Math.min(res[key] ?? 0, excess)
+    res[key] = (res[key] ?? 0) - cut
+    total -= cut
+  }
+
   store.base = {
     ...store.base,
     latitude: lat,
     longitude: lng,
     rooms,
-    areaM2: areaPreview.value ?? store.base.areaM2,
-    roomTypes: store.base.roomTypes ?? {},
+    areaM2: newArea,
+    roomTypes: {},
+    resources: res as never,
     polygon: pendingPolygon,
     roomsGeo: null,
     roomsReal: false,
   }
+  showToast(`База перенесена: комнаты пустые, запас обрезан до ${capacity} ед.`, 3600)
   mapEngine?.setBaseMarker(lng, lat)
   mapEngine?.markExplored(lng, lat)
   const polygon = pendingPolygon
