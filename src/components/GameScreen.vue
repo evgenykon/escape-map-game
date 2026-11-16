@@ -641,16 +641,14 @@ function tickSurvival() {
   // Условие — «внутри здания базы» (как и открытие окна), а не радиус от точки базы:
   // в большом здании игрок легко оказывается дальше радиуса и отдых обрывался.
   if (store.resting) {
-    if (!insideBuildingNow.value) {
+    // Никаких проверок зоны: отдых идёт, пока открыто окно базы (при закрытии флаг
+    // снимается в BaseDialog) и пока игрок не начал двигаться.
+    const s2 = store.stats
+    const restRate = countRooms(store.base?.roomTypes, 'bedroom') > 0 ? 3 : 2
+    s2.energy = Math.min(100, s2.energy + restRate)
+    if (s2.energy >= 100) {
       store.resting = false
-    } else {
-      const s2 = store.stats
-      const restRate = countRooms(store.base?.roomTypes, 'bedroom') > 0 ? 3 : 2
-      s2.energy = Math.min(100, s2.energy + restRate)
-      if (s2.energy >= 100) {
-        store.resting = false
-        showToast('⚡ Отдохнули, силы восстановлены')
-      }
+      showToast('⚡ Отдохнули, силы восстановлены')
     }
   }
 
