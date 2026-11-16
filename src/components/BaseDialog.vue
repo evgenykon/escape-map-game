@@ -4,6 +4,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useGameStore } from '@/stores/game'
 import { polygonToFeature } from '@/engine/IndoorLoader'
+import CraftDialog from '@/components/CraftDialog.vue'
 import { CRAFT_RECIPES, ROOM_BUILD_COST, ROOM_BUILD_MS, ROOM_REFUND, ROOM_TYPES, countRooms, roomTypeOf, storageCapacity, type CraftRecipe, type RoomTypeKey } from '@/engine/BaseRooms'
 import { CARRY_CAPACITY, type ResourceKey } from '@/engine/LootEngine'
 
@@ -592,24 +593,6 @@ function heal() {
         <div v-if="buildMessage" class="build-msg">{{ buildMessage }}</div>
       </section>
 
-      <section v-if="hasWorkshop && craftOpen" class="craft">
-        <h3>Мастерская · крафт</h3>
-        <div class="craft-grid">
-          <button
-            v-for="recipe in CRAFT_RECIPES"
-            :key="recipe.id"
-            class="craft-card"
-            :disabled="!canCraft(recipe)"
-            @click="craft(recipe)"
-          >
-            <span class="craft-ico">{{ recipe.icon }}</span>
-            <span class="craft-name">{{ recipe.name }}</span>
-            <span class="craft-note">{{ recipe.note }}</span>
-          </button>
-        </div>
-        <div v-if="craftMessage" class="build-msg">{{ craftMessage }}</div>
-      </section>
-
       <footer>
         <button :disabled="!store.base || store.base.resources.food <= 0" @click="eat">🍖 Поесть</button>
         <button :disabled="!store.base || store.base.resources.water <= 0" @click="drink">💧 Попить</button>
@@ -622,6 +605,7 @@ function heal() {
         </button>
       </footer>
     </div>
+    <CraftDialog v-if="hasWorkshop && craftOpen" @close="craftOpen = false" />
   </div>
 </template>
 

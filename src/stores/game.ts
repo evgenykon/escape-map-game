@@ -38,6 +38,13 @@ export interface BaseResources {
   tech: number
   weapons: number
   tools: number
+  battery: number
+  wire: number
+  metal: number
+  pipe: number
+  circuit: number
+  wheel: number
+  chain: number
 }
 
 export interface PlayerBase {
@@ -104,6 +111,8 @@ export const useGameStore = defineStore('game', () => {
   const resumeSave = ref(false)
   /** идущая постройка помещения */
   const construction = ref<{ roomId: number; type: RoomTypeKey; endsAt: number; durationMs: number } | null>(null)
+  /** идущий крафт в мастерской */
+  const craftJob = ref<{ recipeId: string; endsAt: number; durationMs: number } | null>(null)
   const base = ref<PlayerBase | null>(null)
   const cleaning = ref<{ active: boolean; progress: number; rooms: number }>({ active: false, progress: 0, rooms: 0 })
   const deathReasonText = ref<string | null>(null)
@@ -149,6 +158,7 @@ export const useGameStore = defineStore('game', () => {
     resting,
     resumeSave,
     construction,
+    craftJob,
     base,
     cleaning,
     deathReasonText,

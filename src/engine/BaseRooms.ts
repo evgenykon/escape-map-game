@@ -62,6 +62,8 @@ export interface CraftRecipe {
   input: Partial<Record<'materials' | 'tech' | 'tools' | 'clothes' | 'fuel', number>>
   output: Partial<Record<'materials' | 'tools' | 'weapons' | 'medicine' | 'energy' | 'clothes', number>>
   note: string
+  /** сколько длится крафт, мс */
+  durationMs: number
 }
 
 export const CRAFT_RECIPES: CraftRecipe[] = [
@@ -72,6 +74,7 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
     input: { materials: 2 },
     output: { tools: 1 },
     note: '2 🧱 → 1 🔧',
+    durationMs: 6000,
   },
   {
     id: 'weapons',
@@ -80,6 +83,7 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
     input: { tools: 1, materials: 2 },
     output: { weapons: 1 },
     note: '1 🔧 + 2 🧱 → 1 🔪',
+    durationMs: 9000,
   },
   {
     id: 'medicine',
@@ -88,6 +92,7 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
     input: { clothes: 1, tech: 1 },
     output: { medicine: 1 },
     note: '1 👕 + 1 🔌 → 1 💊',
+    durationMs: 8000,
   },
   {
     id: 'power',
@@ -96,6 +101,7 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
     input: { tech: 1 },
     output: { energy: 4 },
     note: '1 🔌 → 4 ⚡',
+    durationMs: 4000,
   },
   {
     id: 'clothes',
@@ -104,5 +110,6 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
     input: { materials: 3 },
     output: { clothes: 1 },
     note: '3 🧱 → 1 👕',
+    durationMs: 7000,
   },
 ]

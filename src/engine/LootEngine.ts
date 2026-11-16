@@ -1,4 +1,13 @@
 /** Ресурсы, которые можно найти в зданиях. */
+export type ComponentKey =
+  | 'battery'
+  | 'wire'
+  | 'metal'
+  | 'pipe'
+  | 'circuit'
+  | 'wheel'
+  | 'chain'
+
 export type ResourceKey =
   | 'water'
   | 'food'
@@ -9,6 +18,7 @@ export type ResourceKey =
   | 'weapons'
   | 'tools'
   | 'materials'
+  | ComponentKey
 
 export interface LootItem {
   key: ResourceKey
@@ -36,6 +46,13 @@ export const RESOURCE_META: Record<ResourceKey, { icon: string; label: string }>
   medicine: { icon: '💊', label: 'Медицина' },
   weapons: { icon: '🔪', label: 'Оружие' },
   tools: { icon: '🔧', label: 'Инструменты' },
+  battery: { icon: '🔋', label: 'Батарейка' },
+  wire: { icon: '🧵', label: 'Провод' },
+  metal: { icon: '🪙', label: 'Лист металла' },
+  pipe: { icon: '🧯', label: 'Труба' },
+  circuit: { icon: '🎛', label: 'Эл. плата' },
+  wheel: { icon: '🛞', label: 'Колесо' },
+  chain: { icon: '⛓', label: 'Цепь' },
   materials: { icon: '🧱', label: 'Стройматериалы' },
 }
 

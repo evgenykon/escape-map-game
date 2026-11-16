@@ -10,7 +10,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import StatsBars from '@/components/StatsBars.vue'
 import BaseDialog from '@/components/BaseDialog.vue'
 import { fetchBuildingPolygon, fetchRealRooms, polygonAreaM2, roomsToFeatureCollection, splitBuildingIntoRooms } from '@/engine/IndoorLoader'
-import { countRooms, storageCapacity } from '@/engine/BaseRooms'
+import { CRAFT_RECIPES, countRooms, storageCapacity } from '@/engine/BaseRooms'
 import { loadGame, saveGame } from '@/engine/SaveEngine'
 import LootDialog from '@/components/LootDialog.vue'
 import BackpackDialog from '@/components/BackpackDialog.vue'
@@ -637,11 +637,26 @@ function tickSurvival() {
   s.energy = Math.max(0, s.energy - (inBase ? 0.04 : 0.12) * gymBonus)
   tickRooms()
 
+  // крафт в мастерской завершается по таймеру, даже если окно закрыто
+  const craft = store.craftJob
+  if (craft && store.base && Date.now() >= craft.endsAt) {
+    const recipe = CRAFT_RECIPES.find((r) => r.id === craft.recipeId)
+    if (recipe) {
+      const r = store.base.resources as unknown as Record<string, number>
+      for (const [key, amount] of Object.entries(recipe.output)) {
+        r[key] = (r[key] ?? 0) + (amount ?? 0)
+      }
+      showToast(`🛠 Готово: ${recipe.icon} ${recipe.name}`)
+    }
+    store.craftJob = null
+  }
+
   // постройка помещения завершается по таймеру, даже если окно базы закрыто
   const job = store.construction
   if (job && store.base && Date.now() >= job.endsAt) {
     store.base.roomTypes = { ...(store.base.roomTypes ?? {}), [job.roomId]: job.type }
     store.construction = null
+  store.craftJob = null
     showToast(`🏗 Помещение ${job.roomId} готово`)
   }
 
