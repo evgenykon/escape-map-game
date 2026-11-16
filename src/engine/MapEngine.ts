@@ -393,7 +393,16 @@ export class MapEngine {
     el.style.backgroundPositionY = `-${(MapEngine.CAR_Y * scale).toFixed(2)}px`
   }
 
+  private lastCarsZoom = -1
+  private lastCarsZoomAt = 0
+
   private applyAllCarsZoom(zoom: number) {
+    // при быстрой езде зум меняется каждый кадр — не переписываем стили 34 машин зря
+    const now = performance.now()
+    if (Math.abs(zoom - this.lastCarsZoom) < 0.02 && now - this.lastCarsZoomAt < 250) return
+    this.lastCarsZoom = zoom
+    this.lastCarsZoomAt = now
+
     const natural = MapEngine.getScale(zoom)
     const scale = Math.max(0.5, natural - 0.2)
     const box = Math.round(MapEngine.CAR_BOX * scale)
@@ -1270,10 +1279,16 @@ export class MapEngine {
     this.queueFogRedraw()
   }
 
+  private lastFogDrawAt = 0
+
   private drawFog(): void {
     const map = this.map
     const canvas = this.fogCanvas
     if (!map || !canvas) return
+
+    const nowMs = performance.now()
+    if (nowMs - this.lastFogDrawAt < 60) return
+    this.lastFogDrawAt = nowMs
 
     const dpr = window.devicePixelRatio || 1
     const w = canvas.clientWidth || map.getCanvas().clientWidth
