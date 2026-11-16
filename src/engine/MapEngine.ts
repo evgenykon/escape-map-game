@@ -440,14 +440,16 @@ export class MapEngine {
     lat: number
     angle: number
     dir: number
+    tick: number
   }>()
 
   private ensurePedestrianStyle() {
     if (document.getElementById('ped-walk-style')) return
     const st = document.createElement('style')
     st.id = 'ped-walk-style'
+    // 8 кадров = 8 сдвигов на одну высоту кадра (30px из 240px)
     st.textContent =
-      '@keyframes ped-walk{from{background-position-y:0}to{background-position-y:100%}}'
+      '@keyframes ped-walk{from{transform:translateY(0)}to{transform:translateY(-87.5%)}}'
     document.head.appendChild(st)
   }
 
@@ -456,37 +458,72 @@ export class MapEngine {
     return Math.round(norm / (Math.PI / 4)) % 8
   }
 
-  /** Случайные прохожие, которые бродят по улицам. */
-  spawnPedestrians(count = 14) {
+  /** Прохожие подальше от игрока и друг от друга, чтобы не толпились. */
+  spawnPedestrians(count = 8) {
     if (!this.map) return
     this.ensurePedestrianStyle()
     this.clearPedestrians()
     const store = useGameStore()
 
+    const placed: Array<[number, number]> = []
+    const M_PER_DEG = 111320
+    const cosLat = Math.cos((store.playerLatitude * Math.PI) / 180)
+
     for (let i = 0; i < count; i++) {
-      const spot = this.findValidSpawnPoint(store.playerLongitude, store.playerLatitude, 280)
+      let spot: [number, number] | null = null
+
+      for (let attempt = 0; attempt < 24 && !spot; attempt++) {
+        const angle = Math.random() * Math.PI * 2
+        const dist = 70 + Math.random() * 270 // не ближе 70 м, не дальше 340 м
+        const lat = store.playerLatitude + (dist / M_PER_DEG) * Math.cos(angle)
+        const lng = store.playerLongitude + (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
+
+        let ok = false
+        try {
+          ok = !this.isInsideBuilding(lng, lat) && !this.isOnWater(lng, lat)
+        } catch {
+          ok = false
+        }
+        if (!ok) continue
+
+        // минимум 30 м между прохожими
+        const tooClose = placed.some(([plng, plat]) => {
+          const dx = (lng - plng) * M_PER_DEG * cosLat
+          const dy = (lat - plat) * M_PER_DEG
+          return Math.hypot(dx, dy) < 30
+        })
+        if (tooClose) continue
+
+        spot = [lng, lat]
+      }
+
       if (!spot) continue
+      placed.push(spot)
 
       const dir = Math.floor(Math.random() * 8)
       const wrap = document.createElement('div')
-      wrap.style.cssText = 'width:30px;height:30px;pointer-events:none;z-index:95'
+      wrap.style.cssText = 'width:30px;height:30px;overflow:hidden;pointer-events:none;z-index:95'
 
       const inner = document.createElement('div')
       inner.style.cssText =
-        'width:30px;height:30px;background-repeat:no-repeat;' +
+        'width:30px;height:240px;' +
         `background-image:url(${import.meta.env.BASE_URL}sprites/player/walk-${dir}.png);` +
-        'background-size:30px 240px;animation:ped-walk 0.72s steps(8) infinite;' +
-        'filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))'
+        'background-size:30px 240px;background-repeat:no-repeat;' +
+        'animation:ped-walk 0.72s steps(8) infinite'
 
       wrap.appendChild(inner)
-      const marker = new maplibregl.Marker({ element: wrap }).setLngLat([spot.lng, spot.lat]).addTo(this.map)
+      const marker = new maplibregl.Marker({ element: wrap })
+        .setLngLat([spot[0], spot[1]])
+        .addTo(this.map)
+
       this.pedestrianMarkers.set(`ped-${i}`, {
         marker,
         inner,
-        lng: spot.lng,
-        lat: spot.lat,
+        lng: spot[0],
+        lat: spot[1],
         angle: Math.random() * Math.PI * 2,
         dir,
+        tick: i % 5,
       })
     }
   }
@@ -501,21 +538,25 @@ export class MapEngine {
 
     const stepM = 1.15 * (dtMs / 1000)
     for (const ped of this.pedestrianMarkers.values()) {
+      ped.tick += 1
       if (Math.random() < 0.03) ped.angle += (Math.random() - 0.5) * Math.PI * 0.8
 
       const cosLat = Math.cos((ped.lat * Math.PI) / 180)
       const nLng = ped.lng + (Math.sin(ped.angle) * stepM) / (111320 * cosLat)
       const nLat = ped.lat + (Math.cos(ped.angle) * stepM) / 111320
 
-      let blocked = false
-      try {
-        blocked = this.isInsideBuilding(nLng, nLat) || this.isOnWater(nLng, nLat)
-      } catch {
-        blocked = false
-      }
-      if (blocked) {
-        ped.angle += Math.PI
-        continue
+      // тяжёлые проверки — раз в 5 обновлений, чтобы не грузить карту
+      if (ped.tick % 5 === 0) {
+        let blocked = false
+        try {
+          blocked = this.isInsideBuilding(nLng, nLat) || this.isOnWater(nLng, nLat)
+        } catch {
+          blocked = false
+        }
+        if (blocked) {
+          ped.angle += Math.PI
+          continue
+        }
       }
 
       ped.lng = nLng
@@ -525,7 +566,8 @@ export class MapEngine {
       const dir = MapEngine.dirFromAngle(ped.angle)
       if (dir !== ped.dir) {
         ped.dir = dir
-        ped.inner.style.backgroundImage = `url(${import.meta.env.BASE_URL}sprites/player/walk-${dir}.png)`
+        ped.inner.style.backgroundImage =
+          `url(${import.meta.env.BASE_URL}sprites/player/walk-${dir}.png)`
       }
     }
   }
