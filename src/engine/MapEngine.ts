@@ -679,7 +679,9 @@ export class MapEngine {
     ctx.clearRect(0, 0, w, h)
     if (!this.pedVisible || !this.pedestrians.length) return
 
-    const size = 30 * Math.max(0.8, Math.min(1.6, MapEngine.getScale(map.getZoom())))
+    // масштаб как у игрока: раньше был жёсткий предел 1.6, из-за чего на близком
+    // зуме (взлом, остановка) прохожие выглядели крошечными
+    const size = 30 * Math.max(0.5, Math.min(2.6, MapEngine.getScale(map.getZoom()) - 0.1))
     const frame = Math.floor(performance.now() / 90) % 8
 
     for (const ped of this.pedestrians) {
