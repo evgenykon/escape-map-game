@@ -436,7 +436,7 @@ export class MapEngine {
   // ─── прохожие на canvas-слое ────────────────────────────────────────────
   private pedCanvas: HTMLCanvasElement | null = null
   private pedImages: HTMLImageElement[] = []
-  private pedestrians: Array<{ lng: number; lat: number; angle: number; dir: number; phase: number; tick: number }> = []
+  private pedestrians: Array<{ lng: number; lat: number; angle: number; dir: number; phase: number; tick: number; turnLeft: number }> = []
   private pedRaf: number | null = null
   private pedLastTime = 0
   private pedVisible = true
@@ -464,12 +464,14 @@ export class MapEngine {
     })
   }
 
-  private static dirFromAngle(angle: number): number {
-    const norm = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)
-    return Math.round(norm / (Math.PI / 4)) % 8
+  private static dirFromAngle(angle: number, bearingRad = 0): number {
+    // экранный угол = курс минус поворот карты; лист 4 соответствует «вверх»
+    const rel = angle - bearingRad
+    const k = Math.round(rel / (Math.PI / 4))
+    return ((4 + k) % 8 + 8) % 8
   }
 
-  spawnPedestrians(count = 18) {
+  spawnPedestrians(count = 40) {
     if (!this.map) return
     this.ensurePedestrianCanvas()
     this.loadPedestrianSprites()
@@ -484,7 +486,7 @@ export class MapEngine {
       let spot: [number, number] | null = null
       for (let attempt = 0; attempt < 60 && !spot; attempt++) {
         const angle = Math.random() * Math.PI * 2
-        const dist = 60 + Math.random() * 270
+        const dist = 45 + Math.random() * 300
         const lat = store.playerLatitude + (dist / M_PER_DEG) * Math.cos(angle)
         const lng = store.playerLongitude + (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
 
@@ -499,7 +501,7 @@ export class MapEngine {
         const tooClose = placed.some(([plng, plat]) => {
           const dx = (lng - plng) * M_PER_DEG * cosLat
           const dy = (lat - plat) * M_PER_DEG
-          return Math.hypot(dx, dy) < 22
+          return Math.hypot(dx, dy) < 16
         })
         if (tooClose) continue
         spot = [lng, lat]
@@ -512,9 +514,10 @@ export class MapEngine {
         lng: spot[0],
         lat: spot[1],
         angle,
-        dir: MapEngine.dirFromAngle(angle),
+        dir: MapEngine.dirFromAngle(angle, this.map?.getBearing() ? (this.map.getBearing() * Math.PI) / 180 : 0),
         phase: Math.random() * 1000,
         tick: i % 5,
+        turnLeft: 4000 + Math.random() * 12000,
       })
     }
 
@@ -550,7 +553,11 @@ export class MapEngine {
     const stepM = 1.15 * (dtMs / 1000)
     for (const ped of this.pedestrians) {
       ped.tick += 1
-      if (Math.random() < 0.02) ped.angle += (Math.random() - 0.5) * Math.PI * 0.8
+      ped.turnLeft -= dtMs
+      if (ped.turnLeft <= 0) {
+        ped.turnLeft = 6000 + Math.random() * 9000
+        ped.angle += (Math.random() - 0.5) * Math.PI * 0.6
+      }
 
       const cosLat = Math.cos((ped.lat * Math.PI) / 180)
       const nLng = ped.lng + (Math.sin(ped.angle) * stepM) / (111320 * cosLat)
@@ -571,7 +578,7 @@ export class MapEngine {
 
       ped.lng = nLng
       ped.lat = nLat
-      ped.dir = MapEngine.dirFromAngle(ped.angle)
+      ped.dir = MapEngine.dirFromAngle(ped.angle, this.map ? (this.map.getBearing() * Math.PI) / 180 : 0)
     }
   }
 
