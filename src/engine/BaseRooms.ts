@@ -59,57 +59,19 @@ export interface CraftRecipe {
   id: string
   name: string
   icon: string
-  input: Partial<Record<'materials' | 'tech' | 'tools' | 'clothes' | 'fuel', number>>
-  output: Partial<Record<'materials' | 'tools' | 'weapons' | 'medicine' | 'energy' | 'clothes', number>>
+  input: Record<string, number>
+  output: Record<string, number>
   note: string
   /** сколько длится крафт, мс */
   durationMs: number
 }
 
 export const CRAFT_RECIPES: CraftRecipe[] = [
-  {
-    id: 'tools',
-    name: 'Инструменты',
-    icon: '🔧',
-    input: { materials: 2 },
-    output: { tools: 1 },
-    note: '2 🧱 → 1 🔧',
-    durationMs: 6000,
-  },
-  {
-    id: 'weapons',
-    name: 'Оружие',
-    icon: '🔪',
-    input: { tools: 1, materials: 2 },
-    output: { weapons: 1 },
-    note: '1 🔧 + 2 🧱 → 1 🔪',
-    durationMs: 9000,
-  },
-  {
-    id: 'medicine',
-    name: 'Медицина',
-    icon: '💊',
-    input: { clothes: 1, tech: 1 },
-    output: { medicine: 1 },
-    note: '1 👕 + 1 🔌 → 1 💊',
-    durationMs: 8000,
-  },
-  {
-    id: 'power',
-    name: 'Электричество',
-    icon: '⚡',
-    input: { tech: 1 },
-    output: { energy: 4 },
-    note: '1 🔌 → 4 ⚡',
-    durationMs: 4000,
-  },
-  {
-    id: 'clothes',
-    name: 'Одежда',
-    icon: '👕',
-    input: { materials: 3 },
-    output: { clothes: 1 },
-    note: '3 🧱 → 1 👕',
-    durationMs: 7000,
-  },
+  { id: 'battery', name: 'Батарейка', icon: '🔋', input: { tech: 1, materials: 1 }, output: { battery: 1 }, note: '1 🔌 + 1 🧱 → 1 🔋', durationMs: 6000 },
+  { id: 'wire', name: 'Провод', icon: '🧵', input: { materials: 1 }, output: { wire: 2 }, note: '1 🧱 → 2 🧵', durationMs: 4000 },
+  { id: 'metal', name: 'Лист металла', icon: '🪙', input: { materials: 2 }, output: { metal: 1 }, note: '2 🧱 → 1 🪙', durationMs: 7000 },
+  { id: 'pipe', name: 'Труба', icon: '🧯', input: { materials: 2 }, output: { pipe: 1 }, note: '2 🧱 → 1 🧯', durationMs: 7000 },
+  { id: 'circuit', name: 'Электрическая плата', icon: '🎛', input: { tech: 1, materials: 1 }, output: { circuit: 1 }, note: '1 🔌 + 1 🧱 → 1 🎛', durationMs: 9000 },
+  { id: 'wheel', name: 'Колесо', icon: '🛞', input: { materials: 1, tools: 1 }, output: { wheel: 1 }, note: '1 🧱 + 1 🔧 → 1 🛞', durationMs: 8000 },
+  { id: 'chain', name: 'Цепь', icon: '⛓', input: { materials: 1 }, output: { chain: 1 }, note: '1 🧱 → 1 ⛓', durationMs: 5000 },
 ]

@@ -937,7 +937,7 @@ function relocateBase(lat: number, lng: number, rooms: number) {
   // ресурсы переносим, но обрезаем по лимиту нового помещения
   const res = { ...store.base.resources } as unknown as Record<string, number>
   // сначала режем менее важное
-  const cutOrder = ['materials', 'fuel', 'clothes', 'tech', 'weapons', 'tools', 'medicine', 'food', 'water', 'energy']
+  const cutOrder = ['materials', 'fuel', 'clothes', 'tech', 'weapons', 'tools', 'battery', 'wire', 'metal', 'pipe', 'circuit', 'wheel', 'chain', 'medicine', 'food', 'water', 'energy']
   let total = Object.values(res).reduce((sum, v) => sum + v, 0)
   for (const key of cutOrder) {
     if (total <= capacity) break
@@ -1173,6 +1173,13 @@ function createBase(lat: number, lng: number, rooms: number) {
       tech: 0,
       weapons: 0,
       tools: 0,
+      battery: 0,
+      wire: 0,
+      metal: 0,
+      pipe: 0,
+      circuit: 0,
+      wheel: 0,
+      chain: 0,
     },
     roomTypes: {},
     objects: [],

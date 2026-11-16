@@ -75,6 +75,13 @@ const resources = computed(() => {
     { key: 'tech', icon: '🔌', label: 'Техника', value: r.tech },
     { key: 'weapons', icon: '🔪', label: 'Оружие', value: r.weapons },
     { key: 'tools', icon: '🔧', label: 'Инструменты', value: r.tools },
+    { key: 'battery', icon: '🔋', label: 'Батарейка', value: r.battery },
+    { key: 'wire', icon: '🧵', label: 'Провод', value: r.wire },
+    { key: 'metal', icon: '🪙', label: 'Лист металла', value: r.metal },
+    { key: 'pipe', icon: '🧯', label: 'Труба', value: r.pipe },
+    { key: 'circuit', icon: '🎛', label: 'Эл. плата', value: r.circuit },
+    { key: 'wheel', icon: '🛞', label: 'Колесо', value: r.wheel },
+    { key: 'chain', icon: '⛓', label: 'Цепь', value: r.chain },
   ]
 })
 

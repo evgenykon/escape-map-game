@@ -60,6 +60,13 @@ const RESOURCE_LABEL: Record<string, string> = {
   weapons: '🔪 Оружие',
   medicine: '💊 Медицина',
   energy: '⚡ Электричество',
+  battery: '🔋 Батарейка',
+  wire: '🧵 Провод',
+  metal: '🪙 Лист металла',
+  pipe: '🧯 Труба',
+  circuit: '🎛 Эл. плата',
+  wheel: '🛞 Колесо',
+  chain: '⛓ Цепь',
 }
 
 const outputEntries = computed(() =>
