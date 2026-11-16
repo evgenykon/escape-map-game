@@ -711,6 +711,14 @@ function playDoorAnimation(pos: { lat: number; lng: number }) {
 
   const angle = playerController.getAngle() - Math.PI / 2
   mapEngine.playDoorSwing(pos.lng, pos.lat, angle, 82)
+
+  // короткая пауза у двери: анимация шагов останавливается, затем движение продолжается
+  playerController.setInputBlocked(true)
+  mapEngine.setPlayerFrame('idle')
+  if (doorAnimTimer) clearTimeout(doorAnimTimer)
+  doorAnimTimer = setTimeout(() => {
+    playerController?.setInputBlocked(anyModalOpen.value)
+  }, 420)
 }
 
 function updateBasePrompt() {
