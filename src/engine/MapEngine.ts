@@ -88,6 +88,15 @@ export class MapEngine {
     return Math.round(a / step) % MapEngine.CAR_DIRS
   }
 
+  /** Короткая заморозка кадров анимации без блокировки управления. */
+  freezePlayerAnimation(ms = 420) {
+    if (!this.playerMarkerImg) return
+    this.playerMarkerImg.classList.add('anim-frozen')
+    window.setTimeout(() => {
+      this.playerMarkerImg?.classList.remove('anim-frozen')
+    }, ms)
+  }
+
   private playerAnimState: 'idle' | 'walking' | 'running' | 'hacking' | 'dead' | 'swimming' | 'dooring' = 'idle'
   /** пока идёт анимация двери, другие состояния её не перебивают */
   private doorAnimUntil = 0

@@ -5,6 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { useGameStore } from '@/stores/game'
 import { polygonToFeature } from '@/engine/IndoorLoader'
 import { ROOM_BUILD_COST, ROOM_BUILD_MS, ROOM_REFUND, ROOM_TYPES, countRooms, roomTypeOf, storageCapacity, type RoomTypeKey } from '@/engine/BaseRooms'
+import { CARRY_CAPACITY, type ResourceKey } from '@/engine/LootEngine'
 
 const store = useGameStore()
 const emit = defineEmits<{ (e: 'close'): void }>()
@@ -40,6 +41,26 @@ const resources = computed(() => {
 })
 
 const stats = computed(() => store.stats)
+
+const carriedTotal = computed(() =>
+  Object.values(store.carried).reduce((sum, v) => sum + (v ?? 0), 0),
+)
+const freeSlots = computed(() => Math.max(0, CARRY_CAPACITY - carriedTotal.value))
+
+/** Взять ресурс из хранилища в рюкзак. */
+function takeFromStorage(key: ResourceKey, all = false) {
+  const r = store.base?.resources as unknown as Record<string, number> | undefined
+  if (!r) return
+  const have = r[key] ?? 0
+  if (have <= 0 || freeSlots.value <= 0) return
+
+  const amount = all ? Math.min(have, freeSlots.value) : 1
+  r[key] = have - amount
+
+  const carried = store.carried as Partial<Record<ResourceKey, number>>
+  carried[key] = (carried[key] ?? 0) + amount
+  store.carried = { ...carried }
+}
 
 const selectedRoom = ref<number | null>(null)
 const buildMessage = ref('')
@@ -291,11 +312,28 @@ function heal() {
 
         <aside class="side">
           <h3>Ресурсы</h3>
+          <div class="carry-line">
+            Рюкзак: <b>{{ carriedTotal }}</b> / {{ CARRY_CAPACITY }}
+            <span class="cap-hint">свободно {{ freeSlots }}</span>
+          </div>
+
           <ul class="res">
             <li v-for="res in resources" :key="res.key">
               <span class="res-ico">{{ res.icon }}</span>
               <span class="res-label">{{ res.label }}</span>
               <span class="res-val">{{ res.value }}</span>
+              <template v-if="res.key !== 'energy'">
+                <button
+                  class="take-btn"
+                  :disabled="res.value <= 0 || freeSlots <= 0"
+                  @click="takeFromStorage(res.key as ResourceKey)"
+                >+1</button>
+                <button
+                  class="take-btn"
+                  :disabled="res.value <= 0 || freeSlots <= 0"
+                  @click="takeFromStorage(res.key as ResourceKey, true)"
+                >макс</button>
+              </template>
             </li>
           </ul>
 
@@ -481,6 +519,26 @@ h3 {
   margin: 0 0 18px;
   padding: 0;
 }
+.carry-line {
+  font-size: 11px;
+  color: #8b98a5;
+  margin-bottom: 8px;
+}
+.carry-line b { color: #fff; }
+.take-btn {
+  font-family: inherit;
+  font-size: 10px;
+  padding: 2px 6px;
+  background: #17202a;
+  color: #9fe9bf;
+  border: 1px solid #3c7d54;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.take-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
 .res li {
   display: flex;
   align-items: center;
@@ -498,6 +556,8 @@ h3 {
 }
 .res-val {
   margin-left: auto;
+  min-width: 24px;
+  text-align: right;
   color: #fff;
   font-weight: bold;
 }

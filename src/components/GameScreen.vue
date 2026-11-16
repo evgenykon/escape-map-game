@@ -675,29 +675,36 @@ function tickSurvival() {
 }
 
 let wasInsideBuilding = false
-let doorAnimTimer: ReturnType<typeof setTimeout> | null = null
-let insideStreak = 0
-let doorCooldownUntil = 0
+let doorArmed = true
 let lastOutsidePos: { lat: number; lng: number } | null = null
 
-/** Касание стены: проверяется каждые 80 мс, створка ставится точно на контуре. */
+/**
+ * Касание стены: срабатывает ОДИН раз на подход к зданию (edge-trigger),
+ * иначе дверь открывается заново, пока игрок стоит у стены.
+ */
 function checkDoorEntry(pos: { lat: number; lng: number }) {
   if (!mapEngine || !playerController) return
   if (store.phase !== 'aftermath' || store.isInCar) {
     insideBuildingNow.value = false
+    doorArmed = true
     return
   }
 
   insideBuildingNow.value = mapEngine.isInsideBuildingStrict(pos.lng, pos.lat)
-  if (insideBuildingNow.value) return
+  if (insideBuildingNow.value) {
+    doorArmed = true
+    return
+  }
 
-  // стена прямо перед игроком — открываем дверь на ней
   const contact = mapEngine.findWallContact(pos.lng, pos.lat, playerController.getAngle(), 1.2)
-  // открываем, только когда игрок уже вплотную к стене
-  if (!contact || contact.dist > 0.95) return
-  if (Date.now() < doorCooldownUntil) return
+  if (!contact || contact.dist > 0.95) {
+    // отошёл от стены — взводим для следующего подхода
+    doorArmed = true
+    return
+  }
+  if (!doorArmed) return
 
-  doorCooldownUntil = Date.now() + 2500
+  doorArmed = false
   playDoorAnimation({ lat: contact.lat, lng: contact.lng })
 }
 
@@ -712,13 +719,9 @@ function playDoorAnimation(pos: { lat: number; lng: number }) {
   const angle = playerController.getAngle() - Math.PI / 2
   mapEngine.playDoorSwing(pos.lng, pos.lat, angle, 82)
 
-  // короткая пауза у двери: анимация шагов останавливается, затем движение продолжается
-  playerController.setInputBlocked(true)
-  mapEngine.setPlayerFrame('idle')
-  if (doorAnimTimer) clearTimeout(doorAnimTimer)
-  doorAnimTimer = setTimeout(() => {
-    playerController?.setInputBlocked(anyModalOpen.value)
-  }, 420)
+  // кадры анимации замирают на время открытия, но управление не отбираем:
+  // блокировка чистит нажатые клавиши и игрок потом не идёт без повторного нажатия
+  mapEngine.freezePlayerAnimation(420)
 }
 
 function updateBasePrompt() {
@@ -1980,6 +1983,9 @@ function toggleMute() {
 }
 .still {
   animation: none;
+}
+.anim-frozen {
+  animation-play-state: paused !important;
 }
 .walking {
   animation: player-walk-anim 0.58s steps(8) infinite;
