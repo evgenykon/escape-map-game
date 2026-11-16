@@ -6,7 +6,7 @@ import { useGameStore } from '@/stores/game'
 import { polygonToFeature } from '@/engine/IndoorLoader'
 import CraftDialog from '@/components/CraftDialog.vue'
 import ComponentBox from '@/components/ComponentBox.vue'
-import { CRAFT_RECIPES, ROOM_BUILD_COST, ROOM_BUILD_MS, ROOM_REFUND, ROOM_TYPES, countRooms, roomTypeOf, storageCapacity, type CraftRecipe, type RoomTypeKey } from '@/engine/BaseRooms'
+import { CRAFT_RECIPES, ELECTRICITY_MAX, ROOM_BUILD_COST, ROOM_BUILD_MS, ROOM_REFUND, ROOM_TYPES, countRooms, roomTypeOf, storageCapacity, type CraftRecipe, type RoomTypeKey } from '@/engine/BaseRooms'
 import { CARRY_CAPACITY, type ResourceKey } from '@/engine/LootEngine'
 
 const store = useGameStore()
@@ -141,6 +141,9 @@ const usedUnits = computed(() => {
 const fillPct = computed(() => Math.min(100, Math.round((usedUnits.value / Math.max(1, capacity.value)) * 100)))
 const hasKitchen = computed(() => countRooms(store.base?.roomTypes, 'kitchen') > 0)
 const hasWorkshop = computed(() => countRooms(store.base?.roomTypes, 'workshop') > 0)
+const hasGenerators = computed(() => countRooms(store.base?.roomTypes, 'generator') > 0)
+const electricity = computed(() => Math.round(store.base?.resources.energy ?? 0))
+const electricityPct = computed(() => Math.min(100, Math.round((electricity.value / ELECTRICITY_MAX) * 100)))
 
 const ROOM_COLORS: Record<string, string> = {
   bedroom: '#3f5c8a',
@@ -523,6 +526,15 @@ function heal() {
           </div>
           <div class="cap-bar"><i :style="{ width: fillPct + '%' }" :class="{ full: fillPct >= 100 }"></i></div>
 
+          <div v-if="hasGenerators" class="power-block">
+            <div class="cap-row">
+              ⚡ Электричество <b>{{ electricity }}</b> / {{ ELECTRICITY_MAX }}
+            </div>
+            <div class="cap-bar power">
+              <i :style="{ width: electricityPct + '%' }"></i>
+            </div>
+          </div>
+
           <h3>Состояние</h3>
           <div class="mini">
             <div class="mini-row"><span>Здоровье</span><b>{{ Math.round(stats.health) }}</b></div>
@@ -804,6 +816,12 @@ h3 {
 }
 .cap-bar i.full {
   background: linear-gradient(90deg, #7d3c3c, #ff8a8a);
+}
+.power-block {
+  margin: -6px 0 14px;
+}
+.cap-bar.power i {
+  background: linear-gradient(90deg, #8a6b10, #ffd54a);
 }
 
 .mini-row {

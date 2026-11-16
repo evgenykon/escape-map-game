@@ -43,8 +43,8 @@ export const STORAGE_PER_ROOM = 60
 /** Предел и выработка электричества генераторами. */
 export const ELECTRICITY_MAX = 100
 export const FUEL_PER_CYCLE = 1
-export const POWER_PER_CYCLE = 5
-export const GENERATOR_CYCLE_SEC = 30
+export const POWER_PER_CYCLE = 25
+export const GENERATOR_CYCLE_SEC = 300
 
 export function storageCapacity(areaM2: number, roomTypes: Record<number, RoomTypeKey> = {}): number {
   const fromArea = Math.round((areaM2 || 250) / 12)
