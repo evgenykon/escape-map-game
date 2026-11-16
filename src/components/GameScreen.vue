@@ -255,6 +255,10 @@ onMounted(() => {
       showBaseArrow.value = false
     }
 
+    // раз в ~3 с переносим машины, оставшиеся далеко позади
+    carRelocateTick += 1
+    if (carRelocateTick % 15 === 0 && store.cars.length) mapEngine?.relocateDistantCars()
+
     const moving = store.isWalking || store.isSwimming || store.isInCar
     const closeUp = store.phase === 'aftermath' && !anyModalOpen.value &&
       (insideBuildingNow.value || !moving)
@@ -727,6 +731,7 @@ function tickSurvival() {
 let wasInsideBuilding = false
 let doorArmed = true
 let depositedThisVisit = false
+let carRelocateTick = 0
 let nearBaseNow = false
 let wasNearBase = false
 let lastOutsidePos: { lat: number; lng: number } | null = null

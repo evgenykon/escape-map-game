@@ -440,6 +440,9 @@ export class MapEngine {
   private pedRaf: number | null = null
   private pedLastTime = 0
   private pedVisible = true
+  private pedTargetCount = 40
+  private pedestriansActive = false
+  private lastPlayerAngle: number | null = null
   private pedListener: (() => void) | null = null
 
   private ensurePedestrianCanvas(): void {
@@ -521,6 +524,8 @@ export class MapEngine {
       })
     }
 
+    this.pedTargetCount = count
+    this.pedestriansActive = true
     this.drawPedestrians()
     this.startPedestrianLoop()
   }
@@ -542,12 +547,62 @@ export class MapEngine {
     this.pedRaf = requestAnimationFrame(loop)
   }
 
+  /** Точка впереди по ходу движения игрока (или вокруг, если он стоит). */
+  private pointAhead(minM: number, maxM: number): { lng: number; lat: number } | null {
+    const store = useGameStore()
+    const moving = store.isWalking || store.isSwimming || store.isInCar
+    const heading = moving && this.lastPlayerAngle !== null
+      ? this.lastPlayerAngle
+      : Math.random() * Math.PI * 2
+    const spread = Math.PI * 0.6
+    const angle = heading + (Math.random() - 0.5) * spread
+    const dist = minM + Math.random() * (maxM - minM)
+    const cosLat = Math.cos((store.playerLatitude * Math.PI) / 180)
+    const lng = store.playerLongitude + (Math.sin(angle) * dist) / (111320 * cosLat)
+    const lat = store.playerLatitude + (Math.cos(angle) * dist) / 111320
+    try {
+      if (this.isInsideBuilding(lng, lat) || this.isOnWater(lng, lat)) return null
+    } catch {
+      return null
+    }
+    return { lng, lat }
+  }
+
   updatePedestrians(dtMs: number) {
-    if (!this.pedestrians.length) return
+    if (!this.pedestrians.length && !this.pedestriansActive) return
     const store = useGameStore()
     if (store.isAftermath) {
       this.clearPedestrians()
       return
+    }
+
+    // далёких убираем, вместо них подселяем впереди — мир не заканчивается
+    const M_PER_DEG = 111320
+    const cosLat = Math.cos((store.playerLatitude * Math.PI) / 180)
+    const distTo = (lng: number, lat: number) => {
+      const dx = (lng - store.playerLongitude) * M_PER_DEG * cosLat
+      const dy = (lat - store.playerLatitude) * M_PER_DEG
+      return Math.hypot(dx, dy)
+    }
+
+    const kept = this.pedestrians.filter((ped) => distTo(ped.lng, ped.lat) < 430)
+    const removed = this.pedestrians.length - kept.length
+    this.pedestrians = kept
+
+    let toAdd = Math.min(removed + 1, 3)
+    while (toAdd-- > 0 && this.pedestrians.length < this.pedTargetCount) {
+      const spot = this.pointAhead(140, 340)
+      if (!spot) continue
+      const angle = Math.random() * Math.PI * 2
+      this.pedestrians.push({
+        lng: spot.lng,
+        lat: spot.lat,
+        angle,
+        dir: MapEngine.dirFromAngle(angle, this.map ? (this.map.getBearing() * Math.PI) / 180 : 0),
+        phase: Math.random() * 1000,
+        tick: 0,
+        turnLeft: 6000 + Math.random() * 9000,
+      })
     }
 
     const stepM = 1.15 * (dtMs / 1000)
@@ -629,6 +684,7 @@ export class MapEngine {
 
   clearPedestrians() {
     this.pedestrians = []
+    this.pedestriansActive = false
     if (this.pedRaf !== null) {
       cancelAnimationFrame(this.pedRaf)
       this.pedRaf = null
@@ -727,6 +783,32 @@ export class MapEngine {
     if (this.map) this.applyAllCarsZoom(this.map.getZoom())
   }
 
+  /** Машины, оставшиеся далеко позади, переносим впереди по ходу движения. */
+  relocateDistantCars(maxDistM = 480) {
+    if (!this.map) return
+    const store = useGameStore()
+    if (!store.cars.length) return
+
+    const M_PER_DEG = 111320
+    const cosLat = Math.cos((store.playerLatitude * Math.PI) / 180)
+
+    for (const car of store.cars) {
+      const dx = (car.longitude - store.playerLongitude) * M_PER_DEG * cosLat
+      const dy = (car.latitude - store.playerLatitude) * M_PER_DEG
+      if (Math.hypot(dx, dy) < maxDistM) continue
+
+      for (let attempt = 0; attempt < 25; attempt++) {
+        const spot = this.pointAhead(140, 420)
+        if (!spot) continue
+        car.longitude = spot.lng
+        car.latitude = spot.lat
+        car.angle = Math.random() * Math.PI * 2
+        this.carMarkers.get(car.id)?.setLngLat([spot.lng, spot.lat])
+        break
+      }
+    }
+  }
+
   moveCarMarker(id: string, lng: number, lat: number) {
     const marker = this.carMarkers.get(id)
     if (marker) marker.setLngLat([lng, lat])
@@ -811,6 +893,7 @@ export class MapEngine {
         this.targetZoom = null
       }
       if (angle !== undefined) {
+        this.lastPlayerAngle = angle
         this.map.setBearing(angle * 180 / Math.PI)
       }
     }
