@@ -238,7 +238,8 @@ onMounted(() => {
       const pos = playerController.getPosition()
       const d = haversine(pos.lat, pos.lng, store.base.latitude, store.base.longitude)
       baseDist.value = d
-      showBaseArrow.value = store.isAftermath && d > 200
+      // показываем, как только база не «под ногами»
+      showBaseArrow.value = store.isAftermath && d > 40
       baseHeading.value = bearingTo(pos.lat, pos.lng, store.base.latitude, store.base.longitude) - playerController.getAngle()
     } else {
       showBaseArrow.value = false
