@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { scenarioRegistry } from '@/scenarios'
 import { hasSave, saveAgeText, clearSave } from '@/engine/SaveEngine'
@@ -41,7 +41,25 @@ const cities = [
 const canResume = ref(false)
 const resumeAge = ref('')
 
+const START_PREFS_KEY = 'escape-map-game:start-prefs:v1'
+
 onMounted(() => {
+  // последний выбранный город/режим локации
+  try {
+    const raw = localStorage.getItem(START_PREFS_KEY)
+    if (raw) {
+      const prefs = JSON.parse(raw) as { locationType?: string; selectedCity?: string }
+      if (prefs.locationType === LOCATION_TYPE_GEO || prefs.locationType === LOCATION_TYPE_CITY) {
+        locationType.value = prefs.locationType
+      }
+      if (prefs.selectedCity && cities.some((c) => c.name === prefs.selectedCity)) {
+        selectedCity.value = prefs.selectedCity
+      }
+    }
+  } catch {
+    /* игнорируем битые настройки */
+  }
+
   canResume.value = hasSave()
   resumeAge.value = saveAgeText()
 
@@ -73,6 +91,14 @@ function dropSave() {
   canResume.value = false
   resumeAge.value = ''
 }
+
+watch([locationType, selectedCity], ([type, city]) => {
+  try {
+    localStorage.setItem(START_PREFS_KEY, JSON.stringify({ locationType: type, selectedCity: city }))
+  } catch {
+    /* приватный режим */
+  }
+})
 
 async function startGame(baseMode = false) {
   if (!selectedId.value || isStarting.value) return
@@ -186,7 +212,6 @@ async function startGame(baseMode = false) {
     </button>
 
     <div v-if="isDev" class="dev-tools">
-      <button class="sprite-btn dev-base-btn" @click="startGame(true)">🧪 Режим базы</button>
       <button class="sprite-btn" @click="showSpriteTable = true">Таблица спрайтов</button>
     </div>
 

@@ -89,6 +89,7 @@ watch(
 let statsInterval: ReturnType<typeof setInterval> | null = null
 let buildingInterval: ReturnType<typeof setInterval> | null = null
 let fogInterval: ReturnType<typeof setInterval> | null = null
+let doorInterval: ReturnType<typeof setInterval> | null = null
 let autosaveInterval: ReturnType<typeof setInterval> | null = null
 const onUnload = () => persistGame(false)
 let baseDismissed = false
@@ -233,6 +234,13 @@ onMounted(() => {
 
   playerController = new PlayerController(mapEngine)
   playerController.start()
+
+  // единый механизм дверей: и до взрыва, и после
+  if (doorInterval) clearInterval(doorInterval)
+  doorInterval = setInterval(() => {
+    const pos = playerController?.getPosition()
+    if (pos) checkDoorEntry(pos)
+  }, 80)
   shelterInterval = setInterval(updateShelterInfo, 500)
   carInfoInterval = setInterval(() => {
     if (store.base && playerController) {
@@ -258,6 +266,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (doorInterval) { clearInterval(doorInterval); doorInterval = null }
   playerController.stop()
   clearInterval(timerInterval)
   clearInterval(explosionTimer!)
@@ -555,7 +564,6 @@ function startSurvival(showNotice = true) {
     const pos = playerController?.getPosition()
     if (!pos) return
     mapEngine?.updatePlayerClearing(pos.lng, pos.lat)
-    checkDoorEntry(pos)
   }, 80)
   if (!store.resumeSave) {
     store.stats = { health: 100, energy: 65, satiety: 70, water: 60 }
@@ -727,7 +735,7 @@ let lastOutsidePos: { lat: number; lng: number } | null = null
  */
 function checkDoorEntry(pos: { lat: number; lng: number }) {
   if (!mapEngine || !playerController) return
-  if (store.phase !== 'aftermath' || store.isInCar) {
+  if ((store.phase !== 'aftermath' && store.phase !== 'playing') || store.isInCar) {
     insideBuildingNow.value = false
     doorArmed = true
     return
