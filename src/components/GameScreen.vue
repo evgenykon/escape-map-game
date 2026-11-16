@@ -244,6 +244,13 @@ onMounted(() => {
   }, 80)
   shelterInterval = setInterval(updateShelterInfo, 500)
   carInfoInterval = setInterval(() => {
+    // координаты игрока в сторе нужны спавну машин/прохожих — держим их актуальными
+    if (playerController) {
+      const cur = playerController.getPosition()
+      store.playerLatitude = cur.lat
+      store.playerLongitude = cur.lng
+    }
+
     if (store.base && playerController) {
       const pos = playerController.getPosition()
       const d = haversine(pos.lat, pos.lng, store.base.latitude, store.base.longitude)
