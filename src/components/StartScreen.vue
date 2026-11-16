@@ -164,22 +164,25 @@ async function startGame(baseMode = false) {
       </div>
     </div>
 
-    <button
-      class="start-btn"
-      :disabled="!selectedId || isStarting"
-      @click="startGame(false)"
-    >
-      {{ isStarting ? 'ЗАГРУЗКА…' : 'СТАРТ' }}
-    </button>
+    <div class="main-actions">
+      <button
+        class="start-btn"
+        :disabled="!selectedId || isStarting"
+        @click="startGame(false)"
+      >
+        {{ isStarting ? 'ЗАГРУЗКА…' : 'СТАРТ' }}
+      </button>
 
-    <button
-      v-if="canResume"
-      class="start-btn resume-btn"
-      :disabled="isStarting || !selectedId"
-      @click="resumeGame"
-    >
-      ⟳ ПРОДОЛЖИТЬ <small>{{ resumeAge }}</small>
-    </button>
+      <button
+        v-if="canResume"
+        class="resume-btn"
+        :disabled="isStarting || !selectedId"
+        @click="resumeGame"
+      >
+        <span class="resume-top">⟳ ПРОДОЛЖИТЬ</span>
+        <small>{{ resumeAge }}</small>
+      </button>
+    </div>
 
     <button
       v-if="canResume"
@@ -315,7 +318,7 @@ async function startGame(baseMode = false) {
   margin-top: 0.15rem;
 }
 .drop-save {
-  margin-top: 8px;
+  margin-top: 10px;
   background: none;
   border: 1px solid #3a4654;
   color: #8b98a5;
@@ -328,6 +331,48 @@ async function startGame(baseMode = false) {
 .drop-save:hover {
   border-color: #6b2f2f;
   color: #ff9a9a;
+}
+
+.main-actions {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.resume-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0.7rem 1.5rem;
+  font-family: inherit;
+  background: linear-gradient(180deg, #ffd54a, #eb9d00);
+  color: #1a1205;
+  border: 1px solid #ffe082;
+  cursor: pointer;
+  letter-spacing: 0.2rem;
+  transition: all 0.2s;
+  box-shadow: 0 0 22px rgba(255, 213, 74, 0.28);
+}
+.resume-btn .resume-top {
+  font-size: 1rem;
+  font-weight: bold;
+}
+.resume-btn small {
+  font-size: 0.62rem;
+  letter-spacing: 0.05rem;
+  opacity: 0.7;
+}
+.resume-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffe37a, #ffb300);
+  box-shadow: 0 0 34px rgba(255, 213, 74, 0.55);
+}
+.resume-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .start-btn {
