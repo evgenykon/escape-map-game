@@ -696,9 +696,9 @@ export class MapEngine {
     }
     const zoom = this.map.getZoom()
     const mpp = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom)
-    // створка ~1.8 м, но не меньше 10 и не больше 40 пикселей
-    const leafLen = Math.max(10, Math.min(40, 1.8 / Math.max(mpp, 0.0001)))
-    const leafThick = Math.max(3, Math.round(leafLen * 0.18))
+    // створка ~2.6 м в длину, не меньше 14 и не больше 56 пикселей
+    const leafLen = Math.max(14, Math.min(56, 2.6 / Math.max(mpp, 0.0001)))
+    const leafThick = Math.max(3, Math.round(leafLen * 0.12))
     const wrapSize = Math.ceil(leafLen * 1.6)
 
     const wrap = document.createElement('div')
