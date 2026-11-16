@@ -680,28 +680,24 @@ let insideStreak = 0
 let doorCooldownUntil = 0
 let lastOutsidePos: { lat: number; lng: number } | null = null
 
-/** Пересечение стены здания: проверяется каждые 80 мс, поэтому срабатывает на пороге. */
+/** Касание стены: проверяется каждые 80 мс, створка ставится точно на контуре. */
 function checkDoorEntry(pos: { lat: number; lng: number }) {
   if (!mapEngine || !playerController) return
   if (store.phase !== 'aftermath' || store.isInCar) {
-    wasInsideBuilding = false
-    lastOutsidePos = { lat: pos.lat, lng: pos.lng }
+    insideBuildingNow.value = false
     return
   }
 
-  const inside = mapEngine.isInsideBuildingStrict(pos.lng, pos.lat)
-  insideBuildingNow.value = inside
-  if (!inside) {
-    wasInsideBuilding = false
-    lastOutsidePos = { lat: pos.lat, lng: pos.lng }
-    return
-  }
-  if (wasInsideBuilding) return
+  insideBuildingNow.value = mapEngine.isInsideBuildingStrict(pos.lng, pos.lat)
+  if (insideBuildingNow.value) return
 
-  wasInsideBuilding = true
+  // стена прямо перед игроком — открываем дверь на ней
+  const contact = mapEngine.findWallContact(pos.lng, pos.lat, playerController.getAngle(), 2.2)
+  if (!contact) return
   if (Date.now() < doorCooldownUntil) return
-  doorCooldownUntil = Date.now() + 1500
-  playDoorAnimation(pos)
+
+  doorCooldownUntil = Date.now() + 2500
+  playDoorAnimation({ lat: contact.lat, lng: contact.lng })
 }
 
 /**
@@ -713,8 +709,7 @@ function playDoorAnimation(pos: { lat: number; lng: number }) {
   soundEngine.playDoorOpeningClosing()
 
   const angle = playerController.getAngle() - Math.PI / 2
-  const doorPos = lastOutsidePos ? lastOutsidePos : pos
-  mapEngine.playDoorSwing(doorPos.lng, doorPos.lat, angle, 82)
+  mapEngine.playDoorSwing(pos.lng, pos.lat, angle, 82)
 }
 
 function updateBasePrompt() {

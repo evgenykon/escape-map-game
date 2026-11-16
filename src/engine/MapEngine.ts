@@ -1053,6 +1053,22 @@ export class MapEngine {
   }
 
   /**
+   * Точка касания стены впереди игрока: идём шагами по направлению движения
+   * и возвращаем первое попадание в контур здания (это и есть линия стены).
+   */
+  findWallContact(lng: number, lat: number, angleRad: number, maxM = 2.2): { lng: number; lat: number; dist: number } | null {
+    if (!this.map) return null
+    const step = 0.2
+    const cosLat = Math.cos((lat * Math.PI) / 180)
+    for (let d = step; d <= maxM + 1e-6; d += step) {
+      const pLng = lng + (Math.sin(angleRad) * d) / (111320 * cosLat)
+      const pLat = lat + (Math.cos(angleRad) * d) / 111320
+      if (this.isInsideBuildingStrict(pLng, pLat)) return { lng: pLng, lat: pLat, dist: d }
+    }
+    return null
+  }
+
+  /**
    * POI (магазины и т.п.) вокруг точки. Сэмплируем сеткой пикселей: символы с коллизией
    * не всегда возвращаются точечным запросом, сетка повышает шанс поймать иконку.
    */
