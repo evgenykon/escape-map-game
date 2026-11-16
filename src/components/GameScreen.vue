@@ -221,7 +221,7 @@ onMounted(() => {
     startTimer()
     setTimeout(() => {
       mapEngine.refreshCarMarkers()
-    mapEngine.spawnPedestrians(8)
+    mapEngine.spawnPedestrians(18)
       gameReady.value = true
       if (store.resumeSave) {
         store.resumeSave = false

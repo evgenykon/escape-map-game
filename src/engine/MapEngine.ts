@@ -449,7 +449,7 @@ export class MapEngine {
     st.id = 'ped-walk-style'
     // 8 кадров = 8 сдвигов на одну высоту кадра (30px из 240px)
     st.textContent =
-      '@keyframes ped-walk{from{transform:translateY(0)}to{transform:translateY(-87.5%)}}'
+      '@keyframes ped-walk{from{transform:translateY(0px)}to{transform:translateY(-240px)}}'
     document.head.appendChild(st)
   }
 
@@ -459,7 +459,7 @@ export class MapEngine {
   }
 
   /** Прохожие подальше от игрока и друг от друга, чтобы не толпились. */
-  spawnPedestrians(count = 8) {
+  spawnPedestrians(count = 18) {
     if (!this.map) return
     this.ensurePedestrianStyle()
     this.clearPedestrians()
@@ -472,9 +472,9 @@ export class MapEngine {
     for (let i = 0; i < count; i++) {
       let spot: [number, number] | null = null
 
-      for (let attempt = 0; attempt < 24 && !spot; attempt++) {
+      for (let attempt = 0; attempt < 60 && !spot; attempt++) {
         const angle = Math.random() * Math.PI * 2
-        const dist = 70 + Math.random() * 270 // не ближе 70 м, не дальше 340 м
+        const dist = 60 + Math.random() * 270 // не ближе 60 м, не дальше 330 м
         const lat = store.playerLatitude + (dist / M_PER_DEG) * Math.cos(angle)
         const lng = store.playerLongitude + (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
 
@@ -490,7 +490,7 @@ export class MapEngine {
         const tooClose = placed.some(([plng, plat]) => {
           const dx = (lng - plng) * M_PER_DEG * cosLat
           const dy = (lat - plat) * M_PER_DEG
-          return Math.hypot(dx, dy) < 30
+          return Math.hypot(dx, dy) < 22
         })
         if (tooClose) continue
 
@@ -509,7 +509,7 @@ export class MapEngine {
         'width:30px;height:240px;' +
         `background-image:url(${import.meta.env.BASE_URL}sprites/player/walk-${dir}.png);` +
         'background-size:30px 240px;background-repeat:no-repeat;' +
-        'animation:ped-walk 0.72s steps(8) infinite'
+        'animation:ped-walk 0.72s steps(8) infinite;will-change:transform'
 
       wrap.appendChild(inner)
       const marker = new maplibregl.Marker({ element: wrap })

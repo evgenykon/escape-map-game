@@ -363,7 +363,10 @@ export class PlayerController {
       const speedKmh = Math.abs(this.getCarSpeed()) * 3.6
       const t = Math.min(1, Math.max(0, (speedKmh - 30) / 30))
       const zoom = 19 - t * 1
-      soundEngine.setCarDrivenVolume(Math.min(1, speedKmh / 100))
+      // чем мельче масштаб карты, тем тише звук машины
+      const zoomNow = this.mapEngine.getCurrentZoom()
+      const scaleGain = Math.min(1, Math.max(0.08, (zoomNow - 10) / 9))
+      soundEngine.setCarDrivenVolume(Math.min(1, speedKmh / 100) * scaleGain)
       this.mapEngine.updatePlayerPosition(this.playerLng, this.playerLat, this.playerAngle, zoom)
     } else {
       this.updateWalk(forward, rotation, dt)
