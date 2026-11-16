@@ -675,6 +675,7 @@ function tickSurvival() {
 
 let wasInsideBuilding = false
 let doorArmed = true
+let depositedThisVisit = false
 let lastOutsidePos: { lat: number; lng: number } | null = null
 
 /**
@@ -742,8 +743,17 @@ function updateBasePrompt() {
   canDropHere.value = !!store.base && insideBuilding && !inBaseBuilding && !store.isInCar
 
 
-  // вернулся на базу — рюкзак выгружается в хранилище
-  if (inBaseBuilding && store.base) depositBackpack()
+  // вернулся на базу — рюкзак выгружается ОДИН раз за визит
+  // (иначе взятое из хранилища тут же возвращалось обратно)
+  if (inBaseBuilding && store.base) {
+    if (!depositedThisVisit) {
+      depositedThisVisit = true
+      // если игрок сразу открыл окно базы — не разгружаем, он распорядится сам
+      if (!baseDialogOpen.value) depositBackpack()
+    }
+  } else {
+    depositedThisVisit = false
+  }
 
   // поиск ресурсов в магазинах
   if (insideBuilding && !store.isInCar) {
