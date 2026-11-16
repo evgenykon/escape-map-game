@@ -4,7 +4,8 @@ import { useGameStore } from '@/stores/game'
 import { CARRY_CAPACITY, RESOURCE_META, type ResourceKey } from '@/engine/LootEngine'
 
 const store = useGameStore()
-const emit = defineEmits<{ (e: 'close'): void }>()
+const props = defineProps<{ canDrop?: boolean }>()
+const emit = defineEmits<{ (e: 'close'): void; (e: 'drop'): void }>()
 
 const entries = computed(() => {
   const carried = store.carried as Partial<Record<ResourceKey, number>>
@@ -43,6 +44,13 @@ const total = computed(() => entries.value.reduce((sum, e) => sum + e.amount, 0)
       </ul>
 
       <footer>
+        <button
+          v-if="props.canDrop && entries.length"
+          class="drop-btn"
+          @click="emit('drop')"
+        >
+          ⬇ Оставить в этом здании
+        </button>
         <span class="hint">Дойдите до базы — содержимое выгрузится само.</span>
         <button @click="emit('close')">Закрыть</button>
       </footer>
@@ -135,6 +143,14 @@ footer {
 .hint {
   font-size: 11px;
   color: #6b7885;
+}
+footer .drop-btn {
+  margin-left: 0;
+  border-color: #6b5b2f;
+  color: #ffd54a;
+}
+footer .drop-btn:hover {
+  background: #2a2416;
 }
 footer button {
   margin-left: auto;

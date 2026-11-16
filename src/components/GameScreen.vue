@@ -38,6 +38,7 @@ const canMakeBase = ref(false)
 const canOpenBase = ref(false)
 const canSearchLoot = ref(false)
 const canMoveBase = ref(false)
+const canDropHere = ref(false)
 const lootDialogOpen = ref(false)
 const backpackOpen = ref(false)
 const toastText = ref('')
@@ -59,6 +60,7 @@ let pendingPolygon: GeoJSON.Polygon | null = null
 const moveBaseMode = ref(false)
 const nearBase = ref(false)
 const roomsPreview = ref(1)
+const DROP_TTL_MS = 15 * 60 * 1000
 const areaPreview = ref<number | null>(null)
 const carriedTotal = computed(() =>
   Object.values(store.carried).reduce((sum, v) => sum + (v ?? 0), 0),
@@ -690,6 +692,7 @@ function updateBasePrompt() {
   canMakeBase.value = !store.base && !store.isInCar && insideBuilding
   canOpenBase.value = inBaseBuilding && insideBuilding && !cleaningUi.value.active
   canMoveBase.value = !!store.base && insideBuilding && !inBaseBuilding && !store.isInCar && !cleaningUi.value.active
+  canDropHere.value = !!store.base && insideBuilding && !inBaseBuilding && !store.isInCar
 
 
   // вернулся на базу — рюкзак выгружается в хранилище
@@ -725,6 +728,48 @@ function openBaseDialog() {
     base.roomsGeo = roomsToFeatureCollection(splitBuildingIntoRooms(base.polygon, base.rooms))
   }
   baseDialogOpen.value = true
+}
+
+/** Выложить рюкзак в текущем здании (когда на базе места нет). */
+function dropBackpackInBuilding() {
+  if (!mapEngine || !playerController || !store.base) return
+  const pos = playerController.getPosition()
+  const carried = store.carried as Partial<Record<ResourceKey, number>>
+  const dropped = Object.entries(carried).filter(([, v]) => (v ?? 0) > 0)
+  if (!dropped.length) {
+    showToast('Рюкзак пуст')
+    return
+  }
+
+  const key = findNearbyLoot(pos.lat, pos.lng) ?? makeLootKey(pos.lat, pos.lng)
+  let loot = store.lootBuildings[key]
+  if (!loot) {
+    loot = {
+      key,
+      lat: pos.lat,
+      lng: pos.lng,
+      items: [],
+      icons: '',
+      expiresAt: Date.now() + DROP_TTL_MS,
+    }
+    store.lootBuildings[key] = loot
+  }
+
+  const parts: string[] = []
+  for (const [k, v] of dropped) {
+    const resourceKey = k as ResourceKey
+    const amount = v ?? 0
+    const existing = loot.items.find((i) => i.key === resourceKey)
+    if (existing) existing.amount += amount
+    else loot.items.push({ key: resourceKey, amount })
+    carried[resourceKey] = 0
+    parts.push(`${RESOURCE_META[resourceKey].icon}${amount}`)
+  }
+  loot.expiresAt = Date.now() + DROP_TTL_MS
+  loot.emptied = false
+  store.carried = { ...carried }
+  refreshLootMarkers()
+  showToast(`Оставлено в здании: ${parts.join(' ')}`, 3200)
 }
 
 function depositBackpack() {
@@ -1235,7 +1280,12 @@ function toggleMute() {
 
     <div v-if="toastText" class="game-toast">{{ toastText }}</div>
 
-    <BackpackDialog v-if="backpackOpen" @close="backpackOpen = false" />
+    <BackpackDialog
+      v-if="backpackOpen"
+      :can-drop="canDropHere"
+      @drop="dropBackpackInBuilding()"
+      @close="backpackOpen = false"
+    />
 
     <button v-if="canMakeBase" class="make-base-btn" @click="openBaseConfirm">
       ★ Сделать базой
