@@ -4,7 +4,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useGameStore } from '@/stores/game'
 import { polygonToFeature } from '@/engine/IndoorLoader'
-import { ROOM_BUILD_COST, ROOM_BUILD_MS, ROOM_REFUND, ROOM_TYPES, countRooms, roomTypeOf, storageCapacity, type RoomTypeKey } from '@/engine/BaseRooms'
+import { CRAFT_RECIPES, ROOM_BUILD_COST, ROOM_BUILD_MS, ROOM_REFUND, ROOM_TYPES, countRooms, roomTypeOf, storageCapacity, type CraftRecipe, type RoomTypeKey } from '@/engine/BaseRooms'
 import { CARRY_CAPACITY, type ResourceKey } from '@/engine/LootEngine'
 
 const store = useGameStore()
@@ -101,6 +101,72 @@ const usedUnits = computed(() => {
 })
 const fillPct = computed(() => Math.min(100, Math.round((usedUnits.value / Math.max(1, capacity.value)) * 100)))
 const hasKitchen = computed(() => countRooms(store.base?.roomTypes, 'kitchen') > 0)
+const hasWorkshop = computed(() => countRooms(store.base?.roomTypes, 'workshop') > 0)
+
+const ROOM_COLORS: Record<string, string> = {
+  bedroom: '#3f5c8a',
+  kitchen: '#8a5c3b',
+  workshop: '#6b6b3b',
+  gym: '#7a3f6b',
+  storage: '#3b7a5b',
+  greenhouse: '#2f7a4f',
+  library: '#5b3f8a',
+  radio: '#8a7a3b',
+  armory: '#8a3f3f',
+  empty: '#1f4f6b',
+}
+
+/** Схема помещений с учётом того, что в них построено. */
+const roomsWithTypes = computed<GeoJSON.FeatureCollection>(() => {
+  const fc = store.base?.roomsGeo
+  if (!fc) return { type: 'FeatureCollection', features: [] }
+  const types = store.base?.roomTypes ?? {}
+  return {
+    type: 'FeatureCollection',
+    features: fc.features.map((f, i) => {
+      const id = Number((f.properties as Record<string, unknown>)?.id ?? i + 1)
+      const t = roomTypeOf(types[id])
+      return {
+        ...f,
+        properties: {
+          ...(f.properties as Record<string, unknown>),
+          id,
+          type: t?.key ?? 'empty',
+          icon: t?.icon ?? '',
+        },
+      }
+    }),
+  } as GeoJSON.FeatureCollection
+})
+
+const craftOpen = ref(false)
+const craftMessage = ref('')
+
+function canCraft(recipe: CraftRecipe): boolean {
+  const r = store.base?.resources as unknown as Record<string, number> | undefined
+  if (!r) return false
+  for (const [key, need] of Object.entries(recipe.input)) {
+    if ((r[key] ?? 0) < (need ?? 0)) return false
+  }
+  // результат должен влезть в хранилище
+  const outTotal = Object.values(recipe.output).reduce((sum, v) => sum + (v ?? 0), 0)
+  return usedUnits.value + outTotal <= capacity.value
+}
+
+function craft(recipe: CraftRecipe) {
+  const r = store.base?.resources as unknown as Record<string, number> | undefined
+  if (!r || !canCraft(recipe)) {
+    craftMessage.value = 'Не хватает ресурсов или места в хранилище'
+    return
+  }
+  for (const [key, need] of Object.entries(recipe.input)) {
+    r[key] = (r[key] ?? 0) - (need ?? 0)
+  }
+  for (const [key, amount] of Object.entries(recipe.output)) {
+    r[key] = (r[key] ?? 0) + (amount ?? 0)
+  }
+  craftMessage.value = `Готово: ${recipe.icon} ${recipe.name}`
+}
 const hasBedroom = computed(() => countRooms(store.base?.roomTypes, 'bedroom') > 0)
 
 function roomType(id: number) {
@@ -157,7 +223,7 @@ function dismantle(roomId: number) {
 
 function draw() {
   if (!miniMap || !ready) return
-  const roomsGeo = store.base?.roomsGeo
+  const roomsGeo = roomsWithTypes.value
   const polygon = store.base?.polygon
   if (!roomsGeo && !polygon) return
 
@@ -170,8 +236,21 @@ function draw() {
       type: 'fill',
       source: 'rooms',
       paint: {
-        'fill-color': ['interpolate', ['linear'], ['get', 'id'], 1, '#1f4f6b', 10, '#2a7a8c'],
-        'fill-opacity': 0.75,
+        'fill-color': [
+          'match',
+          ['get', 'type'],
+          'bedroom', ROOM_COLORS.bedroom,
+          'kitchen', ROOM_COLORS.kitchen,
+          'workshop', ROOM_COLORS.workshop,
+          'gym', ROOM_COLORS.gym,
+          'storage', ROOM_COLORS.storage,
+          'greenhouse', ROOM_COLORS.greenhouse,
+          'library', ROOM_COLORS.library,
+          'radio', ROOM_COLORS.radio,
+          'armory', ROOM_COLORS.armory,
+          ROOM_COLORS.empty,
+        ] as never,
+        'fill-opacity': 0.8,
       },
     })
     miniMap.addLayer({
@@ -185,12 +264,17 @@ function draw() {
       type: 'symbol',
       source: 'rooms',
       layout: {
-        'text-field': ['to-string', ['get', 'id']],
-        'text-size': 12,
+        'text-field': [
+          'case',
+          ['!=', ['get', 'icon'], ''],
+          ['concat', ['get', 'icon'], ' ', ['to-string', ['get', 'id']]],
+          ['to-string', ['get', 'id']],
+        ] as never,
+        'text-size': 13,
         'text-font': ['Noto Sans Regular'],
         'text-allow-overlap': true,
       },
-      paint: { 'text-color': '#eaf6ff', 'text-halo-color': '#08131c', 'text-halo-width': 1.4 },
+      paint: { 'text-color': '#eaf6ff', 'text-halo-color': '#08131c', 'text-halo-width': 1.6 },
     })
   } else {
     ;(miniMap.getSource('rooms') as maplibregl.GeoJSONSource).setData(roomsGeo ?? empty)
@@ -260,6 +344,8 @@ watch(
     fitToBuilding()
   },
 )
+
+watch(roomsWithTypes, () => draw())
 
 onUnmounted(() => {
   // отдых идёт только пока открыто окно базы
@@ -446,6 +532,24 @@ function heal() {
         <div v-if="buildMessage" class="build-msg">{{ buildMessage }}</div>
       </section>
 
+      <section v-if="hasWorkshop && craftOpen" class="craft">
+        <h3>Мастерская · крафт</h3>
+        <div class="craft-grid">
+          <button
+            v-for="recipe in CRAFT_RECIPES"
+            :key="recipe.id"
+            class="craft-card"
+            :disabled="!canCraft(recipe)"
+            @click="craft(recipe)"
+          >
+            <span class="craft-ico">{{ recipe.icon }}</span>
+            <span class="craft-name">{{ recipe.name }}</span>
+            <span class="craft-note">{{ recipe.note }}</span>
+          </button>
+        </div>
+        <div v-if="craftMessage" class="build-msg">{{ craftMessage }}</div>
+      </section>
+
       <footer>
         <button :disabled="!store.base || store.base.resources.food <= 0" @click="eat">🍖 Поесть</button>
         <button :disabled="!store.base || store.base.resources.water <= 0" @click="drink">💧 Попить</button>
@@ -453,6 +557,9 @@ function heal() {
           {{ store.resting ? '🛑 Встать' : '⚡ Отдохнуть' }}
         </button>
         <button :disabled="!store.base || store.base.resources.medicine <= 0" @click="heal">💊 Лечиться</button>
+        <button v-if="hasWorkshop" class="craft-btn" @click="craftOpen = !craftOpen">
+          🛠 Крафт
+        </button>
       </footer>
     </div>
   </div>
@@ -653,6 +760,46 @@ h3 {
 footer button.resting {
   border-color: #7ee2a8;
   color: #9fe9bf;
+}
+
+.craft {
+  flex: 0 0 auto;
+  max-height: 26vh;
+  overflow: auto;
+  padding: 12px 18px;
+  border-top: 1px solid #29323c;
+  background: #0f141a;
+}
+.craft-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+.craft-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  font-family: inherit;
+  padding: 8px 10px;
+  background: #161d25;
+  border: 1px solid #2a3542;
+  color: #cfd8e2;
+  cursor: pointer;
+}
+.craft-card:hover:not(:disabled) {
+  border-color: #6b5b2f;
+}
+.craft-card:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.craft-ico { font-size: 14px; }
+.craft-name { font-size: 12px; color: #e6edf3; }
+.craft-note { font-size: 10px; color: #8b98a5; }
+.craft-btn {
+  border-color: #6b5b2f;
+  color: #ffd54a;
 }
 
 .build {

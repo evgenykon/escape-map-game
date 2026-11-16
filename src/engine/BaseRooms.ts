@@ -53,3 +53,56 @@ export function roomTypeOf(key: RoomTypeKey | undefined): RoomType | null {
   if (!key) return null
   return ROOM_TYPES.find((t) => t.key === key) ?? null
 }
+
+/** Рецепты мастерской: что тратится и что получается за один крафт. */
+export interface CraftRecipe {
+  id: string
+  name: string
+  icon: string
+  input: Partial<Record<'materials' | 'tech' | 'tools' | 'clothes' | 'fuel', number>>
+  output: Partial<Record<'materials' | 'tools' | 'weapons' | 'medicine' | 'energy' | 'clothes', number>>
+  note: string
+}
+
+export const CRAFT_RECIPES: CraftRecipe[] = [
+  {
+    id: 'tools',
+    name: 'Инструменты',
+    icon: '🔧',
+    input: { materials: 2 },
+    output: { tools: 1 },
+    note: '2 🧱 → 1 🔧',
+  },
+  {
+    id: 'weapons',
+    name: 'Оружие',
+    icon: '🔪',
+    input: { tools: 1, materials: 2 },
+    output: { weapons: 1 },
+    note: '1 🔧 + 2 🧱 → 1 🔪',
+  },
+  {
+    id: 'medicine',
+    name: 'Медицина',
+    icon: '💊',
+    input: { clothes: 1, tech: 1 },
+    output: { medicine: 1 },
+    note: '1 👕 + 1 🔌 → 1 💊',
+  },
+  {
+    id: 'power',
+    name: 'Электричество',
+    icon: '⚡',
+    input: { tech: 1 },
+    output: { energy: 4 },
+    note: '1 🔌 → 4 ⚡',
+  },
+  {
+    id: 'clothes',
+    name: 'Одежда',
+    icon: '👕',
+    input: { materials: 3 },
+    output: { clothes: 1 },
+    note: '3 🧱 → 1 👕',
+  },
+]
