@@ -20,6 +20,24 @@ const entries = computed(() => {
 })
 
 const total = computed(() => entries.value.reduce((sum, e) => sum + e.amount, 0))
+
+/** Что можно использовать сразу из рюкзака. */
+const USE_LABEL: Partial<Record<ResourceKey, string>> = {
+  food: '🍖 Съесть',
+  water: '💧 Выпить',
+  medicine: '💊 Принять',
+}
+
+function consume(key: ResourceKey) {
+  const carried = store.carried as Partial<Record<ResourceKey, number>>
+  if ((carried[key] ?? 0) <= 0) return
+  carried[key] = (carried[key] ?? 0) - 1
+  store.carried = { ...carried }
+
+  if (key === 'food') store.stats.satiety = Math.min(100, store.stats.satiety + 40)
+  else if (key === 'water') store.stats.water = Math.min(100, store.stats.water + 40)
+  else if (key === 'medicine') store.stats.health = Math.min(100, store.stats.health + 35)
+}
 </script>
 
 <template>
@@ -40,6 +58,13 @@ const total = computed(() => entries.value.reduce((sum, e) => sum + e.amount, 0)
           <span class="ico">{{ item.icon }}</span>
           <span class="label">{{ item.label }}</span>
           <span class="amount">{{ item.amount }}</span>
+          <button
+            v-if="USE_LABEL[item.key]"
+            class="use-btn"
+            @click="consume(item.key)"
+          >
+            {{ USE_LABEL[item.key] }}
+          </button>
         </li>
       </ul>
 
@@ -116,7 +141,7 @@ header h2 {
 }
 .list li {
   display: grid;
-  grid-template-columns: 22px 1fr auto;
+  grid-template-columns: 22px 1fr auto auto;
   gap: 8px;
   align-items: center;
   font-size: 12px;
@@ -132,6 +157,20 @@ header h2 {
 .amount {
   color: #fff;
   font-weight: bold;
+}
+.use-btn {
+  font-family: inherit;
+  font-size: 10px;
+  padding: 4px 8px;
+  background: #14241a;
+  color: #9fe9bf;
+  border: 1px solid #3c7d54;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.use-btn:hover {
+  background: #1b3122;
 }
 footer {
   display: flex;
