@@ -519,7 +519,9 @@ function startSurvival(showNotice = true) {
   if (fogInterval) clearInterval(fogInterval)
   fogInterval = setInterval(() => {
     const pos = playerController?.getPosition()
-    if (pos) mapEngine?.updatePlayerClearing(pos.lng, pos.lat)
+    if (!pos) return
+    mapEngine?.updatePlayerClearing(pos.lng, pos.lat)
+    checkDoorEntry(pos)
   }, 80)
   if (!store.resumeSave) {
     store.stats = { health: 100, energy: 65, satiety: 70, water: 60 }
@@ -643,25 +645,46 @@ let insideStreak = 0
 let doorCooldownUntil = 0
 let lastOutsidePos: { lat: number; lng: number } | null = null
 
-/** Вход в здание: фигура останавливается, тянет дверь, створка двери распахивается. */
+/** Пересечение стены здания: проверяется каждые 80 мс, поэтому срабатывает на пороге. */
+function checkDoorEntry(pos: { lat: number; lng: number }) {
+  if (!mapEngine || !playerController) return
+  if (store.phase !== 'aftermath' || store.isInCar) {
+    wasInsideBuilding = false
+    lastOutsidePos = { lat: pos.lat, lng: pos.lng }
+    return
+  }
+
+  const inside = mapEngine.isInsideBuildingStrict(pos.lng, pos.lat)
+  if (!inside) {
+    wasInsideBuilding = false
+    lastOutsidePos = { lat: pos.lat, lng: pos.lng }
+    return
+  }
+  if (wasInsideBuilding) return
+
+  wasInsideBuilding = true
+  if (Date.now() < doorCooldownUntil) return
+  doorCooldownUntil = Date.now() + 1500
+  playDoorAnimation(pos)
+}
+
+/** Вход в здание: игрок просто останавливается, створка двери распахивается. */
 function playDoorAnimation(pos: { lat: number; lng: number }) {
   if (!mapEngine || !playerController) return
-  // НЕ stop(): он снимает слушатели и останавливает игровой цикл навсегда.
-  // Блокировка ввода очищает нажатые клавиши и замораживает движение.
-  playerController.setInputBlocked(true)
-  mapEngine.playDoorAnimation(1050)
 
-  // створка ставится на линии входа, разворот — по направлению движения
-  const angle = playerController.getAngle() - Math.PI / 2
-  const doorPos = lastOutsidePos
-    ? { lat: (lastOutsidePos.lat + pos.lat) / 2, lng: (lastOutsidePos.lng + pos.lng) / 2 }
-    : pos
-  mapEngine.playDoorSwing(doorPos.lng, doorPos.lat, angle)
+  // без жестов: фигура переходит в «стоит», движение замирает на время створки
+  playerController.setInputBlocked(true)
+  mapEngine.setPlayerFrame('idle')
   soundEngine.playDoorOpeningClosing()
+
+  const angle = playerController.getAngle() - Math.PI / 2
+  const doorPos = lastOutsidePos ? lastOutsidePos : pos
+  mapEngine.playDoorSwing(doorPos.lng, doorPos.lat, angle)
+
   if (doorAnimTimer) clearTimeout(doorAnimTimer)
   doorAnimTimer = setTimeout(() => {
     playerController?.setInputBlocked(anyModalOpen.value)
-  }, 1050)
+  }, 600)
 }
 
 function updateBasePrompt() {
@@ -673,18 +696,6 @@ function updateBasePrompt() {
     mapEngine.setBaseMarker(store.base.longitude, store.base.latitude)
   }
 
-  // вход в здание: 2 подтверждения подряд (пиксельный тест шумит на границе)
-  if (insideBuilding && store.phase === 'aftermath' && !store.isInCar) {
-    insideStreak += 1
-    if (insideStreak === 2 && Date.now() > doorCooldownUntil) {
-      doorCooldownUntil = Date.now() + 3000
-      playDoorAnimation(pos)
-    }
-  } else {
-    insideStreak = 0
-    lastOutsidePos = { lat: pos.lat, lng: pos.lng }
-  }
-  wasInsideBuilding = insideBuilding
   const atBase = insideBuilding && isAtBase()
   if (nearBase.value && !atBase) baseDismissed = false
   nearBase.value = atBase
