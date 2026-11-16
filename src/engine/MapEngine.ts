@@ -459,6 +459,8 @@ export class MapEngine {
   private pedTargetCount = 40
   private pedestriansActive = false
   private lastPlayerAngle: number | null = null
+  private lastPlayerLngLat: [number, number] | null = null
+  private prevPlayerLngLat: [number, number] | null = null
   private pedListener: (() => void) | null = null
 
   private ensurePedestrianCanvas(): void {
@@ -652,19 +654,33 @@ export class MapEngine {
     // тела пропадают через минуту
     this.pedestrians = this.pedestrians.filter((ped) => !ped.dead || ped.deadUntil > nowMs)
 
-    // наезд: игрок в машине и близко к человеку
+    // наезд: проверяем дистанцию от человека до отрезка «где был — где стал»
     let hitSomeone = false
-    if (store.isInCar) {
+    if (store.isInCar && this.lastPlayerLngLat) {
       const M_PER_DEG = 111320
       const cosLat = Math.cos((store.playerLatitude * Math.PI) / 180)
+      const cur = this.lastPlayerLngLat
+      const prev = this.prevPlayerLngLat ?? cur
+
+      const ax = (prev[0] - cur[0]) * M_PER_DEG * cosLat
+      const ay = (prev[1] - cur[1]) * M_PER_DEG
+
       for (const ped of this.pedestrians) {
         if (ped.dead) continue
-        const dx = (ped.lng - store.playerLongitude) * M_PER_DEG * cosLat
-        const dy = (ped.lat - store.playerLatitude) * M_PER_DEG
-        if (Math.hypot(dx, dy) < 2.4) {
+        const px = (ped.lng - cur[0]) * M_PER_DEG * cosLat
+        const py = (ped.lat - cur[1]) * M_PER_DEG
+
+        // расстояние от точки до отрезка (0,0)..(ax,ay)
+        const segLenSq = ax * ax + ay * ay
+        let t = segLenSq > 0 ? (px * ax + py * ay) / segLenSq : 0
+        t = Math.max(-1, Math.min(1, t))
+        const cx = px - ax * t
+        const cy = py - ay * t
+        const dist = Math.hypot(cx, cy)
+
+        if (dist < 2.6) {
           ped.dead = true
           ped.deadUntil = nowMs + 60000
-          // падает в направлении движения
           ped.dir = MapEngine.dirFromAngle(
             this.lastPlayerAngle ?? ped.angle,
             this.map ? (this.map.getBearing() * Math.PI) / 180 : 0,
@@ -956,6 +972,8 @@ export class MapEngine {
   }
 
   updatePlayerPosition(lng: number, lat: number, angle?: number, zoom?: number) {
+    this.prevPlayerLngLat = this.lastPlayerLngLat
+    this.lastPlayerLngLat = [lng, lat]
     if (this.playerMarker) {
       this.playerMarker.setLngLat([lng, lat])
     }
