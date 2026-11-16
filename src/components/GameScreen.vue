@@ -76,6 +76,13 @@ const cleaningUi = ref({ active: false, progress: 0, rooms: 0 })
 // блокировка движения, пока открыта любая модалка или идёт расчистка
 const anyModalOpen = computed(() => showAftermathNotice.value || showBaseConfirm.value || cleaningUi.value.active || baseDialogOpen.value || lootDialogOpen.value || backpackOpen.value)
 watch(anyModalOpen, (open) => { playerController?.setInputBlocked(open) }, { flush: 'post' })
+
+// взял/выронил ресурс — иконки на карте обновляются сразу
+watch(
+  () => store.lootBuildings,
+  () => refreshLootMarkers(),
+  { deep: true },
+)
 let statsInterval: ReturnType<typeof setInterval> | null = null
 let buildingInterval: ReturnType<typeof setInterval> | null = null
 let fogInterval: ReturnType<typeof setInterval> | null = null
@@ -896,23 +903,35 @@ function depositCarried() {
   if (moved) store.carried = {}
 }
 
-function cleanupLoot() {
+/** последнее отрисованное состояние маркеров, чтобы не пересоздавать DOM зря */
+const lootMarkerState = new Map<string, string>()
+
+/** Иконки на карте всегда показывают то, что в здании реально осталось. */
+function refreshLootMarkers() {
   const now = Date.now()
   for (const [key, loot] of Object.entries(store.lootBuildings)) {
     if (loot.expiresAt <= now) {
       delete store.lootBuildings[key]
       mapEngine?.removeLootMarker(key)
+      lootMarkerState.delete(key)
       continue
     }
-    const empty = loot.items.every((i) => i.amount <= 0)
-    if (empty && !loot.emptied) {
-      loot.emptied = true
-      mapEngine?.setLootMarker(key, loot.lng, loot.lat, loot.icons, true)
-    } else if (!empty && loot.emptied) {
-      loot.emptied = false
-      mapEngine?.setLootMarker(key, loot.lng, loot.lat, loot.icons, false)
-    }
+    const left = loot.items.filter((i) => i.amount > 0)
+    const empty = left.length === 0
+    const icons = empty ? loot.icons : lootIcons(left)
+
+    if (icons !== loot.icons) loot.icons = icons
+    if (empty !== !!loot.emptied) loot.emptied = empty
+
+    const signature = `${icons}|${empty}`
+    if (lootMarkerState.get(key) === signature) continue
+    lootMarkerState.set(key, signature)
+    mapEngine?.setLootMarker(key, loot.lng, loot.lat, icons, empty)
   }
+}
+
+function cleanupLoot() {
+  refreshLootMarkers()
 }
 
 async function openBaseConfirm() {
