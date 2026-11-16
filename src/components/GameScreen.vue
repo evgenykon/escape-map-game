@@ -603,6 +603,15 @@ function tickRooms() {
   }
 }
 
+/** Баланс выживания: единицы в секунду. */
+const SURVIVAL = {
+  satietyDrain: 0.09, // было 0.18
+  waterDrain: 0.09, // было 0.22 → 100% воды хватает ~18 минут
+  starveDamage: 0.35, // было 1.2
+  thirstDamage: 0.4, // было 1.4 → на нуле воды ~4 минуты до смерти
+  exhaustionDamage: 0.15, // было 0.4
+}
+
 function tickSurvival() {
   if (!store.isAftermath || store.phase !== 'aftermath') return
   if (store.cars.length) {
@@ -611,8 +620,8 @@ function tickSurvival() {
   }
   const s = store.stats
   const inBase = isAtBase()
-  s.satiety = Math.max(0, s.satiety - 0.18)
-  s.water = Math.max(0, s.water - 0.22)
+  s.satiety = Math.max(0, s.satiety - SURVIVAL.satietyDrain)
+  s.water = Math.max(0, s.water - SURVIVAL.waterDrain)
   const gymBonus = countRooms(store.base?.roomTypes, 'gym') > 0 ? 0.85 : 1
   s.energy = Math.max(0, s.energy - (inBase ? 0.04 : 0.12) * gymBonus)
   tickRooms()
@@ -642,9 +651,9 @@ function tickSurvival() {
   }
 
   let damage = 0
-  if (s.satiety <= 0) damage += 1.2
-  if (s.water <= 0) damage += 1.4
-  if (s.energy <= 0) damage += 0.4
+  if (s.satiety <= 0) damage += SURVIVAL.starveDamage
+  if (s.water <= 0) damage += SURVIVAL.thirstDamage
+  if (s.energy <= 0) damage += SURVIVAL.exhaustionDamage
   if (damage > 0) {
     s.health = Math.max(0, s.health - damage)
   } else if (inBase) {
