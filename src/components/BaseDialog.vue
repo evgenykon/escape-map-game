@@ -139,6 +139,25 @@ const roomsWithTypes = computed<GeoJSON.FeatureCollection>(() => {
   } as GeoJSON.FeatureCollection
 })
 
+const builtLegend = computed(() => {
+  const types = store.base?.roomTypes ?? {}
+  const counts = new Map<string, number>()
+  for (const key of Object.values(types)) {
+    if (!key) continue
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return [...counts.entries()].map(([key, count]) => {
+    const t = roomTypeOf(key as RoomTypeKey)
+    return {
+      key,
+      count,
+      icon: t?.icon ?? '•',
+      name: t?.name ?? key,
+      color: ROOM_COLORS[key] ?? ROOM_COLORS.empty,
+    }
+  })
+})
+
 const craftOpen = ref(false)
 const craftMessage = ref('')
 
@@ -264,12 +283,7 @@ function draw() {
       type: 'symbol',
       source: 'rooms',
       layout: {
-        'text-field': [
-          'case',
-          ['!=', ['get', 'icon'], ''],
-          ['concat', ['get', 'icon'], ' ', ['to-string', ['get', 'id']]],
-          ['to-string', ['get', 'id']],
-        ] as never,
+        'text-field': ['to-string', ['get', 'id']] as never,
         'text-size': 13,
         'text-font': ['Noto Sans Regular'],
         'text-allow-overlap': true,
@@ -408,6 +422,12 @@ function heal() {
         <section class="plan">
           <h3>Помещения</h3>
           <div ref="mapEl" class="plan-map"></div>
+          <div v-if="builtLegend.length" class="legend">
+            <span v-for="item in builtLegend" :key="item.key" class="legend-chip">
+              <i :style="{ background: item.color }"></i>{{ item.icon }} {{ item.name }} ×{{ item.count }}
+            </span>
+          </div>
+
           <div class="room-list">
             <span v-for="room in roomsList" :key="room.id" class="room-chip">{{ room.id }}</span>
           </div>
@@ -639,6 +659,29 @@ h3 {
   height: 340px;
   border: 1px solid #2a3542;
   background: #0d1218;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 10px;
+  color: #b9c4cf;
+}
+.legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid #2a3542;
+  border-radius: 3px;
+  background: #131a21;
+}
+.legend-chip i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  display: inline-block;
 }
 .room-list {
   display: flex;
