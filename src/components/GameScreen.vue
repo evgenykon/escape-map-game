@@ -39,6 +39,7 @@ const canOpenBase = ref(false)
 const canSearchLoot = ref(false)
 const canMoveBase = ref(false)
 const canDropHere = ref(false)
+const insideBuildingNow = ref(false)
 const lootDialogOpen = ref(false)
 const backpackOpen = ref(false)
 const toastText = ref('')
@@ -244,7 +245,9 @@ onMounted(() => {
     }
 
     const moving = store.isWalking || store.isSwimming || store.isInCar
-    mapEngine?.setIdleZoom(!moving && store.phase === 'aftermath' && !anyModalOpen.value)
+    const closeUp = store.phase === 'aftermath' && !anyModalOpen.value &&
+      (insideBuildingNow.value || !moving)
+    mapEngine?.setIdleZoom(closeUp)
     carSpeed.value = playerController.getCarSpeed()
     carGear.value = playerController.getCarGear()
     debugZoom.value = mapEngine.getCurrentZoom()
@@ -687,6 +690,7 @@ function checkDoorEntry(pos: { lat: number; lng: number }) {
   }
 
   const inside = mapEngine.isInsideBuildingStrict(pos.lng, pos.lat)
+  insideBuildingNow.value = inside
   if (!inside) {
     wasInsideBuilding = false
     lastOutsidePos = { lat: pos.lat, lng: pos.lng }
@@ -700,23 +704,17 @@ function checkDoorEntry(pos: { lat: number; lng: number }) {
   playDoorAnimation(pos)
 }
 
-/** Вход в здание: игрок открывает дверь рукой, створка идёт наружу. */
+/**
+ * Вход в здание: створка двери распахивается, игрок не останавливается —
+ * движение и анимация шагов продолжаются без блокировки.
+ */
 function playDoorAnimation(pos: { lat: number; lng: number }) {
   if (!mapEngine || !playerController) return
-
-  playerController.setInputBlocked(true)
-  mapEngine.playDoorAnimation(950)
   soundEngine.playDoorOpeningClosing()
 
   const angle = playerController.getAngle() - Math.PI / 2
   const doorPos = lastOutsidePos ? lastOutsidePos : pos
-  // створка открывается наружу, то есть в сторону, откуда игрок пришёл
   mapEngine.playDoorSwing(doorPos.lng, doorPos.lat, angle, 82)
-
-  if (doorAnimTimer) clearTimeout(doorAnimTimer)
-  doorAnimTimer = setTimeout(() => {
-    playerController?.setInputBlocked(anyModalOpen.value)
-  }, 950)
 }
 
 function updateBasePrompt() {

@@ -683,9 +683,17 @@ export class MapEngine {
     this.playerMarkerImg.style.height = `${sheetH.toFixed(2)}px`
   }
 
+  private doorSwingMarker: maplibregl.Marker | null = null
+
   /** Створка двери: размер в метрах, распахивается наружу. */
   playDoorSwing(lng: number, lat: number, angleRad = 0, swingDeg = 82) {
     if (!this.map) return
+
+    // не даём створкам наслаиваться друг на друга
+    if (this.doorSwingMarker) {
+      this.doorSwingMarker.remove()
+      this.doorSwingMarker = null
+    }
     const zoom = this.map.getZoom()
     const mpp = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom)
     // створка ~1.2 м, но не меньше 7 и не больше 26 пикселей
@@ -709,11 +717,15 @@ export class MapEngine {
     wrap.appendChild(leaf)
     const marker = new maplibregl.Marker({ element: wrap }).setLngLat([lng, lat]).addTo(this.map)
 
+    this.doorSwingMarker = marker
     requestAnimationFrame(() => {
       leaf.style.transform = `rotate(${swingDeg}deg)`
     })
-    window.setTimeout(() => { leaf.style.opacity = '0' }, 900)
-    window.setTimeout(() => marker.remove(), 1400)
+    window.setTimeout(() => { leaf.style.opacity = '0' }, 850)
+    window.setTimeout(() => {
+      marker.remove()
+      if (this.doorSwingMarker === marker) this.doorSwingMarker = null
+    }, 1300)
   }
 
   /** Анимация открытия двери: фиксирует кадры на указанное время. */
