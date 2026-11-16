@@ -235,6 +235,7 @@ onMounted(() => {
 
   playerController = new PlayerController(mapEngine)
   playerController.start()
+  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__me = mapEngine
 
   // единый механизм дверей: и до взрыва, и после
   if (doorInterval) clearInterval(doorInterval)

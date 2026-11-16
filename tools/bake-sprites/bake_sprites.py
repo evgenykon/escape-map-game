@@ -441,15 +441,32 @@ for i in range(PDIRS):
 
         if MODE == "dead":
             # лежит: тело уложено, руки и ноги раскинуты
-            place_cam(0.35, 2.25)
             for bn, sgn in (("UpperArm.L", 1), ("UpperArm.R", -1)):
                 world_rot(arm.pose.bones[bn], (0, 0, 1), sgn * math.radians(25))
             for bn, sgn in (("LowerArm.L", 1), ("LowerArm.R", -1)):
                 world_rot(arm.pose.bones[bn], (0, 0, 1), sgn * math.radians(20))
             for bn, sgn in (("UpperLeg.L", 1), ("UpperLeg.R", -1)):
                 world_rot(arm.pose.bones[bn], (0, 0, 1), sgn * math.radians(14))
-            pl_root.location = (0, 0.85, 0.10)
             pl_root.rotation_euler = (math.radians(90), 0, 2 * math.pi * i / PDIRS)
+            pl_root.location = (0, 0, 0.10)
+            bpy.context.view_layer.update()
+
+            # центрируем лежащее тело в кадре: без этого в кадр попадали только ступни
+            mnx = mny = 1e9
+            mxx = mxy = -1e9
+            for o in pl_objs:
+                if o.type != 'MESH':
+                    continue
+                for c in o.bound_box:
+                    w = o.matrix_world @ Vector(c)
+                    mnx = min(mnx, w.x); mxx = max(mxx, w.x)
+                    mny = min(mny, w.y); mxy = max(mxy, w.y)
+            pl_root.location.x -= (mnx + mxx) / 2
+            pl_root.location.y -= (mny + mxy) / 2
+            bpy.context.view_layer.update()
+
+            span = max(mxx - mnx, mxy - mny)
+            place_cam(0.0, span * 1.18)
             bpy.context.view_layer.update()
             r.filepath = os.path.join(FR, f"dead_{i:02d}_{f:02d}.png")
             bpy.ops.render.render(write_still=True)
