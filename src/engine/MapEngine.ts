@@ -564,17 +564,30 @@ export class MapEngine {
       ? this.lastPlayerAngle
       : Math.random() * Math.PI * 2
     const spread = Math.PI * 0.6
-    const angle = heading + (Math.random() - 0.5) * spread
-    const dist = minM + Math.random() * (maxM - minM)
     const cosLat = Math.cos((store.playerLatitude * Math.PI) / 180)
-    const lng = store.playerLongitude + (Math.sin(angle) * dist) / (111320 * cosLat)
-    const lat = store.playerLatitude + (Math.cos(angle) * dist) / 111320
-    try {
-      if (this.isInsideBuilding(lng, lat) || this.isOnWater(lng, lat)) return null
-    } catch {
-      return null
+
+    // несколько попыток: иначе одна проверка «вода/здание» почти всегда отсекает точку
+    for (let attempt = 0; attempt < 14; attempt++) {
+      const angle = heading + (Math.random() - 0.5) * spread
+      const dist = minM + Math.random() * (maxM - minM)
+      const lng = store.playerLongitude + (Math.sin(angle) * dist) / (111320 * cosLat)
+      const lat = store.playerLatitude + (Math.cos(angle) * dist) / 111320
+
+      let blockedWater = false
+      let blockedBuilding = false
+      try {
+        blockedWater = this.isOnWater(lng, lat)
+        blockedBuilding = this.isInsideBuilding(lng, lat)
+      } catch {
+        blockedWater = false
+        blockedBuilding = false
+      }
+      if (blockedWater) continue
+      // здание допускаем, если попытки кончаются — иначе улица остаётся пустой
+      if (blockedBuilding && attempt < 10) continue
+      return { lng, lat }
     }
-    return { lng, lat }
+    return null
   }
 
   updatePedestrians(dtMs: number) {
