@@ -128,6 +128,19 @@ const processedEvents = new Set<number>()
 
 const shelterHeading = ref(0)
 const shelterDist = ref(0)
+const baseHeading = ref(0)
+const baseDist = ref(0)
+const showBaseArrow = ref(false)
+
+/** Пеленг от игрока к точке базы (радианы от севера). */
+function bearingTo(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const p1 = (lat1 * Math.PI) / 180
+  const p2 = (lat2 * Math.PI) / 180
+  const dl = ((lng2 - lng1) * Math.PI) / 180
+  const y = Math.sin(dl) * Math.cos(p2)
+  const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)
+  return Math.atan2(y, x)
+}
 const carSpeed = ref(0)
 const carGear = ref('P')
 
@@ -220,6 +233,16 @@ onMounted(() => {
   playerController.start()
   shelterInterval = setInterval(updateShelterInfo, 500)
   carInfoInterval = setInterval(() => {
+    if (store.base && playerController) {
+      const pos = playerController.getPosition()
+      const d = haversine(pos.lat, pos.lng, store.base.latitude, store.base.longitude)
+      baseDist.value = d
+      showBaseArrow.value = store.isAftermath && d > 200
+      baseHeading.value = bearingTo(pos.lat, pos.lng, store.base.latitude, store.base.longitude) - playerController.getAngle()
+    } else {
+      showBaseArrow.value = false
+    }
+
     const moving = store.isWalking || store.isSwimming || store.isInCar
     mapEngine?.setIdleZoom(!moving && store.phase === 'aftermath' && !anyModalOpen.value)
     carSpeed.value = playerController.getCarSpeed()
@@ -668,23 +691,23 @@ function checkDoorEntry(pos: { lat: number; lng: number }) {
   playDoorAnimation(pos)
 }
 
-/** Вход в здание: игрок просто останавливается, створка двери распахивается. */
+/** Вход в здание: игрок открывает дверь рукой, створка идёт наружу. */
 function playDoorAnimation(pos: { lat: number; lng: number }) {
   if (!mapEngine || !playerController) return
 
-  // без жестов: фигура переходит в «стоит», движение замирает на время створки
   playerController.setInputBlocked(true)
-  mapEngine.setPlayerFrame('idle')
+  mapEngine.playDoorAnimation(950)
   soundEngine.playDoorOpeningClosing()
 
   const angle = playerController.getAngle() - Math.PI / 2
   const doorPos = lastOutsidePos ? lastOutsidePos : pos
-  mapEngine.playDoorSwing(doorPos.lng, doorPos.lat, angle)
+  // створка открывается наружу, то есть в сторону, откуда игрок пришёл
+  mapEngine.playDoorSwing(doorPos.lng, doorPos.lat, angle, 82)
 
   if (doorAnimTimer) clearTimeout(doorAnimTimer)
   doorAnimTimer = setTimeout(() => {
     playerController?.setInputBlocked(anyModalOpen.value)
-  }, 600)
+  }, 950)
 }
 
 function updateBasePrompt() {
@@ -1266,6 +1289,16 @@ function toggleMute() {
       <div class="shelter-dist">{{ (shelterDist / 1000).toFixed(1) }} км</div>
     </div>
 
+    <div v-if="showBaseArrow" class="base-hud" title="Направление на базу">
+      <div class="shelter-compass base-compass">
+        <div class="shelter-arrow-wrap" :style="{ transform: `rotate(${baseHeading}rad)` }">
+          <div class="shelter-arrow-head base-arrow"></div>
+          <div class="shelter-arrow-stem base-arrow-stem"></div>
+        </div>
+      </div>
+      <div class="base-dist">★ {{ baseDist > 1000 ? (baseDist / 1000).toFixed(1) + ' км' : Math.round(baseDist) + ' м' }}</div>
+    </div>
+
     <div class="sms-container">
       <TransitionGroup name="sms">
         <div
@@ -1565,6 +1598,34 @@ function toggleMute() {
   border: 1px solid #fa0;
   border-radius: 4px;
   font-family: 'Courier New', monospace;
+}
+.base-hud {
+  position: absolute;
+  top: 3.5rem;
+  right: 0.5rem;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(0, 0, 0, 0.62);
+  padding: 0.3rem 0.6rem;
+  border: 1px solid #ffd54a;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+}
+.base-compass {
+  border-color: #ffd54a;
+}
+.base-arrow {
+  border-bottom-color: #ffd54a;
+}
+.base-arrow-stem {
+  background: #ffd54a;
+}
+.base-dist {
+  color: #ffd54a;
+  font-size: 0.8rem;
+  letter-spacing: 0.03rem;
 }
 .shelter-compass {
   width: 28px;

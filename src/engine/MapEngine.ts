@@ -683,30 +683,37 @@ export class MapEngine {
     this.playerMarkerImg.style.height = `${sheetH.toFixed(2)}px`
   }
 
-  /** Створка двери: появляется у входа и распахивается. */
-  playDoorSwing(lng: number, lat: number, angleRad = 0) {
+  /** Створка двери: размер в метрах, распахивается наружу. */
+  playDoorSwing(lng: number, lat: number, angleRad = 0, swingDeg = 82) {
     if (!this.map) return
+    const zoom = this.map.getZoom()
+    const mpp = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom)
+    // створка ~1.2 м, но не меньше 7 и не больше 26 пикселей
+    const leafLen = Math.max(7, Math.min(26, 1.2 / Math.max(mpp, 0.0001)))
+    const leafThick = Math.max(2, Math.round(leafLen * 0.16))
+    const wrapSize = Math.ceil(leafLen * 1.6)
+
     const wrap = document.createElement('div')
     wrap.style.cssText =
-      'width:40px;height:40px;position:relative;pointer-events:none;z-index:118;' +
+      `width:${wrapSize}px;height:${wrapSize}px;position:relative;pointer-events:none;z-index:118;` +
       `transform:rotate(${angleRad}rad)`
 
     const leaf = document.createElement('div')
     leaf.style.cssText =
-      'position:absolute;left:4px;top:18px;width:30px;height:5px;border-radius:2px;' +
-      'background:linear-gradient(90deg,#7a4a26,#c98a4b 60%,#8a5a33);' +
-      'border:1px solid rgba(0,0,0,.65);box-shadow:0 2px 6px rgba(0,0,0,.65);' +
-      'transform-origin:2px 50%;transform:rotate(0deg);' +
-      'transition:transform .55s cubic-bezier(.2,.75,.3,1),opacity .4s ease'
+      `position:absolute;left:1px;top:${Math.round(wrapSize / 2)}px;width:${leafLen}px;height:${leafThick}px;` +
+      'border-radius:1px;background:linear-gradient(90deg,#7a4a26,#c98a4b 60%,#8a5a33);' +
+      'border:1px solid rgba(0,0,0,.6);box-shadow:0 1px 3px rgba(0,0,0,.6);' +
+      'transform-origin:1px 50%;transform:rotate(0deg);' +
+      'transition:transform .45s cubic-bezier(.2,.75,.3,1),opacity .35s ease'
 
     wrap.appendChild(leaf)
     const marker = new maplibregl.Marker({ element: wrap }).setLngLat([lng, lat]).addTo(this.map)
 
     requestAnimationFrame(() => {
-      leaf.style.transform = 'rotate(-82deg)'
+      leaf.style.transform = `rotate(${swingDeg}deg)`
     })
-    window.setTimeout(() => { leaf.style.opacity = '0' }, 1000)
-    window.setTimeout(() => marker.remove(), 1500)
+    window.setTimeout(() => { leaf.style.opacity = '0' }, 900)
+    window.setTimeout(() => marker.remove(), 1400)
   }
 
   /** Анимация открытия двери: фиксирует кадры на указанное время. */

@@ -386,31 +386,35 @@ for i in range(PDIRS):
             bpy.ops.render.render(write_still=True)
             continue
         if MODE == "door":
-            # тянет дверь на себя: корпус отклоняется назад, руки идут к двери и обратно
-            pull = (math.sin(ph) + 1) / 2  # 0..1
-            for bn, deg in (("Hips", -3), ("Abdomen", -4), ("Torso", -3), ("Chest", -2)):
+            # базовая стойка: руки опущены вдоль тела, затем правая вытягивается к двери
+            pull = (math.sin(ph) + 1) / 2  # 0..1 — тянет дверь на себя
+            for bn, deg in (("Hips", -2), ("Abdomen", -3), ("Torso", -2)):
                 world_rot(arm.pose.bones[bn], (1, 0, 0), math.radians(deg))
             for bn, sgn in (("UpperArm.L", 1), ("UpperArm.R", -1)):
                 pb = arm.pose.bones[bn]
                 rest = pb.bone.matrix_local.to_3x3()
-                fwd = math.radians(-95 + 35 * pull)
-                r_fwd = Matrix.Rotation(fwd, 3, Vector((1, 0, 0)))
-                r_in = Matrix.Rotation(sgn * math.radians(12), 3, Vector((0, 0, 1)))
-                l_fwd = rest.inverted() @ r_fwd @ rest
-                l_in = rest.inverted() @ r_in @ rest
-                pb.rotation_quaternion = (l_fwd @ l_in).to_quaternion()
-            for bn, sgn in (("LowerArm.L", 1), ("LowerArm.R", -1)):
-                world_rot(arm.pose.bones[bn], (1, 0, 0), math.radians(-12 - 22 * pull))
-            for bn, sgn in (("Hand.L", 1), ("Hand.R", -1)):
-                world_rot(arm.pose.bones[bn], (0, 0, 1), sgn * math.radians(14))
+                r_down = Matrix.Rotation(sgn * math.radians(86), 3, Vector((0, 0, 1)))
+                if sgn < 0:
+                    # правая рука идёт вперёд к ручке и подтягивается
+                    r_fwd = Matrix.Rotation(math.radians(-96 + 34 * pull), 3, Vector((1, 0, 0)))
+                    local = rest.inverted() @ r_fwd @ r_down @ rest
+                else:
+                    local = rest.inverted() @ r_down @ rest
+                pb.rotation_quaternion = local.to_quaternion()
+            world_rot(arm.pose.bones["LowerArm.R"], (1, 0, 0), math.radians(-8 - 26 * pull))
+            world_rot(arm.pose.bones["Hand.R"], (0, 0, 1), math.radians(-14))
+            world_rot(arm.pose.bones["LowerArm.L"], (1, 0, 0), math.radians(-4))
             for bn in ("UpperLeg.L", "UpperLeg.R"):
-                world_rot(arm.pose.bones[bn], (1, 0, 0), math.radians(5 + 3 * pull))
+                world_rot(arm.pose.bones[bn], (1, 0, 0), math.radians(3))
+            for bn in ("LowerLeg.L", "LowerLeg.R"):
+                world_rot(arm.pose.bones[bn], (1, 0, 0), math.radians(-5))
             pl_root.location.z = -0.01
             pl_root.rotation_euler = (0, 0, 2 * math.pi * i / PDIRS)
             bpy.context.view_layer.update()
             r.filepath = os.path.join(FR, f"door_{i:02d}_{f:02d}.png")
             bpy.ops.render.render(write_still=True)
             continue
+
         if MODE == "swim":
             # плывёт: руки гребут по очереди, ноги болтают, корпус чуть опущен
             for k, (bn, sgn) in enumerate((("UpperArm.L", 1), ("UpperArm.R", -1))):
