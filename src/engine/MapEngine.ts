@@ -433,24 +433,35 @@ export class MapEngine {
     }
   }
 
-  private pedestrianMarkers = new Map<string, {
-    marker: maplibregl.Marker
-    inner: HTMLElement
-    lng: number
-    lat: number
-    angle: number
-    dir: number
-    tick: number
-  }>()
+  // ─── прохожие на canvas-слое ────────────────────────────────────────────
+  private pedCanvas: HTMLCanvasElement | null = null
+  private pedImages: HTMLImageElement[] = []
+  private pedestrians: Array<{ lng: number; lat: number; angle: number; dir: number; phase: number; tick: number }> = []
+  private pedRaf: number | null = null
+  private pedLastTime = 0
+  private pedVisible = true
+  private pedListener: (() => void) | null = null
 
-  private ensurePedestrianStyle() {
-    if (document.getElementById('ped-walk-style')) return
-    const st = document.createElement('style')
-    st.id = 'ped-walk-style'
-    // 8 кадров = 8 сдвигов на одну высоту кадра (30px из 240px)
-    st.textContent =
-      '@keyframes ped-walk{from{transform:translateY(0px)}to{transform:translateY(-240px)}}'
-    document.head.appendChild(st)
+  private ensurePedestrianCanvas(): void {
+    if (!this.map || this.pedCanvas) return
+    const canvas = document.createElement('canvas')
+    canvas.style.cssText =
+      'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1'
+    this.map.getCanvasContainer().appendChild(canvas)
+    this.pedCanvas = canvas
+
+    this.pedListener = () => this.drawPedestrians()
+    this.map.on('render', this.pedListener)
+    this.map.on('move', this.pedListener)
+  }
+
+  private loadPedestrianSprites(): void {
+    if (this.pedImages.length) return
+    this.pedImages = Array.from({ length: 8 }, (_, i) => {
+      const img = new Image()
+      img.src = `${import.meta.env.BASE_URL}sprites/player/walk-${i}.png`
+      return img
+    })
   }
 
   private static dirFromAngle(angle: number): number {
@@ -458,23 +469,22 @@ export class MapEngine {
     return Math.round(norm / (Math.PI / 4)) % 8
   }
 
-  /** Прохожие подальше от игрока и друг от друга, чтобы не толпились. */
   spawnPedestrians(count = 18) {
     if (!this.map) return
-    this.ensurePedestrianStyle()
-    this.clearPedestrians()
-    const store = useGameStore()
+    this.ensurePedestrianCanvas()
+    this.loadPedestrianSprites()
+    this.pedestrians = []
 
-    const placed: Array<[number, number]> = []
+    const store = useGameStore()
     const M_PER_DEG = 111320
     const cosLat = Math.cos((store.playerLatitude * Math.PI) / 180)
+    const placed: Array<[number, number]> = []
 
     for (let i = 0; i < count; i++) {
       let spot: [number, number] | null = null
-
       for (let attempt = 0; attempt < 60 && !spot; attempt++) {
         const angle = Math.random() * Math.PI * 2
-        const dist = 60 + Math.random() * 270 // не ближе 60 м, не дальше 330 м
+        const dist = 60 + Math.random() * 270
         const lat = store.playerLatitude + (dist / M_PER_DEG) * Math.cos(angle)
         const lng = store.playerLongitude + (dist / (M_PER_DEG * cosLat)) * Math.sin(angle)
 
@@ -486,50 +496,51 @@ export class MapEngine {
         }
         if (!ok) continue
 
-        // минимум 30 м между прохожими
         const tooClose = placed.some(([plng, plat]) => {
           const dx = (lng - plng) * M_PER_DEG * cosLat
           const dy = (lat - plat) * M_PER_DEG
           return Math.hypot(dx, dy) < 22
         })
         if (tooClose) continue
-
         spot = [lng, lat]
       }
-
       if (!spot) continue
       placed.push(spot)
 
-      const dir = Math.floor(Math.random() * 8)
-      const wrap = document.createElement('div')
-      wrap.style.cssText = 'width:30px;height:30px;overflow:hidden;pointer-events:none;z-index:95'
-
-      const inner = document.createElement('div')
-      inner.style.cssText =
-        'width:30px;height:240px;' +
-        `background-image:url(${import.meta.env.BASE_URL}sprites/player/walk-${dir}.png);` +
-        'background-size:30px 240px;background-repeat:no-repeat;' +
-        'animation:ped-walk 0.72s steps(8) infinite;will-change:transform'
-
-      wrap.appendChild(inner)
-      const marker = new maplibregl.Marker({ element: wrap })
-        .setLngLat([spot[0], spot[1]])
-        .addTo(this.map)
-
-      this.pedestrianMarkers.set(`ped-${i}`, {
-        marker,
-        inner,
+      const angle = Math.random() * Math.PI * 2
+      this.pedestrians.push({
         lng: spot[0],
         lat: spot[1],
-        angle: Math.random() * Math.PI * 2,
-        dir,
+        angle,
+        dir: MapEngine.dirFromAngle(angle),
+        phase: Math.random() * 1000,
         tick: i % 5,
       })
     }
+
+    this.drawPedestrians()
+    this.startPedestrianLoop()
+  }
+
+  private startPedestrianLoop(): void {
+    if (this.pedRaf !== null) return
+    this.pedLastTime = performance.now()
+    const loop = (time: number) => {
+      if (!this.pedCanvas) {
+        this.pedRaf = null
+        return
+      }
+      const dt = Math.min(120, time - this.pedLastTime)
+      this.pedLastTime = time
+      this.updatePedestrians(dt)
+      this.drawPedestrians()
+      this.pedRaf = requestAnimationFrame(loop)
+    }
+    this.pedRaf = requestAnimationFrame(loop)
   }
 
   updatePedestrians(dtMs: number) {
-    if (!this.map || !this.pedestrianMarkers.size) return
+    if (!this.pedestrians.length) return
     const store = useGameStore()
     if (store.isAftermath) {
       this.clearPedestrians()
@@ -537,16 +548,15 @@ export class MapEngine {
     }
 
     const stepM = 1.15 * (dtMs / 1000)
-    for (const ped of this.pedestrianMarkers.values()) {
+    for (const ped of this.pedestrians) {
       ped.tick += 1
-      if (Math.random() < 0.03) ped.angle += (Math.random() - 0.5) * Math.PI * 0.8
+      if (Math.random() < 0.02) ped.angle += (Math.random() - 0.5) * Math.PI * 0.8
 
       const cosLat = Math.cos((ped.lat * Math.PI) / 180)
       const nLng = ped.lng + (Math.sin(ped.angle) * stepM) / (111320 * cosLat)
       const nLat = ped.lat + (Math.cos(ped.angle) * stepM) / 111320
 
-      // тяжёлые проверки — раз в 5 обновлений, чтобы не грузить карту
-      if (ped.tick % 5 === 0) {
+      if (ped.tick % 30 === 0) {
         let blocked = false
         try {
           blocked = this.isInsideBuilding(nLng, nLat) || this.isOnWater(nLng, nLat)
@@ -561,26 +571,69 @@ export class MapEngine {
 
       ped.lng = nLng
       ped.lat = nLat
-      ped.marker.setLngLat([nLng, nLat])
+      ped.dir = MapEngine.dirFromAngle(ped.angle)
+    }
+  }
 
-      const dir = MapEngine.dirFromAngle(ped.angle)
-      if (dir !== ped.dir) {
-        ped.dir = dir
-        ped.inner.style.backgroundImage =
-          `url(${import.meta.env.BASE_URL}sprites/player/walk-${dir}.png)`
+  private drawPedestrians(): void {
+    const map = this.map
+    const canvas = this.pedCanvas
+    if (!map || !canvas) return
+
+    const dpr = window.devicePixelRatio || 1
+    const w = canvas.clientWidth || map.getCanvas().clientWidth
+    const h = canvas.clientHeight || map.getCanvas().clientHeight
+    if (!w || !h) return
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr)
+      canvas.height = Math.round(h * dpr)
+    }
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, w, h)
+    if (!this.pedVisible || !this.pedestrians.length) return
+
+    const size = 30 * Math.max(0.8, Math.min(1.6, MapEngine.getScale(map.getZoom())))
+    const frame = Math.floor(performance.now() / 90) % 8
+
+    for (const ped of this.pedestrians) {
+      const p = map.project([ped.lng, ped.lat])
+      if (p.x < -size || p.y < -size || p.x > w + size || p.y > h + size) continue
+
+      const img = this.pedImages[ped.dir]
+      const row = (frame + Math.floor(ped.phase)) % 8
+      if (img?.complete && img.naturalWidth) {
+        ctx.drawImage(img, 0, row * 128, 128, 128, p.x - size / 2, p.y - size / 2, size, size)
+      } else {
+        ctx.fillStyle = '#c8d2dc'
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, size * 0.18, 0, Math.PI * 2)
+        ctx.fill()
       }
     }
   }
 
   setPedestriansVisible(visible: boolean) {
-    for (const ped of this.pedestrianMarkers.values()) {
-      ped.marker.getElement().style.display = visible ? '' : 'none'
-    }
+    this.pedVisible = visible
+    this.drawPedestrians()
   }
 
   clearPedestrians() {
-    for (const ped of this.pedestrianMarkers.values()) ped.marker.remove()
-    this.pedestrianMarkers.clear()
+    this.pedestrians = []
+    if (this.pedRaf !== null) {
+      cancelAnimationFrame(this.pedRaf)
+      this.pedRaf = null
+    }
+    if (this.map && this.pedListener) {
+      this.map.off('render', this.pedListener)
+      this.map.off('move', this.pedListener)
+    }
+    this.pedListener = null
+    this.pedCanvas?.remove()
+    this.pedCanvas = null
+    this.pedImages = []
   }
 
   /** Заново расставить машины вокруг игрока (например, после взрыва). */

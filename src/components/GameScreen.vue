@@ -255,8 +255,6 @@ onMounted(() => {
       showBaseArrow.value = false
     }
 
-    mapEngine?.updatePedestrians(200)
-
     const moving = store.isWalking || store.isSwimming || store.isInCar
     const closeUp = store.phase === 'aftermath' && !anyModalOpen.value &&
       (insideBuildingNow.value || !moving)
