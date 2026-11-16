@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { scenarioRegistry } from '@/scenarios'
-import { hasSave, loadGame, saveAgeText, clearSave } from '@/engine/SaveEngine'
+import { hasSave, saveAgeText, clearSave } from '@/engine/SaveEngine'
 import SpriteTable from '@/components/SpriteTable.vue'
 
 const isDev = import.meta.env.DEV || new URLSearchParams(location.search).has('dev')
@@ -44,14 +44,6 @@ const resumeAge = ref('')
 onMounted(() => {
   canResume.value = hasSave()
   resumeAge.value = saveAgeText()
-
-  // после перезагрузки страницы (в том числе HMR в dev) продолжаем игру сами
-  const save = loadGame()
-  if (save && Date.now() - save.savedAt < 120000 && selectedId.value) {
-    store.resumeSave = true
-    void startGame(false)
-    return
-  }
 
   const canvas = document.createElement('canvas')
   const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
