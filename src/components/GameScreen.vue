@@ -692,8 +692,9 @@ function checkDoorEntry(pos: { lat: number; lng: number }) {
   if (insideBuildingNow.value) return
 
   // стена прямо перед игроком — открываем дверь на ней
-  const contact = mapEngine.findWallContact(pos.lng, pos.lat, playerController.getAngle(), 2.2)
-  if (!contact) return
+  const contact = mapEngine.findWallContact(pos.lng, pos.lat, playerController.getAngle(), 1.2)
+  // открываем, только когда игрок уже вплотную к стене
+  if (!contact || contact.dist > 0.95) return
   if (Date.now() < doorCooldownUntil) return
 
   doorCooldownUntil = Date.now() + 2500

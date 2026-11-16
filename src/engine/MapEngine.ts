@@ -696,9 +696,9 @@ export class MapEngine {
     }
     const zoom = this.map.getZoom()
     const mpp = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom)
-    // створка ~1.2 м, но не меньше 7 и не больше 26 пикселей
-    const leafLen = Math.max(7, Math.min(26, 1.2 / Math.max(mpp, 0.0001)))
-    const leafThick = Math.max(2, Math.round(leafLen * 0.16))
+    // створка ~1.8 м, но не меньше 10 и не больше 40 пикселей
+    const leafLen = Math.max(10, Math.min(40, 1.8 / Math.max(mpp, 0.0001)))
+    const leafThick = Math.max(3, Math.round(leafLen * 0.18))
     const wrapSize = Math.ceil(leafLen * 1.6)
 
     const wrap = document.createElement('div')
@@ -1056,9 +1056,9 @@ export class MapEngine {
    * Точка касания стены впереди игрока: идём шагами по направлению движения
    * и возвращаем первое попадание в контур здания (это и есть линия стены).
    */
-  findWallContact(lng: number, lat: number, angleRad: number, maxM = 2.2): { lng: number; lat: number; dist: number } | null {
+  findWallContact(lng: number, lat: number, angleRad: number, maxM = 1.2): { lng: number; lat: number; dist: number } | null {
     if (!this.map) return null
-    const step = 0.2
+    const step = 0.15
     const cosLat = Math.cos((lat * Math.PI) / 180)
     for (let d = step; d <= maxM + 1e-6; d += step) {
       const pLng = lng + (Math.sin(angleRad) * d) / (111320 * cosLat)
