@@ -10,3 +10,5 @@ tools/bake-sprites/frames*/
 # исходная 3D-модель персонажа (CC0) должна попадать в репозиторий
 !tools/bake-sprites/assets/
 tools/bake-sprites/*.log
+
+.deploy-wt
